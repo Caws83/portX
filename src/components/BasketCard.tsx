@@ -1,0 +1,69 @@
+import { Link } from 'react-router-dom'
+import type { Basket } from '@/types/basket'
+import { formatUsd } from '@/utils/format'
+
+interface BasketCardProps {
+  basket: Basket
+  onBuy?: (basket: Basket) => void
+  onSell?: (basketId: string) => void
+  isOwned?: boolean
+  loading?: boolean
+}
+
+export function BasketCard({ basket, onBuy, onSell, isOwned, loading }: BasketCardProps) {
+  const tokenCount = basket.allocations.length
+
+  return (
+    <div className="card-glow flex flex-col h-full hover:border-portx-green/30 transition-colors">
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div>
+          <h3 className="text-lg font-bold">{basket.name}</h3>
+          <span className="badge mt-1">{basket.tag}</span>
+        </div>
+        {basket.isCustom && <span className="badge-blue text-[10px]">Custom</span>}
+      </div>
+
+      <p className="text-sm text-portx-muted mb-4 flex-grow">{basket.description}</p>
+
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {basket.allocations.map(({ token, weightPercent }) => (
+          <span
+            key={token.symbol}
+            className="text-xs px-2 py-1 rounded-md bg-portx-surface border border-portx-border font-mono"
+          >
+            {token.symbol} {weightPercent}%
+          </span>
+        ))}
+      </div>
+
+      <div className="text-sm text-portx-muted mb-4">
+        {tokenCount} tokens · Demo TVL {formatUsd(basket.totalValueUsd ?? 0, true)}
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-2 mt-auto">
+        {onBuy && (
+          <button
+            type="button"
+            onClick={() => onBuy(basket)}
+            disabled={loading}
+            className="btn-primary flex-1 text-sm py-2.5 disabled:opacity-50"
+          >
+            {loading ? 'Quoting...' : 'Buy Basket'}
+          </button>
+        )}
+        {isOwned && onSell && (
+          <button
+            type="button"
+            onClick={() => onSell(basket.id)}
+            className="btn-secondary flex-1 text-sm py-2.5"
+          >
+            Sell Basket
+          </button>
+        )}
+        <Link to="/baskets" className="btn-secondary text-sm py-2.5 text-center">
+          Details
+        </Link>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply scroll-smooth antialiased;
+  }
+
+  body {
+    @apply bg-portx-black text-white font-sans min-h-screen;
+    background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 255, 136, 0.06), transparent);
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold
+      bg-gradient-to-r from-portx-green to-portx-blue text-portx-black
+      hover:opacity-90 transition-all shadow-glow;
+  }
+
+  .btn-primary:hover {
+    transform: scale(1.02);
+  }
+
+  .btn-primary:active {
+    transform: scale(0.98);
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold
+      border border-portx-border bg-portx-card text-white
+      hover:bg-portx-surface transition-all;
+  }
+
+  .btn-secondary:hover {
+    border-color: rgba(0, 255, 136, 0.5);
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold
+      border text-portx-danger transition-all;
+    background-color: rgba(255, 68, 102, 0.2);
+    border-color: rgba(255, 68, 102, 0.5);
+  }
+
+  .btn-danger:hover {
+    background-color: rgba(255, 68, 102, 0.3);
+  }
+
+  .card {
+    @apply rounded-2xl border border-portx-border bg-portx-card p-6 shadow-card;
+  }
+
+  .card-glow {
+    @apply rounded-2xl border border-portx-border bg-portx-card p-6 shadow-card relative overflow-hidden;
+  }
+
+  .card-glow::before {
+    content: '';
+    @apply absolute inset-0 opacity-30 pointer-events-none;
+    background: linear-gradient(135deg, rgba(0, 255, 136, 0.05), rgba(0, 212, 255, 0.03));
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl bg-portx-surface border border-portx-border
+      text-white placeholder-portx-muted focus:outline-none transition-colors;
+  }
+
+  .input-field:focus {
+    border-color: rgba(0, 255, 136, 0.5);
+    box-shadow: 0 0 0 1px rgba(0, 255, 136, 0.3);
+  }
+
+  .label {
+    @apply block text-sm font-medium text-portx-muted mb-2;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+      text-portx-green border;
+    background-color: rgba(0, 255, 136, 0.1);
+    border-color: rgba(0, 255, 136, 0.2);
+  }
+
+  .badge-blue {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+      text-portx-blue border;
+    background-color: rgba(0, 212, 255, 0.1);
+    border-color: rgba(0, 212, 255, 0.2);
+  }
+
+  .section-title {
+    @apply text-2xl md:text-3xl font-bold tracking-tight;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-portx-green to-portx-blue bg-clip-text text-transparent;
+  }
+}
+
+/* RainbowKit dark theme overrides */
+[data-rk] {
+  --rk-accent-color: #00ff88;
+  --rk-accent-color-foreground: #050508;
+}
