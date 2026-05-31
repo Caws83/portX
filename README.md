@@ -10,7 +10,7 @@ PortX is a DeFi portfolio trading platform that lets users buy, manage, and sell
 
 PortX composes **crypto baskets** (weighted token portfolios), lets you **enter in a single transaction flow**, track unified **P&L**, and **exit** the full book — or individual baskets — with portfolio-level **take-profit** and **stop-loss** targets.
 
-This repository is the **MVP frontend**: wallet connect, dashboard, basket creation, demo buy/sell flows, exit targets, AI agent placeholders, and DEX routing stubs. **No real on-chain trading** is implemented yet.
+This repository includes the **MVP frontend** (Vite/React) and **Backend v1** (`/backend` — Fastify API for Railway). Wallet connect, baskets, demo quotes, Discover, and agent placeholders. **No real on-chain trading** yet.
 
 ## Features
 
@@ -34,15 +34,33 @@ Browse **Trending Addresses**, **Notable Portfolios**, and **Whale Watch** on th
 - **No trade is executed** until you preview a quote on Baskets and sign from your wallet
 - Future plan: connect wallet intelligence APIs (Arkham, Nansen, DeBank) and company treasury data
 
+## Backend v1 (`/backend`)
+
+Fastify TypeScript API with mock quotes, baskets, portfolios, and agent rules. Railway-ready.
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Default: **http://localhost:8080** · See [backend/README.md](./backend/README.md) for routes and Railway deploy.
+
+Point the frontend at the API:
+
+```
+VITE_PORTX_API_URL=http://localhost:8080
+```
+
 ## Tech stack
 
 | Layer | Tools |
 |-------|--------|
-| Build | Vite |
-| UI | React, TypeScript, Tailwind CSS |
+| Frontend | Vite, React, TypeScript, Tailwind |
+| Backend | Node.js, Fastify, Zod |
 | Web3 | wagmi, viem, RainbowKit |
 | State | Zustand (persisted) |
-| Routing | React Router |
 
 ## Install
 
@@ -82,6 +100,7 @@ npm run preview
 ## Project structure
 
 ```
+backend/          # Fastify API (Railway)
 src/
 ├── api/          # Backend API client (quotes, portfolio)
 ├── config/       # chains, wagmi, constants
