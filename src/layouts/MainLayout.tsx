@@ -11,7 +11,7 @@ export function MainLayout() {
       </main>
       <footer className="border-t border-portx-border py-8 mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-portx-muted flex flex-col items-center gap-3">
-          <Logo height="sm" linkToHome={false} className="mx-auto opacity-90" />
+          <Logo height="md" linkToHome={false} className="mx-auto opacity-90 max-w-[240px]" />
           <p className="mb-1">Trade portfolios like a single asset.</p>
           <p className="text-xs">Demo mode · No real trading · DEX routing placeholders</p>
         </div>

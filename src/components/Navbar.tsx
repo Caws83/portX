@@ -16,8 +16,8 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-portx-border/80 bg-portx-black/80 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <Logo height="md" />
+        <div className="flex items-center justify-between min-h-20 py-2">
+          <Logo height="lg" className="max-w-[min(55vw,280px)]" />
 
           <nav className="hidden lg:flex items-center gap-1">
             {links.map(({ to, label }) => (

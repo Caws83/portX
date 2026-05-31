@@ -9,9 +9,9 @@ interface LogoProps {
 }
 
 const heights = {
-  sm: 'h-7',
-  md: 'h-9',
-  lg: 'h-12 md:h-14',
+  sm: 'h-10 sm:h-11',
+  md: 'h-12 sm:h-14',
+  lg: 'h-14 sm:h-16 md:h-[4.5rem] min-w-[140px] sm:min-w-[180px] md:min-w-[220px]',
 }
 
 export function Logo({ className = '', height = 'md', linkToHome = true }: LogoProps) {
