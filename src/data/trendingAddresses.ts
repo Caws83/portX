@@ -1,0 +1,98 @@
+import type { TrendingAddress } from '@/types/whale'
+
+/**
+ * DEMO DATA — future integrations:
+ * - Arkham API / Nansen API / DeBank API for labeled wallets
+ * - Etherscan wallet tracking
+ * - On-chain whale labels
+ */
+export const TRENDING_ADDRESSES: TrendingAddress[] = [
+  {
+    id: 'whale-eth-01',
+    label: 'ETH Mega Whale',
+    shortAddress: '0x47ac...0b6',
+    chain: 'Ethereum',
+    avatarColor: '#00ff88',
+    estimatedValueUsd: 284_000_000,
+    change24h: 2.1,
+    tags: ['Whale', 'DeFi'],
+    verified: false,
+  },
+  {
+    id: 'defi-vault-02',
+    label: 'DeFi Treasury Vault',
+    shortAddress: '0x8eb8...4f2',
+    chain: 'Ethereum',
+    avatarColor: '#00d4ff',
+    estimatedValueUsd: 92_500_000,
+    change24h: -0.8,
+    tags: ['DeFi', 'Treasury'],
+    verified: false,
+  },
+  {
+    id: 'meme-whale-03',
+    label: 'Meme Coin Whale',
+    shortAddress: '0x3f5c...9a1',
+    chain: 'Ethereum',
+    avatarColor: '#ff4466',
+    estimatedValueUsd: 18_200_000,
+    change24h: 14.5,
+    tags: ['Meme', 'High Vol'],
+    verified: false,
+  },
+  {
+    id: 'ai-alpha-04',
+    label: 'AI Alpha Wallet',
+    shortAddress: '0x1a2b...7c3',
+    chain: 'Ethereum',
+    avatarColor: '#a855f7',
+    estimatedValueUsd: 41_800_000,
+    change24h: 8.2,
+    tags: ['AI', 'Thematic'],
+    verified: false,
+  },
+  {
+    id: 'btc-accum-05',
+    label: 'BTC Accumulator',
+    shortAddress: 'bc1q...x9k',
+    chain: 'Bitcoin',
+    avatarColor: '#f7931a',
+    estimatedValueUsd: 520_000_000,
+    change24h: 1.4,
+    tags: ['BTC', 'Accumulator'],
+    verified: false,
+  },
+  {
+    id: 'stable-yield-06',
+    label: 'Stable Yield Desk',
+    shortAddress: '0x9d12...e44',
+    chain: 'Ethereum',
+    avatarColor: '#6b7280',
+    estimatedValueUsd: 67_300_000,
+    change24h: 0.1,
+    tags: ['Stable', 'Yield'],
+    verified: false,
+  },
+  {
+    id: 'sol-whale-07',
+    label: 'SOL Ecosystem Whale',
+    shortAddress: '7xKX...9pQ',
+    chain: 'Solana',
+    avatarColor: '#9945ff',
+    estimatedValueUsd: 33_600_000,
+    change24h: 5.8,
+    tags: ['SOL', 'Ecosystem'],
+    verified: false,
+  },
+  {
+    id: 'public-demo-08',
+    label: 'Public Demo Wallet',
+    shortAddress: '0xdead...beef',
+    chain: 'Ethereum',
+    avatarColor: '#00cc6a',
+    estimatedValueUsd: 12_400_000,
+    change24h: 3.2,
+    tags: ['Demo', 'Watchlist'],
+    verified: false,
+  },
+]

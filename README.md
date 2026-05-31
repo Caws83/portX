@@ -21,7 +21,18 @@ This repository is the **MVP frontend**: wallet connect, dashboard, basket creat
 - Sell full basket or entire portfolio
 - Take-profit (e.g. sell all at 2x) and stop-loss (e.g. -20%) targets
 - AI Agent section (placeholders)
-- DEX router service stubs (0x / 1inch / Uniswap)
+- DEX quote engine with 0x / 1inch / Uniswap route selection (demo mode)
+- Buy / sell / sell-all quote previews with transaction review modal
+- **Discover** — trending addresses & notable portfolios (demo copy-as-basket)
+
+## Trending Portfolios
+
+Browse **Trending Addresses**, **Notable Portfolios**, and **Whale Watch** on the Discover page (`/discover`).
+
+- Currently **mock/demo data** only — not verified wallet ownership
+- **Copy as Basket** saves a portfolio template to your Zustand basket store
+- **No trade is executed** until you preview a quote on Baskets and sign from your wallet
+- Future plan: connect wallet intelligence APIs (Arkham, Nansen, DeBank) and company treasury data
 
 ## Tech stack
 
@@ -49,6 +60,8 @@ Add your [WalletConnect Cloud](https://cloud.walletconnect.com) project ID:
 
 ```
 VITE_WALLETCONNECT_PROJECT_ID=your_project_id_here
+VITE_PORTX_API_URL=http://localhost:8080
+VITE_ENABLE_DEMO_QUOTES=true
 ```
 
 ## Run locally
@@ -70,19 +83,69 @@ npm run preview
 
 ```
 src/
+├── api/          # Backend API client (quotes, portfolio)
 ├── config/       # chains, wagmi, constants
 ├── components/   # UI building blocks
 ├── pages/        # route pages
 ├── store/        # Zustand portfolio & basket state
-├── services/     # DEX, pricing, agents (stubs)
-├── hooks/        # portfolio, basket, swap quotes
+├── services/     # quote engine, route selector, providers
+├── hooks/        # portfolio, basket, quote preview
 ├── data/         # demo tokens & baskets
 └── types/        # TypeScript models
 ```
 
 Integration comments mark where **smart contracts**, **DEX aggregators**, and **AI agents** will connect.
 
-## Future roadmap
+## DEX Routing Architecture
+
+PortX is **non-custodial**. The platform never holds user funds or private keys. Baskets are **execution strategies** at the MVP stage — not vault tokens. Users sign every swap from their connected wallet.
+
+```
+Frontend (React)
+    ↓
+PortX Backend API (VITE_PORTX_API_URL)
+    ↓
+Quote Engine → 0x / 1inch / Uniswap providers
+    ↓
+Route Selector (best output per leg)
+    ↓
+Transaction Builder → Review Modal
+    ↓
+User wallet signs (wagmi / viem) — coming soon
+```
+
+| Layer | Location | Role |
+|-------|----------|------|
+| API client | `src/api/` | Calls PortX backend; keeps DEX API keys server-side |
+| Allocation engine | `src/services/allocationEngine.ts` | Splits basket $ into per-token legs |
+| Quote engine | `src/services/quoteEngine.ts` | Orchestrates buy/sell/sell-all previews |
+| Providers | `src/services/providers/` | 0x (primary), 1inch (secondary), Uniswap (fallback) |
+| Route selector | `src/services/routeSelector.ts` | Compares quotes, picks best route per leg |
+| Transaction builder | `src/services/transactionBuilder.ts` | Builds execution plan + calldata placeholders |
+
+**Router priority:** 0x first → 1inch comparison → Uniswap direct fallback. **BundleExecutor** smart contract comes later (Phase 5).
+
+## Roadmap
+
+### Phase 1 — Demo quote engine ✅
+Local mocked providers, allocation engine, quote preview UI, transaction review modal.
+
+### Phase 2 — Backend quote API
+PortX API at `VITE_PORTX_API_URL` validates quotes server-side; frontend never exposes aggregator keys.
+
+### Phase 3 — Live 0x integration
+Real quotes and calldata via backend proxy to 0x Swap API.
+
+### Phase 4 — 1inch + Uniswap comparison
+Multi-provider routing with gas-adjusted best-route scoring.
+
+### Phase 5 — BundleExecutor smart contract
+Optional single-tx basket entry/exit via on-chain executor (still non-custodial).
+
+### Phase 6 — AI / scripting agent automation
+Auto exit, rebalance, profit lock via keepers and agent runners.
+
+## Future roadmap (extended)
 
 - [ ] PortX basket smart contracts (mint/redeem)
 - [ ] Live 0x / 1inch / Uniswap quote aggregation

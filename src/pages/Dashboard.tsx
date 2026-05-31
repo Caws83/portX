@@ -3,8 +3,10 @@ import { useAccount } from 'wagmi'
 import { PortfolioSummary } from '@/components/PortfolioCard'
 import { TokenRow } from '@/components/TokenRow'
 import { BasketCard } from '@/components/BasketCard'
+import { WhalePortfolioCard } from '@/components/WhalePortfolioCard'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useBasket } from '@/hooks/useBasket'
+import { NOTABLE_PORTFOLIOS } from '@/data/notablePortfolios'
 import { formatUsd } from '@/utils/format'
 
 export function Dashboard() {
@@ -84,6 +86,23 @@ export function Dashboard() {
           </Link>
         </div>
       </div>
+
+      <section className="mt-10">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-bold">Trending now</h2>
+            <p className="text-sm text-portx-muted">Demo portfolios — copy as basket templates</p>
+          </div>
+          <Link to="/discover" className="text-sm text-portx-green hover:underline">
+            Discover more →
+          </Link>
+        </div>
+        <div className="grid md:grid-cols-3 gap-6">
+          {NOTABLE_PORTFOLIOS.slice(0, 3).map((p) => (
+            <WhalePortfolioCard key={p.id} portfolio={p} compact />
+          ))}
+        </div>
+      </section>
 
       <section className="mt-10">
         <div className="flex items-center justify-between mb-6">

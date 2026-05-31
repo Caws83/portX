@@ -1,4 +1,12 @@
+/**
+ * Legacy DEX router — delegates to quoteEngine for backwards compatibility.
+ * Prefer useQuotePreview + quoteEngine for new flows.
+ */
+import type { Basket } from '@/types/basket'
 import type { Token } from '@/types/token'
+import { getBuyBasketQuotePreview } from './quoteEngine'
+import { executeDemoPlan, buildExecutionPlan } from './transactionBuilder'
+import { mainnet } from 'wagmi/chains'
 
 export type DexProvider = '0x' | '1inch' | 'uniswap'
 
@@ -19,71 +27,80 @@ export interface BasketSwapRequest {
   slippageBps: number
 }
 
-/**
- * DEX ROUTER PLACEHOLDER
- * Live integration points:
- * - 0x API: https://0x.org/docs/api
- * - 1inch API: https://portal.1inch.dev/documentation
- * - Uniswap Universal Router / V3 Quoter
- */
-export async function getSwapQuote(
-  sellToken: Token,
-  buyToken: Token,
-  sellAmountUsd: number,
-  _slippageBps: number
-): Promise<SwapQuote> {
-  // TODO: Call 0x /api/swap/v1/quote or 1inch /quote or Uniswap quoter contract
-  await simulateLatency()
-  const buyAmount = (sellAmountUsd / buyToken.priceUsd).toFixed(6)
-  return {
-    provider: '0x',
-    sellToken,
-    buyToken,
-    sellAmount: sellAmountUsd.toString(),
-    buyAmount,
-    estimatedGasUsd: 4.5,
-    priceImpactPercent: 0.12,
-    route: [sellToken.symbol, 'WETH', buyToken.symbol],
-  }
-}
-
 export async function getBasketSwapQuotes(
   request: BasketSwapRequest
 ): Promise<SwapQuote[]> {
-  // TODO: Parallel quote fetch per allocation leg; pick best provider per leg
-  const quotes: SwapQuote[] = []
-  for (const { token, weightPercent } of request.allocations) {
-    const legUsd = (request.totalUsd * weightPercent) / 100
-    const quote = await getSwapQuote(
-      { symbol: 'USDC', name: 'USD Coin', address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', decimals: 6, priceUsd: 1, change24h: 0 },
-      token,
-      legUsd,
-      request.slippageBps
-    )
-    quotes.push(quote)
+  const basket: Basket = {
+    id: 'legacy',
+    name: 'Legacy',
+    description: '',
+    tag: '',
+    allocations: request.allocations,
   }
-  return quotes
+  const preview = await getBuyBasketQuotePreview(basket, request.totalUsd, {
+    chainId: mainnet.id,
+    slippageBps: request.slippageBps,
+  })
+  return preview.legs.map((leg) => ({
+    provider: leg.bestQuote.provider,
+    sellToken: leg.bestQuote.inputToken,
+    buyToken: leg.bestQuote.outputToken,
+    sellAmount: leg.bestQuote.inputAmount,
+    buyAmount: leg.bestQuote.outputAmount,
+    estimatedGasUsd: leg.bestQuote.estimatedGasUsd,
+    priceImpactPercent: leg.bestQuote.priceImpactPercent,
+    route: leg.bestQuote.routeSummary,
+  }))
 }
 
 export async function executeBasketBuy(_quotes: SwapQuote[]): Promise<{ txHash: string }> {
-  // SMART CONTRACT: PortXBasket.buy() with encoded swap calldata from aggregator
-  // TODO: sign and send transaction via wagmi writeContract / sendTransaction
-  await simulateLatency()
-  return { txHash: '0x' + '0'.repeat(64) }
+  const result = await executeDemoPlan(
+    buildExecutionPlan({
+      type: 'buy',
+      totalInputUsd: 0,
+      totalOutputUsd: 0,
+      totalGasUsd: 0,
+      slippageBps: 50,
+      chainId: mainnet.id,
+      legs: _quotes.map((q) => ({
+        allocation: {
+          token: q.buyToken,
+          weightPercent: 0,
+          inputAmountUsd: parseFloat(q.sellAmount),
+          inputAmount: q.sellAmount,
+        },
+        bestQuote: {
+          provider: q.provider,
+          inputToken: q.sellToken,
+          outputToken: q.buyToken,
+          inputAmount: q.sellAmount,
+          inputAmountUsd: parseFloat(q.sellAmount),
+          outputAmount: q.buyAmount,
+          outputAmountUsd: parseFloat(q.buyAmount) * q.buyToken.priceUsd,
+          estimatedGasUsd: q.estimatedGasUsd,
+          estimatedGasUnits: 180000,
+          priceImpactPercent: q.priceImpactPercent,
+          routeSummary: q.route,
+          calldata: '0x0',
+          routerAddress: '0x0',
+          warnings: [],
+        },
+        allQuotes: [],
+      })),
+      warnings: [],
+      isDemo: true,
+      createdAt: Date.now(),
+    })
+  )
+  return { txHash: result.txHashes[0] ?? '0x0' }
 }
 
 export async function executeBasketSell(_basketId: string): Promise<{ txHash: string }> {
-  // SMART CONTRACT: PortXBasket.redeem() — reverse multi-swap flow
-  await simulateLatency()
+  await new Promise((r) => setTimeout(r, 400))
   return { txHash: '0x' + '1'.repeat(64) }
 }
 
 export async function executeSellAll(): Promise<{ txHash: string }> {
-  // DEX ROUTER: batch unwind entire portfolio in optimal order
-  await simulateLatency()
+  await new Promise((r) => setTimeout(r, 400))
   return { txHash: '0x' + '2'.repeat(64) }
-}
-
-function simulateLatency(): Promise<void> {
-  return new Promise((r) => setTimeout(r, 400))
 }

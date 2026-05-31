@@ -1,20 +1,35 @@
-import { Link } from 'react-router-dom'
 import type { Basket } from '@/types/basket'
 import { formatUsd } from '@/utils/format'
 
 interface BasketCardProps {
   basket: Basket
+  onPreviewBuy?: (basket: Basket) => void
+  onPreviewSell?: (basket: Basket) => void
   onBuy?: (basket: Basket) => void
   onSell?: (basketId: string) => void
   isOwned?: boolean
   loading?: boolean
+  isSelected?: boolean
 }
 
-export function BasketCard({ basket, onBuy, onSell, isOwned, loading }: BasketCardProps) {
+export function BasketCard({
+  basket,
+  onPreviewBuy,
+  onPreviewSell,
+  onBuy,
+  onSell,
+  isOwned,
+  loading,
+  isSelected,
+}: BasketCardProps) {
   const tokenCount = basket.allocations.length
 
   return (
-    <div className="card-glow flex flex-col h-full hover:border-portx-green/30 transition-colors">
+    <div
+      className={`card-glow flex flex-col h-full hover:border-portx-green/30 transition-colors ${
+        isSelected ? 'border-portx-green/50 shadow-glow' : ''
+      }`}
+    >
       <div className="flex items-start justify-between gap-2 mb-3">
         <div>
           <h3 className="text-lg font-bold">{basket.name}</h3>
@@ -40,29 +55,48 @@ export function BasketCard({ basket, onBuy, onSell, isOwned, loading }: BasketCa
         {tokenCount} tokens · Demo TVL {formatUsd(basket.totalValueUsd ?? 0, true)}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2 mt-auto">
-        {onBuy && (
+      <div className="flex flex-col gap-2 mt-auto">
+        {onPreviewBuy && (
           <button
             type="button"
-            onClick={() => onBuy(basket)}
+            onClick={() => onPreviewBuy(basket)}
             disabled={loading}
-            className="btn-primary flex-1 text-sm py-2.5 disabled:opacity-50"
+            className="btn-primary w-full text-sm py-2.5 disabled:opacity-50"
           >
-            {loading ? 'Quoting...' : 'Buy Basket'}
+            {loading ? 'Fetching quotes...' : 'Preview Buy Quote'}
           </button>
         )}
-        {isOwned && onSell && (
+        {isOwned && onPreviewSell && (
           <button
             type="button"
-            onClick={() => onSell(basket.id)}
-            className="btn-secondary flex-1 text-sm py-2.5"
+            onClick={() => onPreviewSell(basket)}
+            disabled={loading}
+            className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
           >
-            Sell Basket
+            Preview Sell Quote
           </button>
         )}
-        <Link to="/baskets" className="btn-secondary text-sm py-2.5 text-center">
-          Details
-        </Link>
+        <div className="flex flex-col sm:flex-row gap-2">
+          {onBuy && (
+            <button
+              type="button"
+              onClick={() => onBuy(basket)}
+              disabled={loading}
+              className="btn-secondary flex-1 text-sm py-2.5 disabled:opacity-50"
+            >
+              Quick Buy (Demo)
+            </button>
+          )}
+          {isOwned && onSell && (
+            <button
+              type="button"
+              onClick={() => onSell(basket.id)}
+              className="btn-secondary flex-1 text-sm py-2.5"
+            >
+              Sell Basket
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -6,6 +6,7 @@ import { Baskets } from '@/pages/Baskets'
 import { CreateBasket } from '@/pages/CreateBasket'
 import { SellAll } from '@/pages/SellAll'
 import { Agents } from '@/pages/Agents'
+import { Discover } from '@/pages/Discover'
 import { Settings } from '@/pages/Settings'
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/create-basket" element={<CreateBasket />} />
         <Route path="/sell-all" element={<SellAll />} />
         <Route path="/agents" element={<Agents />} />
+        <Route path="/discover" element={<Discover />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
     </Routes>

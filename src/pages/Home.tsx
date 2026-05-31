@@ -1,10 +1,24 @@
 import { Link } from 'react-router-dom'
 import { Hero } from '@/components/Hero'
+import { TrendingAddresses } from '@/components/TrendingAddresses'
+import { NotablePortfolios } from '@/components/NotablePortfolios'
 
 export function Home() {
   return (
     <div>
       <Hero />
+
+      <section className="py-16 border-t border-portx-border bg-portx-surface/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+          <TrendingAddresses limit={6} showViewAll />
+          <NotablePortfolios limit={5} horizontal showViewAll />
+          <div className="text-center pt-4">
+            <Link to="/discover" className="btn-primary px-10 py-4 text-lg">
+              Discover Portfolios
+            </Link>
+          </div>
+        </div>
+      </section>
 
       <section className="py-20 border-t border-portx-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
