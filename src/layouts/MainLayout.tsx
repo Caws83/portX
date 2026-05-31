@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { Navbar } from '@/components/Navbar'
+import { Logo } from '@/components/Logo'
 
 export function MainLayout() {
   return (
@@ -9,10 +10,9 @@ export function MainLayout() {
         <Outlet />
       </main>
       <footer className="border-t border-portx-border py-8 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-portx-muted">
-          <p className="mb-1">
-            <span className="text-portx-green font-semibold">PortX</span> — Trade portfolios like a single asset.
-          </p>
+        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-portx-muted flex flex-col items-center gap-3">
+          <Logo height="sm" linkToHome={false} className="mx-auto opacity-90" />
+          <p className="mb-1">Trade portfolios like a single asset.</p>
           <p className="text-xs">Demo mode · No real trading · DEX routing placeholders</p>
         </div>
       </footer>
