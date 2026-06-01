@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { HorizontalScrollRow } from '@/components/HorizontalScrollRow'
 import { TRENDING_ADDRESSES } from '@/data/trendingAddresses'
 import { formatUsd, formatPercent } from '@/utils/format'
 
@@ -24,7 +25,7 @@ export function TrendingAddresses({ limit, showViewAll = false }: TrendingAddres
         )}
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
+      <HorizontalScrollRow className="pb-2">
         {addresses.map((addr) => {
           const trend = addr.change24h >= 0 ? 'text-portx-green' : 'text-portx-danger'
           return (
@@ -64,7 +65,7 @@ export function TrendingAddresses({ limit, showViewAll = false }: TrendingAddres
             </div>
           )
         })}
-      </div>
+      </HorizontalScrollRow>
     </section>
   )
 }

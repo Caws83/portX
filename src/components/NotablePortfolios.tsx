@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { NotablePortfolio } from '@/types/whale'
 import { NOTABLE_PORTFOLIOS } from '@/data/notablePortfolios'
+import { HorizontalScrollRow } from '@/components/HorizontalScrollRow'
 import { WhalePortfolioCard } from './WhalePortfolioCard'
 
 interface NotablePortfoliosProps {
@@ -35,13 +36,13 @@ export function NotablePortfolios({
       </div>
 
       {horizontal ? (
-        <div className="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
+        <HorizontalScrollRow className="pb-2">
           {items.map((p) => (
             <div key={p.id} className="shrink-0 w-[300px] snap-start">
               <WhalePortfolioCard portfolio={p} compact />
             </div>
           ))}
-        </div>
+        </HorizontalScrollRow>
       ) : (
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
           {items.map((p) => (
