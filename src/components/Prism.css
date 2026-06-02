@@ -1,0 +1,18 @@
+.prism-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.prism-container.prism-fallback-active {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 35%, rgba(0, 255, 136, 0.18), transparent 70%),
+    radial-gradient(ellipse 55% 45% at 72% 58%, rgba(0, 212, 255, 0.14), transparent 70%),
+    linear-gradient(180deg, #050508 0%, #0a0a12 100%);
+}
+
+.prism-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

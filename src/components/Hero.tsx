@@ -1,21 +1,33 @@
 import { Link } from 'react-router-dom'
-import { TAGLINE } from '@/config/constants'
+import { Prism } from '@/components/Prism'
 
 export function Hero() {
   return (
-    <section className="relative py-20 md:py-32 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-hero opacity-50" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-portx-green/5 rounded-full blur-3xl" />
+    <section className="relative -mt-[7.25rem] lg:-mt-[5.25rem] overflow-hidden pb-20 lg:min-h-screen lg:pb-0">
+      <div className="absolute inset-0 pointer-events-none">
+        <Prism
+          color1="#00ff88"
+          color2="#00d4ff"
+          animationType="rotate"
+          timeScale={0.5}
+          scale={3.5}
+          height={2.6}
+          baseWidth={3.6}
+          noise={0}
+          glow={0.8}
+          hueShift={-0.1}
+          colorFrequency={1}
+        />
+      </div>
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <div className="badge mb-6 mx-auto w-fit">DeFi Portfolio Trading</div>
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[7.25rem] lg:min-h-screen lg:flex lg:flex-col lg:justify-center lg:pt-[5.75rem] lg:pb-12 text-center">
         <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold tracking-tight mb-6">
           Trade portfolios
           <br />
           <span className="gradient-text">like a single asset</span>
         </h1>
-        <p className="text-lg md:text-xl text-portx-muted max-w-2xl mx-auto mb-4">
-          {TAGLINE} Buy, manage, and sell crypto baskets in one position — not token by token.
+        <p className="text-lg md:text-xl text-white/90 font-medium max-w-2xl mx-auto mb-4 drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)]">
+          Buy and sell crypto baskets as one position.
         </p>
         <p className="text-portx-green font-semibold text-lg mb-10">
           One click in. One click out.
@@ -36,9 +48,11 @@ export function Hero() {
             { label: 'Portfolio P&L', desc: 'Track value and targets in one view' },
             { label: 'Smart Exits', desc: 'Take-profit & stop-loss at portfolio level' },
           ].map((item) => (
-            <div key={item.label} className="card-glow text-left">
-              <div className="text-portx-green font-semibold mb-1">{item.label}</div>
-              <div className="text-sm text-portx-muted">{item.desc}</div>
+            <div key={item.label} className="glass-panel-dark rounded-2xl p-6 text-left">
+              <div className="relative z-10">
+                <div className="text-portx-green font-semibold mb-1">{item.label}</div>
+                <div className="text-sm text-white/70">{item.desc}</div>
+              </div>
             </div>
           ))}
         </div>
