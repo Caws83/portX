@@ -11,7 +11,7 @@ import { DEFAULT_BUY_AMOUNT_USD } from '@/config/constants'
 import type { Basket } from '@/types/basket'
 
 export function Baskets() {
-  const { allBaskets } = useBasket()
+  const { allBaskets, basketsLoading, basketsError, basketsSource } = useBasket()
   const buyBasket = usePortfolioStore((s) => s.buyBasket)
   const sellBasket = usePortfolioStore((s) => s.sellBasket)
   const activeBaskets = usePortfolioStore((s) => s.activeBaskets)
@@ -125,6 +125,24 @@ export function Baskets() {
         </p>
       </div>
 
+      {basketsLoading && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted">
+          Loading baskets from API…
+        </div>
+      )}
+
+      {basketsError && basketsSource === 'fallback' && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning">
+          Could not reach API ({basketsError}). Showing offline fallback baskets.
+        </div>
+      )}
+
+      {basketsSource === 'api' && !basketsLoading && (
+        <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green">
+          Baskets loaded from PortX API
+        </div>
+      )}
+
       {error && (
         <div className="mb-6 p-4 rounded-xl border border-portx-danger/50 bg-portx-danger/10 text-sm text-portx-danger">
           {error}
@@ -139,7 +157,8 @@ export function Baskets() {
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 grid md:grid-cols-2 gap-6">
-          {allBaskets.map((basket) => (
+          {!basketsLoading &&
+            allBaskets.map((basket) => (
             <BasketCard
               key={basket.id}
               basket={basket}
@@ -151,7 +170,7 @@ export function Baskets() {
               loading={loading && selectedBasket?.id === basket.id}
               isSelected={selectedBasket?.id === basket.id && !!preview}
             />
-          ))}
+            ))}
         </div>
 
         <div className="lg:col-span-1">

@@ -12,7 +12,7 @@ import { formatUsd } from '@/utils/format'
 export function Dashboard() {
   const { isConnected } = useAccount()
   const portfolio = usePortfolio()
-  const { getBasketById } = useBasket()
+  const { getBasketById, basketsLoading } = useBasket()
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -111,7 +111,11 @@ export function Dashboard() {
             View all baskets →
           </Link>
         </div>
-        {portfolio.activeBaskets.length === 0 ? (
+        {basketsLoading ? (
+          <div className="card text-center py-8 text-sm text-portx-muted">
+            Loading basket details…
+          </div>
+        ) : portfolio.activeBaskets.length === 0 ? (
           <div className="card text-center py-12">
             <p className="text-portx-muted mb-4">No active basket positions.</p>
             <Link to="/baskets" className="btn-primary">
