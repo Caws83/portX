@@ -1,9 +1,12 @@
 import type { FastifyInstance } from 'fastify'
-import { DEMO_TOKENS } from '../data/tokens.js'
+import { getTokensWithLivePrices } from '../services/coingecko.js'
 
 export async function tokensRoutes(app: FastifyInstance) {
-  app.get('/tokens', async () => ({
-    count: DEMO_TOKENS.length,
-    tokens: DEMO_TOKENS,
-  }))
+  app.get('/tokens', async () => {
+    const tokens = await getTokensWithLivePrices()
+    return {
+      count: tokens.length,
+      tokens,
+    }
+  })
 }
