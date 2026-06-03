@@ -23,7 +23,7 @@ export function selectBestQuote(quotes: ProviderQuote[]): ProviderQuote {
   })
 }
 
-export async function getBestQuote(request: QuoteRequest): Promise<ProviderQuote> {
+export async function getBestQuoteLocal(request: QuoteRequest): Promise<ProviderQuote> {
   const quotes = await fetchAllProviderQuotes(request)
   return selectBestQuote(quotes)
 }

@@ -1,13 +1,17 @@
 import type { BasketQuoteResponse, LegQuoteResponse } from '../types/quote.js'
 import { requireBasket } from '../data/demoBaskets.js'
 import { getDemoPortfolio } from '../data/demoPortfolio.js'
-import { env } from '../config/env.js'
 import { calculateBuyLegs, calculateSellLegs, calculateSellAllLegs } from './allocationEngine.js'
-import { getBestQuote } from './routeSelector.js'
+import { getBestQuote, getQuotesStatus } from './quoteProviders.js'
 import { sum } from '../utils/math.js'
 
 const DEMO_WARNINGS = [
   'Demo quote only. No real swap will execute.',
+  'PortX is non-custodial — user signs transactions from their wallet when live.',
+]
+
+const LIVE_WARNINGS = [
+  'Quote from 0x Swap API — preview only, no swap will execute.',
   'PortX is non-custodial — user signs transactions from their wallet when live.',
 ]
 
@@ -133,14 +137,17 @@ function buildResponse(
     return s + (Number.isNaN(out) ? 0 : out)
   }, 0)
 
+  const quotesSource = getQuotesStatus()
+  const isLive = quotesSource === '0x'
+
   return {
-    mode: env.enableDemoQuotes ? 'demo' : 'live',
+    mode: isLive ? 'live' : 'demo',
     basketId,
     basketName,
     inputAmountUsd,
     totalOutputUsd,
     quotes,
     totalEstimatedGasUsd: Math.round(totalGas * 100) / 100,
-    warnings: [...DEMO_WARNINGS],
+    warnings: isLive ? [...LIVE_WARNINGS] : [...DEMO_WARNINGS],
   }
 }
