@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom'
 import { useAccount } from 'wagmi'
-import { PortfolioSummary } from '@/components/PortfolioCard'
+import { PortfolioSummary, PortfolioCard } from '@/components/PortfolioCard'
 import { TokenRow } from '@/components/TokenRow'
 import { BasketCard } from '@/components/BasketCard'
 import { WhalePortfolioCard } from '@/components/WhalePortfolioCard'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useBasket } from '@/hooks/useBasket'
 import { NOTABLE_PORTFOLIOS } from '@/data/notablePortfolios'
-import { formatUsd } from '@/utils/format'
+import { formatUsd, formatPercent } from '@/utils/format'
 
 export function Dashboard() {
   const { isConnected } = useAccount()
@@ -28,12 +28,68 @@ export function Dashboard() {
         </Link>
       </div>
 
+      {portfolio.portfolioLoading && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted">
+          Loading portfolio from API…
+        </div>
+      )}
+
+      {portfolio.portfolioSource === 'fallback' && !portfolio.portfolioLoading && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span>Using local portfolio fallback</span>
+          <button
+            type="button"
+            onClick={portfolio.retryPortfolio}
+            className="btn-secondary text-sm py-2 px-4 shrink-0"
+          >
+            Retry API
+          </button>
+        </div>
+      )}
+
+      {portfolio.portfolioSource === 'api' && !portfolio.portfolioLoading && (
+        <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green">
+          Portfolio loaded from PortX API
+        </div>
+      )}
+
       <PortfolioSummary
         totalValueUsd={portfolio.totalValueUsd}
         pnlUsd={portfolio.pnlUsd}
         pnlPercent={portfolio.pnlPercent}
         costBasisUsd={portfolio.costBasisUsd}
       />
+
+      {!portfolio.portfolioLoading && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          <PortfolioCard
+            label="Number of Positions"
+            value={String(portfolio.positionCount)}
+            subValue="Token holdings"
+          />
+          <PortfolioCard
+            label="Largest Position"
+            value={
+              portfolio.largestPosition
+                ? portfolio.largestPosition.token.symbol
+                : '—'
+            }
+            subValue={
+              portfolio.largestPosition
+                ? formatUsd(portfolio.largestPosition.valueUsd)
+                : 'No holdings'
+            }
+            highlight={!!portfolio.largestPosition}
+          />
+          <PortfolioCard
+            label="Active Baskets"
+            value={String(portfolio.activeBasketsCount)}
+            subValue={
+              portfolio.activeBasketsCount === 1 ? '1 basket' : `${portfolio.activeBasketsCount} baskets`
+            }
+          />
+        </div>
+      )}
 
       {(portfolio.targetStatus.takeProfitHit || portfolio.targetStatus.stopLossHit) && (
         <div className="mt-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-portx-warning">
@@ -48,7 +104,9 @@ export function Dashboard() {
       <div className="grid lg:grid-cols-2 gap-6 mt-8">
         <div className="card">
           <h2 className="text-lg font-bold mb-4">Tokens Held</h2>
-          {portfolio.heldTokens.length === 0 ? (
+          {portfolio.portfolioLoading ? (
+            <p className="text-portx-muted text-sm">Loading holdings…</p>
+          ) : portfolio.heldTokens.length === 0 ? (
             <p className="text-portx-muted text-sm">No tokens in demo portfolio.</p>
           ) : (
             portfolio.heldTokens.map((h) => <TokenRow key={h.token.symbol} holding={h} />)
@@ -75,6 +133,10 @@ export function Dashboard() {
                   ? `-${portfolio.targets.stopLossPercent}%`
                   : 'Not set'}
               </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-portx-muted">Portfolio P/L</dt>
+              <dd className="font-mono text-portx-green">{formatPercent(portfolio.pnlPercent)}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-portx-muted">Current value</dt>
@@ -111,7 +173,7 @@ export function Dashboard() {
             View all baskets →
           </Link>
         </div>
-        {basketsLoading ? (
+        {basketsLoading || portfolio.portfolioLoading ? (
           <div className="card text-center py-8 text-sm text-portx-muted">
             Loading basket details…
           </div>
