@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { usePortfolio } from '@/hooks/usePortfolio'
-import { useQuotePreview } from '@/hooks/useQuotePreview'
+import { useSellAllPreview } from '@/hooks/useSellAllPreview'
 import { SellAllButton } from '@/components/SellAllButton'
 import { TargetSellForm } from '@/components/TargetSellForm'
 import { StopLossForm } from '@/components/StopLossForm'
 import { PortfolioSummary } from '@/components/PortfolioCard'
-import { QuotePreviewCard } from '@/components/QuotePreviewCard'
+import { SellAllPreviewCard } from '@/components/SellAllPreviewCard'
 import { TransactionReviewModal } from '@/components/TransactionReviewModal'
 import { ExecutionWarning } from '@/components/ExecutionWarning'
 import { executeDemoPlan } from '@/services/transactionBuilder'
@@ -14,7 +14,17 @@ import { formatUsd } from '@/utils/format'
 export function SellAll() {
   const portfolio = usePortfolio()
   const sellAllPortfolio = portfolio.sellAllPortfolio
-  const { preview, plan, loading, error, previewSellAll, buildPlan, clear } = useQuotePreview()
+  const {
+    preview,
+    plan,
+    loading,
+    error,
+    quoteSource,
+    previewSellAllPortfolio,
+    retrySellAllQuote,
+    buildPlan,
+    clear,
+  } = useSellAllPreview()
 
   const [modalOpen, setModalOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -23,7 +33,7 @@ export function SellAll() {
   const handlePreview = async () => {
     setTxMsg(null)
     if (portfolio.heldTokens.length === 0) return
-    await previewSellAll(portfolio.heldTokens)
+    await previewSellAllPortfolio(portfolio.heldTokens)
   }
 
   const handleReview = () => {
@@ -82,6 +92,31 @@ export function SellAll() {
           {formatUsd(portfolio.totalValueUsd)}
         </p>
 
+        {loading && (
+          <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted text-center">
+            Loading sell-all quote from API…
+          </div>
+        )}
+
+        {quoteSource === 'fallback' && preview && !loading && (
+          <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <span>Using local sell-all fallback</span>
+            <button
+              type="button"
+              onClick={() => void retrySellAllQuote(portfolio.heldTokens)}
+              className="btn-secondary text-sm py-2 px-4 shrink-0"
+            >
+              Retry API
+            </button>
+          </div>
+        )}
+
+        {quoteSource === 'api' && preview && !loading && (
+          <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green text-center">
+            Sell-all quote loaded from PortX API
+          </div>
+        )}
+
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <button
             type="button"
@@ -89,7 +124,7 @@ export function SellAll() {
             disabled={loading || portfolio.heldTokens.length === 0}
             className="btn-primary flex-1 py-3 disabled:opacity-50"
           >
-            {loading ? 'Fetching quotes...' : 'Preview Sell All Quote'}
+            {loading ? 'Fetching quotes...' : 'Preview Sell All'}
           </button>
         </div>
 
@@ -103,7 +138,7 @@ export function SellAll() {
 
         {preview && (
           <div className="mb-6">
-            <QuotePreviewCard
+            <SellAllPreviewCard
               preview={preview}
               onReview={handleReview}
               reviewLabel="Review & Confirm Demo Sell"

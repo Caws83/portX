@@ -161,8 +161,8 @@ export async function getSellBasketQuotePreview(
   })
 }
 
-/** Sell all portfolio: every held token → USDC */
-export async function getSellAllQuotePreview(
+/** Local demo sell-all — used when POST /quotes/sell-all is unavailable */
+export async function getLocalSellAllQuotePreview(
   holdings: HeldToken[],
   params: QuoteEngineParams
 ): Promise<BasketQuotePreview> {
@@ -177,11 +177,24 @@ export async function getSellAllQuotePreview(
     'sell'
   )
 
+  return buildPreviewFromLegs('sell_all', legs, requests, {
+    basketName: 'Full Portfolio',
+    slippageBps: params.slippageBps,
+    chainId: params.chainId,
+    isDemo: true,
+  })
+}
+
+/** Sell all portfolio: every held token → USDC (local providers; prefer useSellAllPreview + API) */
+export async function getSellAllQuotePreview(
+  holdings: HeldToken[],
+  params: QuoteEngineParams
+): Promise<BasketQuotePreview> {
   if (!ENABLE_DEMO_QUOTES) {
     try {
       return await fetchSellAllQuoteFromBackend({
         holdings,
-        outputToken,
+        outputToken: getStablecoin(params.stablecoinSymbol),
         chainId: params.chainId,
         walletAddress: params.walletAddress,
         slippageBps: params.slippageBps,
@@ -191,9 +204,5 @@ export async function getSellAllQuotePreview(
     }
   }
 
-  return buildPreviewFromLegs('sell_all', legs, requests, {
-    slippageBps: params.slippageBps,
-    chainId: params.chainId,
-    isDemo: ENABLE_DEMO_QUOTES,
-  })
+  return getLocalSellAllQuotePreview(holdings, params)
 }

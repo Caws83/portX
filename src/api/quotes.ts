@@ -142,6 +142,128 @@ export function mapBuyBasketResponseToPreview(
   }
 }
 
+export interface SellAllPreviewRequest {
+  walletAddress: string
+  chainId: number
+  outputToken: string
+  slippageBps: number
+}
+
+export interface SellAllLegQuote {
+  provider: string
+  fromToken: string
+  toToken: string
+  inputAmountUsd: number
+  estimatedOutput: string
+  estimatedGasUsd: number
+  priceImpactPercent: number
+  routeSummary: string
+  calldata: string
+  routerAddress: string
+  allocationPercent: number
+}
+
+export interface SellAllPreviewResponse {
+  mode: 'demo' | 'live'
+  basketId?: string
+  basketName?: string
+  inputAmountUsd?: number
+  totalOutputUsd?: number
+  totalEstimatedOutputUsd?: number
+  quotes: SellAllLegQuote[]
+  totalEstimatedGasUsd: number
+  warnings: string[]
+}
+
+/**
+ * POST ${VITE_PORTX_API_URL}/quotes/sell-all
+ */
+export async function previewSellAll(
+  payload: SellAllPreviewRequest
+): Promise<SellAllPreviewResponse> {
+  if (!PORTX_API_URL) {
+    throw new ApiError('VITE_PORTX_API_URL is not configured')
+  }
+
+  return apiClient<SellAllPreviewResponse>('/quotes/sell-all', {
+    method: 'POST',
+    body: {
+      walletAddress: payload.walletAddress,
+      chainId: payload.chainId,
+      outputToken: payload.outputToken,
+      slippageBps: payload.slippageBps,
+    },
+  })
+}
+
+function sellLegQuoteFromApi(leg: SellAllLegQuote, outputToken: Token): LegQuote {
+  const inputToken = requireToken(leg.fromToken)
+  const outputAmount = leg.estimatedOutput
+  const outputAmountUsd =
+    outputToken.priceUsd > 0
+      ? parseFloat(outputAmount) * outputToken.priceUsd
+      : leg.inputAmountUsd
+
+  const bestQuote: QuoteResponse = {
+    provider: normalizeProvider(leg.provider),
+    inputToken,
+    outputToken,
+    inputAmount: String(Math.round(leg.inputAmountUsd * Math.pow(10, inputToken.decimals))),
+    inputAmountUsd: leg.inputAmountUsd,
+    outputAmount,
+    outputAmountUsd,
+    estimatedGasUsd: leg.estimatedGasUsd,
+    estimatedGasUnits: Math.round(leg.estimatedGasUsd * 1e9),
+    priceImpactPercent: leg.priceImpactPercent,
+    routeSummary: leg.routeSummary ? [leg.routeSummary] : [],
+    calldata: leg.calldata,
+    routerAddress: leg.routerAddress,
+    warnings: [],
+  }
+
+  return {
+    allocation: {
+      token: inputToken,
+      weightPercent: leg.allocationPercent,
+      inputAmountUsd: leg.inputAmountUsd,
+      inputAmount: bestQuote.inputAmount,
+    },
+    bestQuote,
+    allQuotes: [bestQuote],
+  }
+}
+
+/** Map backend sell-all response into UI BasketQuotePreview */
+export function mapSellAllResponseToPreview(
+  response: SellAllPreviewResponse,
+  chainId: number,
+  slippageBps: number,
+  outputTokenSymbol = 'USDC'
+): BasketQuotePreview {
+  const outputToken = requireToken(outputTokenSymbol)
+  const legs = response.quotes.map((q) => sellLegQuoteFromApi(q, outputToken))
+  const totalInputUsd =
+    response.inputAmountUsd ?? legs.reduce((sum, l) => sum + l.allocation.inputAmountUsd, 0)
+  const totalOutputUsd =
+    response.totalEstimatedOutputUsd ??
+    response.totalOutputUsd ??
+    legs.reduce((sum, l) => sum + l.bestQuote.outputAmountUsd, 0)
+
+  return {
+    type: 'sell_all',
+    basketName: response.basketName ?? 'Full Portfolio',
+    totalInputUsd,
+    totalOutputUsd,
+    totalGasUsd: response.totalEstimatedGasUsd,
+    slippageBps,
+    chainId,
+    legs,
+    warnings: response.warnings,
+    isDemo: response.mode === 'demo',
+    createdAt: Date.now(),
+  }
+}
+
 export async function validateExecutionPlan(plan: ExecutionPlan): Promise<ExecutionPlan> {
   return apiClient<ExecutionPlan>('/api/v1/quotes/validate', {
     method: 'POST',
