@@ -1,19 +1,201 @@
-import type { BasketQuotePreview } from '@/types/quote'
-import type { BuiltTransaction, ExecutionPlan, ExecutionResult, SwapLeg } from '@/types/execution'
+import type { BasketQuotePreview, QuoteResponse } from '@/types/quote'
+import type {
+  BuiltTransaction,
+  CalldataStatus,
+  ExecutionPlan,
+  ExecutionReadiness,
+  ExecutionResult,
+  ExecutionStatus,
+  LegExecutionInfo,
+  LiveExecutionPlanSummary,
+  SwapLeg,
+} from '@/types/execution'
+import { isSupportedExecutionChain } from '@/types/execution'
 import { validateExecutionPlan } from '@/api/quotes'
+import { isZeroAddress } from '@/utils/addresses'
 
 let planCounter = 0
 
+const DEMO_CALLDATA_MARKERS = ['_DEMO_CALLDATA', '_DEMO_']
+
+export function truncateAddress(address: string, head = 6, tail = 4): string {
+  if (address.length <= head + tail + 2) return address
+  return `${address.slice(0, head + 2)}…${address.slice(-tail)}`
+}
+
+export function truncateCalldata(calldata: string, max = 18): string {
+  if (calldata.length <= max) return calldata
+  return `${calldata.slice(0, max)}…`
+}
+
+export function isValidRouterAddress(address: string): boolean {
+  return /^0x[0-9a-fA-F]{40}$/.test(address) && !isZeroAddress(address)
+}
+
+/** True when calldata looks like a real 0x transaction payload (not demo placeholders) */
+export function isValidCalldata(calldata: string): boolean {
+  if (!calldata?.startsWith('0x')) return false
+  const body = calldata.slice(2)
+  if (body.length < 16) return false
+  if (!/^[0-9a-fA-F]+$/.test(body)) return false
+  if (/^0+$/.test(body)) return false
+  if (DEMO_CALLDATA_MARKERS.some((marker) => calldata.includes(marker))) return false
+  return true
+}
+
+export function getCalldataStatus(quote: QuoteResponse, isDemoPlan: boolean): CalldataStatus {
+  if (isDemoPlan) return 'demo'
+  if (quote.provider === '0x' && isValidCalldata(quote.calldata) && isValidRouterAddress(quote.routerAddress)) {
+    return 'available'
+  }
+  if (isValidCalldata(quote.calldata) && isValidRouterAddress(quote.routerAddress)) {
+    return 'available'
+  }
+  return 'missing'
+}
+
+export function hasZeroExRoute(quotes: QuoteResponse[]): boolean {
+  return quotes.some((q) => q.provider === '0x')
+}
+
+export function allZeroExCalldataAvailable(quotes: QuoteResponse[], isDemoPlan: boolean): boolean {
+  if (isDemoPlan) return false
+  const zeroExLegs = quotes.filter((q) => q.provider === '0x')
+  if (zeroExLegs.length === 0) return false
+  return zeroExLegs.every(
+    (q) => isValidCalldata(q.calldata) && isValidRouterAddress(q.routerAddress)
+  )
+}
+
+export function getExecutionStatus(quotes: QuoteResponse[], isDemoPlan: boolean): ExecutionStatus {
+  if (isDemoPlan) return 'preview_only'
+  if (hasZeroExRoute(quotes) && allZeroExCalldataAvailable(quotes, isDemoPlan)) {
+    return 'ready_for_wallet'
+  }
+  return 'preview_only'
+}
+
+export function getExecutionStatusLabel(status: ExecutionStatus): string {
+  return status === 'ready_for_wallet' ? 'Ready for wallet execution' : 'Preview only'
+}
+
+function legExecutionInfoFromQuote(quote: QuoteResponse, index: number, isDemoPlan: boolean): LegExecutionInfo {
+  const calldataStatus = getCalldataStatus(quote, isDemoPlan)
+  return {
+    index,
+    provider: quote.provider,
+    inputSymbol: quote.inputToken.symbol,
+    outputSymbol: quote.outputToken.symbol,
+    routerAddress: quote.routerAddress,
+    routerDisplay: isValidRouterAddress(quote.routerAddress)
+      ? truncateAddress(quote.routerAddress)
+      : 'Not available',
+    calldata: quote.calldata,
+    calldataDisplay: quote.calldata?.startsWith('0x')
+      ? truncateCalldata(quote.calldata)
+      : 'Not available',
+    calldataStatus,
+  }
+}
+
+export function buildLegExecutionInfo(plan: ExecutionPlan): LegExecutionInfo[] {
+  return plan.legs.map((leg) => legExecutionInfoFromQuote(leg.quote, leg.index, plan.isDemo))
+}
+
+export function buildLiveExecutionSummaryFromPreview(preview: BasketQuotePreview): LiveExecutionPlanSummary {
+  const quotes = preview.legs.map((l) => l.bestQuote)
+  const status = getExecutionStatus(quotes, preview.isDemo)
+  return {
+    status,
+    statusLabel: getExecutionStatusLabel(status),
+    hasZeroExRoute: hasZeroExRoute(quotes),
+    allCalldataAvailable: allZeroExCalldataAvailable(quotes, preview.isDemo),
+    legs: preview.legs.map((leg, index) =>
+      legExecutionInfoFromQuote(leg.bestQuote, index, preview.isDemo)
+    ),
+  }
+}
+
+export function assessExecutionReadiness(
+  plan: ExecutionPlan,
+  context: { walletConnected: boolean; currentChainId?: number }
+): ExecutionReadiness {
+  const quotes = plan.legs.map((l) => l.quote)
+  const status = getExecutionStatus(quotes, plan.isDemo)
+  const legs = buildLegExecutionInfo(plan)
+  const builtTransactions = buildTransactions(plan)
+  const zeroExRoute = hasZeroExRoute(quotes)
+  const calldataReady = allZeroExCalldataAvailable(quotes, plan.isDemo)
+  const networkChainId = context.currentChainId ?? plan.chainId
+  const networkSupported = isSupportedExecutionChain(networkChainId) && networkChainId === plan.chainId
+  const slippageSet = plan.slippageBps > 0
+
+  const checks: ExecutionReadiness['checks'] = [
+    {
+      id: 'wallet',
+      label: 'Wallet connected',
+      passed: context.walletConnected && Boolean(plan.walletAddress),
+      detail: context.walletConnected ? plan.walletAddress : 'Connect wallet to execute',
+    },
+    {
+      id: 'network',
+      label: 'Network supported',
+      passed: networkSupported,
+      detail: networkSupported
+        ? `Ethereum mainnet (chain ${plan.chainId})`
+        : `Switch to Ethereum mainnet (chain ${plan.chainId})`,
+    },
+    {
+      id: 'slippage',
+      label: 'Slippage set',
+      passed: slippageSet,
+      detail: slippageSet ? `${plan.slippageBps} bps` : 'Set slippage tolerance',
+    },
+    {
+      id: 'route',
+      label: '0x route found',
+      passed: zeroExRoute,
+      detail: zeroExRoute ? '0x aggregator route selected' : 'No 0x route in quote',
+    },
+    {
+      id: 'calldata',
+      label: 'Calldata available',
+      passed: calldataReady,
+      detail: calldataReady
+        ? `${legs.filter((l) => l.calldataStatus === 'available').length}/${legs.length} legs ready`
+        : '0x calldata missing or preview-only',
+    },
+    {
+      id: 'confirm',
+      label: 'User confirmation required',
+      passed: false,
+      detail: 'Sign transaction in wallet (coming soon)',
+    },
+  ]
+
+  return {
+    status,
+    statusLabel: getExecutionStatusLabel(status),
+    checks,
+    legs,
+    builtTransactions,
+    hasZeroExRoute: zeroExRoute,
+    allCalldataAvailable: calldataReady,
+    liveExecutionEnabled: false,
+  }
+}
+
 export function buildExecutionPlan(
   preview: BasketQuotePreview,
-  walletAddress?: string
+  walletAddress?: string,
+  context?: { walletConnected?: boolean; currentChainId?: number }
 ): ExecutionPlan {
   const legs: SwapLeg[] = preview.legs.map((leg, index) => ({
     quote: leg.bestQuote,
     index,
   }))
 
-  return {
+  const plan: ExecutionPlan = {
     id: `portx-exec-${Date.now()}-${++planCounter}`,
     type: preview.type,
     basketId: preview.basketId,
@@ -28,6 +210,13 @@ export function buildExecutionPlan(
     isDemo: preview.isDemo,
     warnings: preview.warnings,
   }
+
+  plan.readiness = assessExecutionReadiness(plan, {
+    walletConnected: context?.walletConnected ?? Boolean(walletAddress),
+    currentChainId: context?.currentChainId ?? preview.chainId,
+  })
+
+  return plan
 }
 
 /** Converts execution plan into wallet-ready transactions (one per swap leg at MVP) */
@@ -60,9 +249,7 @@ export async function validatePlanWithBackend(plan: ExecutionPlan): Promise<Exec
  */
 export async function executeDemoPlan(plan: ExecutionPlan): Promise<ExecutionResult> {
   await simulateLatency()
-  const txHashes = plan.legs.map(
-    (_, i) => '0x' + i.toString(16).padStart(64, '0')
-  )
+  const txHashes = plan.legs.map((_, i) => '0x' + i.toString(16).padStart(64, '0'))
   return {
     success: true,
     txHashes,
