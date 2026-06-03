@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import type { NotablePortfolio } from '@/types/whale'
 import type { Basket } from '@/types/basket'
+import type { Token } from '@/types/token'
 import { useBasketStore } from '@/store/basketStore'
-import { getTokenBySymbol } from '@/data/tokens'
+import { useTokens } from '@/hooks/useTokens'
 
-function notablePortfolioToBasket(portfolio: NotablePortfolio): Basket {
+function notablePortfolioToBasket(
+  portfolio: NotablePortfolio,
+  getTokenBySymbol: (symbol: string) => Token | undefined
+): Basket {
   const allocations = portfolio.tokens.map(({ symbol, allocationPercent }) => {
     const token = getTokenBySymbol(symbol) ?? {
       symbol,
@@ -36,6 +40,7 @@ interface CopyPortfolioButtonProps {
 
 export function CopyPortfolioButton({ portfolio, className = '', onCopied }: CopyPortfolioButtonProps) {
   const addCustomBasket = useBasketStore((s) => s.addCustomBasket)
+  const { getTokenBySymbol } = useTokens()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
@@ -43,7 +48,7 @@ export function CopyPortfolioButton({ portfolio, className = '', onCopied }: Cop
 
     // Converts discovery template → Zustand basket — no trade execution
     // Future: optional on-chain snapshot before copy via wallet intelligence API
-    const basket = notablePortfolioToBasket(portfolio)
+    const basket = notablePortfolioToBasket(portfolio, getTokenBySymbol)
     addCustomBasket(basket)
     setCopied(true)
     onCopied?.()

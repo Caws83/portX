@@ -1,5 +1,6 @@
 import type { Token } from '@/types/token'
 
+/** Local fallback token list — used when GET /tokens API is unavailable. */
 export const DEMO_TOKENS: Token[] = [
   { symbol: 'ETH', name: 'Ethereum', address: '0x0000000000000000000000000000000000000000', decimals: 18, priceUsd: 3450, change24h: 2.4 },
   { symbol: 'BTC', name: 'Bitcoin', address: '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', decimals: 8, priceUsd: 98500, change24h: 1.8 },

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { DEMO_TOKENS } from '@/data/tokens'
+import { useTokens } from '@/hooks/useTokens'
 import { useBasketStore } from '@/store/basketStore'
 import type { TokenAllocation } from '@/types/token'
 import type { Basket } from '@/types/basket'
@@ -10,6 +10,7 @@ import { sum } from '@/utils/math'
 export function CreateBasket() {
   const navigate = useNavigate()
   const addCustomBasket = useBasketStore((s) => s.addCustomBasket)
+  const { tokens, tokensLoading, tokensError, tokensSource, getTokenBySymbol } = useTokens()
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -42,10 +43,11 @@ export function CreateBasket() {
   const handleSave = () => {
     if (!valid) return
 
-    const allocations: TokenAllocation[] = Object.entries(selected).map(([symbol, weightPercent]) => ({
-      token: DEMO_TOKENS.find((t) => t.symbol === symbol)!,
-      weightPercent,
-    }))
+    const allocations: TokenAllocation[] = Object.entries(selected).map(([symbol, weightPercent]) => {
+      const token = getTokenBySymbol(symbol)
+      if (!token) throw new Error(`Unknown token: ${symbol}`)
+      return { token, weightPercent }
+    })
 
     const basket: Basket = {
       id: `custom-${Date.now()}`,
@@ -56,7 +58,6 @@ export function CreateBasket() {
       isCustom: true,
     }
 
-    // Persist to Zustand — on-chain basket registry will replace local storage later
     addCustomBasket(basket)
     navigate('/baskets')
   }
@@ -79,6 +80,24 @@ export function CreateBasket() {
       <p className="text-portx-muted mb-8">
         Select tokens and set allocation percentages. Saved to local state (demo).
       </p>
+
+      {tokensLoading && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted">
+          Loading tokens from API…
+        </div>
+      )}
+
+      {tokensError && tokensSource === 'fallback' && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning">
+          Could not reach API ({tokensError}). Showing offline fallback tokens.
+        </div>
+      )}
+
+      {tokensSource === 'api' && !tokensLoading && (
+        <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green">
+          Tokens loaded from PortX API
+        </div>
+      )}
 
       <div className="card space-y-6 mb-8">
         <div>
@@ -119,39 +138,49 @@ export function CreateBasket() {
         </p>
 
         <div className="space-y-3 max-h-[400px] overflow-y-auto">
-          {DEMO_TOKENS.map((token) => {
-            const isOn = token.symbol in selected
-            return (
-              <div
-                key={token.symbol}
-                className={`flex items-center gap-4 p-3 rounded-xl border ${
-                  isOn ? 'border-portx-green/30 bg-portx-green/5' : 'border-portx-border'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={isOn}
-                  onChange={() => toggleToken(token.symbol)}
-                  className="w-4 h-4 accent-portx-green"
-                />
-                <div className="flex-1 font-medium">{token.symbol}</div>
-                {isOn && (
+          {!tokensLoading &&
+            tokens.map((token) => {
+              const isOn = token.symbol in selected
+              return (
+                <div
+                  key={token.symbol}
+                  className={`flex items-center gap-4 p-3 rounded-xl border ${
+                    isOn ? 'border-portx-green/30 bg-portx-green/5' : 'border-portx-border'
+                  }`}
+                >
                   <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={selected[token.symbol]}
-                    onChange={(e) => setWeight(token.symbol, parseFloat(e.target.value) || 0)}
-                    className="input-field w-24 text-right font-mono"
+                    type="checkbox"
+                    checked={isOn}
+                    onChange={() => toggleToken(token.symbol)}
+                    className="w-4 h-4 accent-portx-green"
+                    disabled={tokensLoading}
                   />
-                )}
-              </div>
-            )
-          })}
+                  <div className="flex-1">
+                    <div className="font-medium">{token.symbol}</div>
+                    <div className="text-xs text-portx-muted">{token.name}</div>
+                  </div>
+                  {isOn && (
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={selected[token.symbol]}
+                      onChange={(e) => setWeight(token.symbol, parseFloat(e.target.value) || 0)}
+                      className="input-field w-24 text-right font-mono"
+                    />
+                  )}
+                </div>
+              )
+            })}
         </div>
       </div>
 
-      <button type="button" onClick={handleSave} disabled={!valid} className="btn-primary w-full py-4 disabled:opacity-40">
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={!valid || tokensLoading}
+        className="btn-primary w-full py-4 disabled:opacity-40"
+      >
         Save Basket
       </button>
     </div>
