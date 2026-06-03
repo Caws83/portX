@@ -63,7 +63,7 @@ export function BasketCard({
             disabled={loading}
             className="btn-primary w-full text-sm py-2.5 disabled:opacity-50"
           >
-            {loading ? 'Fetching quotes...' : 'Preview Buy Quote'}
+            {loading ? 'Fetching quotes...' : 'Preview Quote'}
           </button>
         )}
         {isOwned && onPreviewSell && (

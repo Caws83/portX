@@ -3,7 +3,6 @@ import type { Token } from '@/types/token'
 import type { HeldToken } from '@/types/portfolio'
 import type { QuoteRequest, BasketQuotePreview, LegQuote, QuotePreviewType } from '@/types/quote'
 import { ENABLE_DEMO_QUOTES } from '@/config/constants'
-import { fetchBasketQuoteFromBackend } from '@/api/quotes'
 import { fetchSellAllQuoteFromBackend } from '@/api/portfolio'
 import { ApiError } from '@/api/client'
 import {
@@ -96,8 +95,8 @@ export interface QuoteEngineParams {
   stablecoinSymbol?: string
 }
 
-/** Buy basket: USDC → each allocation token */
-export async function getBuyBasketQuotePreview(
+/** Local demo quote engine — used when POST /quotes/buy-basket is unavailable */
+export async function getLocalBuyBasketQuotePreview(
   basket: Basket,
   totalInputUsd: number,
   params: QuoteEngineParams
@@ -113,27 +112,22 @@ export async function getBuyBasketQuotePreview(
     'buy'
   )
 
-  if (!ENABLE_DEMO_QUOTES) {
-    try {
-      return await fetchBasketQuoteFromBackend({
-        legs: requests,
-        type: 'buy',
-        basketId: basket.id,
-        basketName: basket.name,
-      })
-    } catch (e) {
-      if (!(e instanceof ApiError)) throw e
-      // Fall through to local demo engine if backend unavailable
-    }
-  }
-
   return buildPreviewFromLegs('buy', legs, requests, {
     basketId: basket.id,
     basketName: basket.name,
     slippageBps: params.slippageBps,
     chainId: params.chainId,
-    isDemo: ENABLE_DEMO_QUOTES,
+    isDemo: true,
   })
+}
+
+/** Buy basket: USDC → each allocation token (local providers; prefer useQuotePreview + API) */
+export async function getBuyBasketQuotePreview(
+  basket: Basket,
+  totalInputUsd: number,
+  params: QuoteEngineParams
+): Promise<BasketQuotePreview> {
+  return getLocalBuyBasketQuotePreview(basket, totalInputUsd, params)
 }
 
 /** Sell basket: each token → USDC */
@@ -157,19 +151,6 @@ export async function getSellBasketQuotePreview(
     params.slippageBps,
     'sell'
   )
-
-  if (!ENABLE_DEMO_QUOTES) {
-    try {
-      return await fetchBasketQuoteFromBackend({
-        legs: requests,
-        type: 'sell_basket',
-        basketId: basket.id,
-        basketName: basket.name,
-      })
-    } catch (e) {
-      if (!(e instanceof ApiError)) throw e
-    }
-  }
 
   return buildPreviewFromLegs('sell_basket', legs, requests, {
     basketId: basket.id,

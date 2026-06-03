@@ -43,6 +43,15 @@ export function QuotePreviewCard({
         </div>
       </div>
 
+      {preview.type === 'buy' && (
+        <div className="p-3 rounded-xl bg-portx-surface border border-portx-border text-sm">
+          <span className="text-portx-muted">Input: </span>
+          <span className="font-mono font-semibold text-portx-green">
+            {formatUsd(preview.totalInputUsd)} USDC
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Stat label="Total In" value={formatUsd(preview.totalInputUsd)} />
         <Stat label="Est. Out" value={formatUsd(preview.totalOutputUsd)} highlight />

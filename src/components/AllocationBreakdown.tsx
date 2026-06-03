@@ -45,6 +45,11 @@ export function AllocationBreakdown({ legs, direction }: AllocationBreakdownProp
                     {formatTokenAmount(parseFloat(q.outputAmount))} {q.outputToken.symbol}
                   </div>
                   <div className="text-xs text-portx-muted">≈ {formatUsd(q.outputAmountUsd)}</div>
+                  {q.routeSummary.length > 0 && (
+                    <div className="text-[10px] text-portx-muted mt-0.5 font-mono">
+                      {q.routeSummary.join(' · ')}
+                    </div>
+                  )}
                 </div>
                 <RouteProviderBadge provider={q.provider} />
               </div>

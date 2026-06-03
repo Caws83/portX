@@ -21,7 +21,9 @@ export function Baskets() {
     plan,
     loading,
     error,
+    quoteSource,
     previewBuy,
+    retryBuyQuote,
     previewSellBasket,
     buildPlan,
     clear,
@@ -143,6 +145,31 @@ export function Baskets() {
         </div>
       )}
 
+      {loading && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted">
+          Loading quote preview from API…
+        </div>
+      )}
+
+      {quoteSource === 'fallback' && preview && !loading && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span>Using local quote fallback</span>
+          <button
+            type="button"
+            onClick={() => void retryBuyQuote()}
+            className="btn-secondary text-sm py-2 px-4 shrink-0"
+          >
+            Retry API
+          </button>
+        </div>
+      )}
+
+      {quoteSource === 'api' && preview && !loading && (
+        <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green">
+          Quote loaded from PortX API
+        </div>
+      )}
+
       {error && (
         <div className="mb-6 p-4 rounded-xl border border-portx-danger/50 bg-portx-danger/10 text-sm text-portx-danger">
           {error}
@@ -195,7 +222,7 @@ export function Baskets() {
           ) : (
             <div className="card border-dashed text-center py-12">
               <p className="text-portx-muted text-sm">
-                Select <span className="text-portx-green">Preview Buy Quote</span> on any basket to
+                Select <span className="text-portx-green">Preview Quote</span> on any basket to
                 see allocation breakdown, best route per token, gas, and slippage.
               </p>
             </div>
