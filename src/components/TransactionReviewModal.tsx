@@ -3,6 +3,8 @@ import type { ExecutionPlan } from '@/types/execution'
 import { formatUsd, formatTokenAmount } from '@/utils/format'
 import { formatSlippage } from '@/utils/slippage'
 import { assessExecutionReadiness } from '@/services/transactionBuilder'
+import { assessExecutionSafety } from '@/services/executionSafety'
+import { useFeatureFlags } from '@/hooks/useFeatureFlags'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
 
@@ -52,15 +54,23 @@ export function TransactionReviewModal({
 }: TransactionReviewModalProps) {
   const { isConnected, address } = useAccount()
   const chainId = useChainId()
+  const { enableLiveExecution } = useFeatureFlags()
 
   if (!open || !plan) return null
 
+  const walletConnected = isConnected && Boolean(address)
   const readiness =
     plan.readiness ??
     assessExecutionReadiness(plan, {
-      walletConnected: isConnected && Boolean(address),
+      walletConnected,
       currentChainId: chainId,
     })
+
+  const safety = assessExecutionSafety(plan, {
+    walletConnected,
+    currentChainId: chainId,
+    featureFlagEnabled: enableLiveExecution,
+  })
 
   const showLivePrep = !plan.isDemo && readiness.hasZeroExRoute
   const statusTone =
@@ -95,6 +105,37 @@ export function TransactionReviewModal({
 
         {showLivePrep && (
           <div className="mb-6 space-y-4">
+            <div className="p-4 rounded-xl bg-portx-surface border border-portx-border space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+                Execution safety
+              </p>
+              {safety.readyExceptFeatureFlag ? (
+                <>
+                  <p className="font-bold text-portx-green">Ready for execution</p>
+                  <p className="text-sm text-portx-muted">Feature flag disabled</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs uppercase tracking-wide text-portx-muted">Execution Status</p>
+                  <p className="font-bold text-portx-warning">{safety.executionLabel}</p>
+                  <p className="text-sm">
+                    <span className="text-portx-muted">Reason: </span>
+                    <span className="font-medium">{safety.blockedReason}</span>
+                  </p>
+                </>
+              )}
+              <div className="grid grid-cols-2 gap-3 text-sm pt-1">
+                <div>
+                  <p className="text-xs text-portx-muted">Readiness</p>
+                  <p className="font-mono font-bold">{safety.readinessScore}%</p>
+                </div>
+                <div>
+                  <p className="text-xs text-portx-muted">Execution</p>
+                  <p className="font-mono font-bold text-portx-warning">{safety.executionLabel}</p>
+                </div>
+              </div>
+            </div>
+
             <div className={`rounded-xl border p-4 ${statusTone}`}>
               <p className="text-xs uppercase tracking-wide font-semibold mb-1">
                 Live quote execution plan
@@ -111,6 +152,22 @@ export function TransactionReviewModal({
               variant="info"
               warnings={['Live execution coming soon — swaps are not sent on-chain in v1 preview.']}
             />
+
+            <div className="p-4 rounded-xl bg-portx-surface border border-portx-border space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+                Safety checks
+              </p>
+              <ul className="space-y-2">
+                {safety.checks.map((check) => (
+                  <ChecklistRow
+                    key={check.id}
+                    label={check.label}
+                    passed={check.passed}
+                    detail={check.detail}
+                  />
+                ))}
+              </ul>
+            </div>
 
             <div className="p-4 rounded-xl bg-portx-surface border border-portx-border space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
