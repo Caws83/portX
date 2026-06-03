@@ -10,6 +10,7 @@ const demoDisclaimer =
  * - Arkham / Nansen / DeBank wallet intelligence
  * - Real-time portfolio valuation oracles
  */
+/** Local fallback — used when GET /notable-portfolios API is unavailable. */
 export const NOTABLE_PORTFOLIOS: NotablePortfolio[] = [
   {
     id: 'microstrategy-btc',

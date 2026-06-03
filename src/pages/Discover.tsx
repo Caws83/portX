@@ -2,9 +2,19 @@ import { Link } from 'react-router-dom'
 import { TrendingAddresses } from '@/components/TrendingAddresses'
 import { NotablePortfolios } from '@/components/NotablePortfolios'
 import { WhalePortfolioCard } from '@/components/WhalePortfolioCard'
-import { WHALE_WATCH_PORTFOLIOS, DISCOVERY_DISCLAIMER } from '@/data/notablePortfolios'
+import { useNotablePortfolios } from '@/hooks/useNotablePortfolios'
 
 export function Discover() {
+  const {
+    portfolios,
+    whaleWatchPortfolios,
+    disclaimer,
+    loading,
+    error,
+    source,
+    retry,
+  } = useNotablePortfolios()
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
       <div className="mb-8">
@@ -16,6 +26,27 @@ export function Discover() {
         </p>
       </div>
 
+      {loading && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted">
+          Loading trending portfolios from API…
+        </div>
+      )}
+
+      {source === 'fallback' && !loading && (
+        <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span>Using local portfolio fallback</span>
+          <button type="button" onClick={retry} className="btn-secondary text-sm py-2 px-4 shrink-0">
+            Retry API
+          </button>
+        </div>
+      )}
+
+      {source === 'api' && !loading && (
+        <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green">
+          Trending portfolios loaded from PortX API
+        </div>
+      )}
+
       <div
         className="rounded-xl border p-4 mb-10 text-sm"
         style={{
@@ -25,27 +56,31 @@ export function Discover() {
         }}
       >
         <p className="font-semibold mb-1">Risk & verification disclaimer</p>
-        <p className="text-portx-muted leading-relaxed">{DISCOVERY_DISCLAIMER}</p>
+        <p className="text-portx-muted leading-relaxed">{disclaimer}</p>
       </div>
 
       <div className="space-y-14">
         <TrendingAddresses showViewAll={false} />
 
-        <NotablePortfolios title="Notable Portfolios" />
+        {!loading && (
+          <NotablePortfolios title="Notable Portfolios" portfolios={portfolios} />
+        )}
 
-        <section>
-          <div className="mb-4">
-            <h2 className="text-xl font-bold">Whale Watch</h2>
-            <p className="text-sm text-portx-muted">
-              Demo whale allocations — future: on-chain whale labels via Nansen / Arkham
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 gap-6">
-            {WHALE_WATCH_PORTFOLIOS.map((p) => (
-              <WhalePortfolioCard key={p.id} portfolio={p} />
-            ))}
-          </div>
-        </section>
+        {!loading && (
+          <section>
+            <div className="mb-4">
+              <h2 className="text-xl font-bold">Whale Watch</h2>
+              <p className="text-sm text-portx-muted">
+                Demo whale allocations — future: on-chain whale labels via Nansen / Arkham
+              </p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-6">
+              {whaleWatchPortfolios.map((p) => (
+                <WhalePortfolioCard key={p.id} portfolio={p} />
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="card-glow text-center p-8 md:p-12">
           <h2 className="text-2xl font-bold mb-2">Copy Portfolio CTA</h2>
@@ -62,7 +97,6 @@ export function Discover() {
             </Link>
           </div>
           <p className="text-xs text-portx-muted mt-6">
-            {/* Future: company treasury data, Etherscan tracking, real-time valuation */}
             Live wallet intelligence integrations coming in a future release.
           </p>
         </section>
