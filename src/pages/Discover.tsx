@@ -10,7 +10,6 @@ export function Discover() {
     whaleWatchPortfolios,
     disclaimer,
     loading,
-    error,
     source,
     retry,
   } = useNotablePortfolios()
