@@ -4,6 +4,7 @@ import { useTokens } from '@/hooks/useTokens'
 import { useBasketStore } from '@/store/basketStore'
 import type { TokenAllocation } from '@/types/token'
 import type { Basket } from '@/types/basket'
+import { getChainLabel } from '@/types/basketChain'
 import { isValidAllocationTotal } from '@/utils/validation'
 import { sum } from '@/utils/math'
 
@@ -54,6 +55,9 @@ export function CreateBasket() {
       name: name.trim(),
       description: description.trim() || 'Custom user basket',
       tag: 'Custom',
+      chain: 'ethereum',
+      chainLabel: getChainLabel('ethereum'),
+      chainStatus: 'active',
       allocations,
       isCustom: true,
     }

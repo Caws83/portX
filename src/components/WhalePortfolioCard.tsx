@@ -1,7 +1,9 @@
 import type { NotablePortfolio, RiskLevel } from '@/types/whale'
 import { formatUsd, formatPercent } from '@/utils/format'
+import { BasketChainBadge } from './BasketChainBadge'
 import { PortfolioSourceBadge } from './PortfolioSourceBadge'
 import { CopyPortfolioButton } from './CopyPortfolioButton'
+import { withDefaultChainMetadata } from '@/types/basketChain'
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   low: 'text-portx-green',
@@ -17,6 +19,7 @@ interface WhalePortfolioCardProps {
 
 export function WhalePortfolioCard({ portfolio, compact = false }: WhalePortfolioCardProps) {
   const trend = portfolio.change24h >= 0 ? 'text-portx-green' : 'text-portx-danger'
+  const chainMeta = withDefaultChainMetadata(portfolio)
 
   return (
     <div
@@ -28,6 +31,12 @@ export function WhalePortfolioCard({ portfolio, compact = false }: WhalePortfoli
         <div>
           <h3 className={`font-bold ${compact ? 'text-base' : 'text-lg'}`}>{portfolio.name}</h3>
           <p className="text-xs text-portx-muted mt-0.5">{portfolio.category}</p>
+          <div className="mt-1">
+            <BasketChainBadge
+              chainLabel={chainMeta.chainLabel}
+              chainStatus={chainMeta.chainStatus}
+            />
+          </div>
         </div>
         <PortfolioSourceBadge sourceType={portfolio.sourceType} />
       </div>

@@ -1,3 +1,5 @@
+import type { BasketChain, ChainStatus } from './basketChain'
+
 export type PortfolioSourceType =
   | 'public_wallet'
   | 'company_holdings'
@@ -30,6 +32,9 @@ export interface NotablePortfolio {
   name: string
   category: string
   description: string
+  chain: BasketChain
+  chainLabel: string
+  chainStatus: ChainStatus
   sourceType: PortfolioSourceType
   estimatedValueUsd: number
   change24h: number

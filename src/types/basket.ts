@@ -1,3 +1,4 @@
+import type { BasketChain, ChainStatus } from './basketChain'
 import type { TokenAllocation } from './token'
 
 export interface Basket {
@@ -5,6 +6,10 @@ export interface Basket {
   name: string
   description: string
   tag: string
+  /** Chain this basket is scoped to */
+  chain: BasketChain
+  chainLabel: string
+  chainStatus: ChainStatus
   allocations: TokenAllocation[]
   totalValueUsd?: number
   isCustom?: boolean

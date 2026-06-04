@@ -1,4 +1,5 @@
 import { PORTX_API_URL } from '@/config/constants'
+import { withDefaultChainMetadata } from '@/types/basketChain'
 import { apiClient, ApiError } from './client'
 import type { Basket } from '@/types/basket'
 
@@ -17,5 +18,5 @@ export async function fetchBaskets(): Promise<Basket[]> {
   }
 
   const data = await apiClient<BasketsApiResponse>('/baskets')
-  return data.baskets
+  return data.baskets.map((b) => withDefaultChainMetadata(b))
 }

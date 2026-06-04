@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { NotablePortfolio } from '@/types/whale'
 import type { Basket } from '@/types/basket'
+import { withDefaultChainMetadata } from '@/types/basketChain'
 import type { Token } from '@/types/token'
 import { useBasketStore } from '@/store/basketStore'
 import { useTokens } from '@/hooks/useTokens'
@@ -21,11 +22,16 @@ function notablePortfolioToBasket(
     return { token, weightPercent: allocationPercent }
   })
 
+  const chainMeta = withDefaultChainMetadata(portfolio)
+
   return {
     id: `copied-${portfolio.id}-${Date.now()}`,
     name: `${portfolio.name} (Copy)`,
     description: `Copied from Discover — ${portfolio.description}`,
     tag: portfolio.category,
+    chain: chainMeta.chain,
+    chainLabel: chainMeta.chainLabel,
+    chainStatus: chainMeta.chainStatus,
     allocations,
     totalValueUsd: portfolio.estimatedValueUsd,
     isCustom: true,

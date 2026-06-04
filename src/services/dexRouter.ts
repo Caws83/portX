@@ -35,6 +35,9 @@ export async function getBasketSwapQuotes(
     name: 'Legacy',
     description: '',
     tag: '',
+    chain: 'ethereum',
+    chainLabel: 'Ethereum',
+    chainStatus: 'active',
     allocations: request.allocations,
   }
   const preview = await getBuyBasketQuotePreview(basket, request.totalUsd, {

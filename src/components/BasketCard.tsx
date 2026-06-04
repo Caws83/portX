@@ -1,4 +1,5 @@
 import type { Basket } from '@/types/basket'
+import { BasketChainBadge } from '@/components/BasketChainBadge'
 import { formatUsd } from '@/utils/format'
 
 interface BasketCardProps {
@@ -31,11 +32,14 @@ export function BasketCard({
       }`}
     >
       <div className="flex items-start justify-between gap-2 mb-3">
-        <div>
+        <div className="min-w-0">
           <h3 className="text-lg font-bold">{basket.name}</h3>
-          <span className="badge mt-1">{basket.tag}</span>
+          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+            <span className="badge">{basket.tag}</span>
+            <BasketChainBadge chainLabel={basket.chainLabel} chainStatus={basket.chainStatus} />
+          </div>
         </div>
-        {basket.isCustom && <span className="badge-blue text-[10px]">Custom</span>}
+        {basket.isCustom && <span className="badge-blue text-[10px] shrink-0">Custom</span>}
       </div>
 
       <p className="text-sm text-portx-muted mb-4 flex-grow">{basket.description}</p>

@@ -1,8 +1,23 @@
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { TrendingAddresses } from '@/components/TrendingAddresses'
 import { NotablePortfolios } from '@/components/NotablePortfolios'
 import { WhalePortfolioCard } from '@/components/WhalePortfolioCard'
 import { useNotablePortfolios } from '@/hooks/useNotablePortfolios'
+import {
+  DISCOVER_CHAIN_FILTERS,
+  matchesDiscoverChainFilter,
+  withDefaultChainMetadata,
+  type DiscoverChainFilter,
+} from '@/types/basketChain'
+import type { NotablePortfolio } from '@/types/whale'
+
+function filterPortfoliosByChain(
+  portfolios: NotablePortfolio[],
+  filter: DiscoverChainFilter
+): NotablePortfolio[] {
+  return portfolios.filter((p) => matchesDiscoverChainFilter(p.chain, filter))
+}
 
 export function Discover() {
   const {
@@ -14,6 +29,23 @@ export function Discover() {
     retry,
   } = useNotablePortfolios()
 
+  const [chainFilter, setChainFilter] = useState<DiscoverChainFilter>('all')
+
+  const normalizedPortfolios = useMemo(
+    () => portfolios.map((p) => withDefaultChainMetadata(p)),
+    [portfolios]
+  )
+
+  const filteredPortfolios = useMemo(
+    () => filterPortfoliosByChain(normalizedPortfolios, chainFilter),
+    [normalizedPortfolios, chainFilter]
+  )
+
+  const filteredWhalePortfolios = useMemo(
+    () => filterPortfoliosByChain(whaleWatchPortfolios.map((p) => withDefaultChainMetadata(p)), chainFilter),
+    [whaleWatchPortfolios, chainFilter]
+  )
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
       <div className="mb-8">
@@ -23,6 +55,34 @@ export function Discover() {
           strategies — then save as a basket template. No trades until you preview a quote and sign
           from your wallet.
         </p>
+      </div>
+
+      <div className="mb-8">
+        <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted mb-2">
+          Filter by chain
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {DISCOVER_CHAIN_FILTERS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setChainFilter(id)}
+              className={
+                chainFilter === id
+                  ? 'btn-primary text-sm py-2 px-4'
+                  : 'btn-secondary text-sm py-2 px-4'
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {chainFilter !== 'all' && (
+          <p className="text-xs text-portx-muted mt-2">
+            Showing {filteredPortfolios.length} notable and {filteredWhalePortfolios.length} whale
+            portfolio(s) on {DISCOVER_CHAIN_FILTERS.find((f) => f.id === chainFilter)?.label}
+          </p>
+        )}
       </div>
 
       {loading && (
@@ -62,7 +122,7 @@ export function Discover() {
         <TrendingAddresses showViewAll={false} />
 
         {!loading && (
-          <NotablePortfolios title="Notable Portfolios" portfolios={portfolios} />
+          <NotablePortfolios title="Notable Portfolios" portfolios={filteredPortfolios} />
         )}
 
         {!loading && (
@@ -73,11 +133,17 @@ export function Discover() {
                 Demo whale allocations — future: on-chain whale labels via Nansen / Arkham
               </p>
             </div>
-            <div className="grid md:grid-cols-2 gap-6">
-              {whaleWatchPortfolios.map((p) => (
-                <WhalePortfolioCard key={p.id} portfolio={p} />
-              ))}
-            </div>
+            {filteredWhalePortfolios.length === 0 ? (
+              <p className="text-sm text-portx-muted p-4 rounded-xl border border-portx-border bg-portx-surface">
+                No whale portfolios on this chain in the demo set.
+              </p>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-6">
+                {filteredWhalePortfolios.map((p) => (
+                  <WhalePortfolioCard key={p.id} portfolio={p} />
+                ))}
+              </div>
+            )}
           </section>
         )}
 
