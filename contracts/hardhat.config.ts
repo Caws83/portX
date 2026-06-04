@@ -1,9 +1,17 @@
 import type { HardhatUserConfig } from 'hardhat/config'
 import '@nomicfoundation/hardhat-toolbox'
+import '@nomicfoundation/hardhat-ignition-ethers'
+import * as dotenv from 'dotenv'
+
+dotenv.config()
+
+const deployerKey = process.env.DEPLOYER_PRIVATE_KEY
+const sepoliaRpc = process.env.SEPOLIA_RPC_URL ?? ''
+const etherscanKey = process.env.ETHERSCAN_API_KEY ?? ''
 
 /**
- * Local-only Hardhat config for BundleExecutor tests.
- * No mainnet, no deployment tasks, no verify plugin.
+ * Hardhat config: local tests + Sepolia testnet scaffold only.
+ * No mainnet. No automatic deployment.
  */
 const config: HardhatUserConfig = {
   solidity: {
@@ -21,6 +29,16 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       chainId: 31337,
+    },
+    sepolia: {
+      url: sepoliaRpc,
+      chainId: 11155111,
+      accounts: deployerKey ? [deployerKey] : [],
+    },
+  },
+  etherscan: {
+    apiKey: {
+      sepolia: etherscanKey,
     },
   },
 }

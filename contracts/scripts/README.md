@@ -1,12 +1,16 @@
 # PortX Contracts — Scripts
 
-This folder intentionally contains **no deployment scripts**.
+| Path | Purpose |
+|------|---------|
+| [deploy/README.md](./deploy/README.md) | Sepolia Ignition deploy steps (commands only — not run in CI) |
+| [verify/README.md](./verify/README.md) | Etherscan verify on Sepolia after deploy |
 
 BundleExecutor is a planning draft only:
 
 - **NOT audited**
-- **NOT deployed**
+- **NOT deployed** by default
 - **NOT connected** to PortX frontend or backend
+- **Sepolia testnet only** — no mainnet config
 
 ## Local development
 
@@ -25,13 +29,17 @@ npm run compile
 npm run test
 ```
 
+## Environment
+
+Copy `contracts/.env.example` → `contracts/.env` for Sepolia RPC, deployer key, and Etherscan API key.  
+**Never commit** `.env` or private keys.
+
 ## What is not included
 
-- No `deploy.ts` / deploy tasks
-- No Etherscan verify tasks
-- No mainnet or testnet network configuration
-- No private keys or `.env` requirements
+- No mainnet network
+- No automatic deployment in CI
+- No PortX live execution enablement
 
-All testing runs on the in-process **Hardhat** network (`chainId: 31337`).
+Local tests use the in-process **Hardhat** network (`chainId: 31337`).
 
 Solidity sources live under `src/` (Hardhat excludes `node_modules` at the project root).

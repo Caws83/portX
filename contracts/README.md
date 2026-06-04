@@ -126,7 +126,7 @@ npx hardhat compile
 npx hardhat test
 ```
 
-See `scripts/README.md` for details. No deployment scripts are included.
+See `scripts/README.md` and `scripts/deploy/README.md` for local tests and **Sepolia-only** Ignition deploy commands (not executed by default). Copy `.env.example` → `.env` for testnet RPC keys — never commit secrets.
 
 ---
 
