@@ -1,6 +1,7 @@
 import type { Basket } from '@/types/basket'
 import { BasketChainBadge } from '@/components/BasketChainBadge'
 import { formatUsd } from '@/utils/format'
+import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 
 interface BasketCardProps {
   basket: Basket
@@ -8,6 +9,7 @@ interface BasketCardProps {
   onPreviewSell?: (basket: Basket) => void
   onBuy?: (basket: Basket) => void
   onSell?: (basketId: string) => void
+  onPlannedChainSelect?: (basket: Basket) => void
   isOwned?: boolean
   loading?: boolean
   isSelected?: boolean
@@ -19,11 +21,14 @@ export function BasketCard({
   onPreviewSell,
   onBuy,
   onSell,
+  onPlannedChainSelect,
   isOwned,
   loading,
   isSelected,
 }: BasketCardProps) {
   const tokenCount = basket.allocations.length
+  const quotesAvailable = canPreviewQuoteForBasket(basket)
+  const plannedMessage = getPlannedChainMessage(basket)
 
   return (
     <div
@@ -59,22 +64,42 @@ export function BasketCard({
         {tokenCount} tokens · Demo TVL {formatUsd(basket.totalValueUsd ?? 0, true)}
       </div>
 
+      {!quotesAvailable && (
+        <div className="mb-4 p-3 rounded-xl border border-portx-warning/40 bg-portx-warning/10 text-xs text-portx-warning leading-relaxed">
+          {plannedMessage}
+        </div>
+      )}
+
       <div className="flex flex-col gap-2 mt-auto">
         {onPreviewBuy && (
           <button
             type="button"
-            onClick={() => onPreviewBuy(basket)}
-            disabled={loading}
-            className="btn-primary w-full text-sm py-2.5 disabled:opacity-50"
+            onClick={() =>
+              quotesAvailable ? onPreviewBuy(basket) : onPlannedChainSelect?.(basket)
+            }
+            disabled={quotesAvailable && loading}
+            title={quotesAvailable ? undefined : plannedMessage}
+            className={
+              quotesAvailable
+                ? 'btn-primary w-full text-sm py-2.5 disabled:opacity-50'
+                : 'btn-secondary w-full text-sm py-2.5 opacity-80'
+            }
           >
-            {loading ? 'Fetching quotes...' : 'Preview Quote'}
+            {loading && quotesAvailable
+              ? 'Fetching quotes...'
+              : quotesAvailable
+                ? 'Preview Quote'
+                : 'Quotes unavailable (planned chain)'}
           </button>
         )}
         {isOwned && onPreviewSell && (
           <button
             type="button"
-            onClick={() => onPreviewSell(basket)}
-            disabled={loading}
+            onClick={() =>
+              quotesAvailable ? onPreviewSell(basket) : onPlannedChainSelect?.(basket)
+            }
+            disabled={quotesAvailable && loading}
+            title={quotesAvailable ? undefined : plannedMessage}
             className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
           >
             Preview Sell Quote
@@ -84,8 +109,9 @@ export function BasketCard({
           {onBuy && (
             <button
               type="button"
-              onClick={() => onBuy(basket)}
-              disabled={loading}
+              onClick={() => (quotesAvailable ? onBuy(basket) : onPlannedChainSelect?.(basket))}
+              disabled={quotesAvailable && loading}
+              title={quotesAvailable ? undefined : plannedMessage}
               className="btn-secondary flex-1 text-sm py-2.5 disabled:opacity-50"
             >
               Quick Buy (Demo)
