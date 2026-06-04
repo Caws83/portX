@@ -7,7 +7,12 @@ import {
   STABLECOIN_OPTIONS,
   type StablecoinOption,
 } from '@/config/constants'
+import { APP_MODE, APP_MODE_BADGE_LABEL, APP_MODE_BANNER_MESSAGE } from '@/config/appMode'
+import { getActiveNetworkConfig } from '@/config/networks'
+import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
 import { SUPPORTED_CHAINS } from '@/config/chains'
+import { AppModeBadge } from '@/components/AppModeIndicator'
+import { StatusBanner } from '@/components/ui/StatusBanner'
 import { truncateAddress, formatUsd } from '@/utils/format'
 import { usePortfolio } from '@/hooks/usePortfolio'
 
@@ -46,9 +51,48 @@ export function Settings() {
     setTimeout(() => setSaved(false), 2000)
   }
 
+  const targetNetwork = getActiveNetworkConfig()
+
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
-      <h1 className="section-title mb-8">Settings</h1>
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <h1 className="section-title mb-0">Settings</h1>
+        <AppModeBadge />
+      </div>
+
+      <StatusBanner
+        variant={ENABLE_TESTNET_MODE ? 'warning' : 'info'}
+        className="mb-6"
+        compact
+      >
+        {APP_MODE_BANNER_MESSAGE}
+      </StatusBanner>
+
+      <div className="card mb-6 space-y-4">
+        <h2 className="font-bold">App mode</h2>
+        <dl className="space-y-2 text-sm">
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Mode</dt>
+            <dd className="font-medium text-right">{APP_MODE_BADGE_LABEL}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">VITE_APP_MODE</dt>
+            <dd className="font-mono text-xs">{APP_MODE}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Target network (scaffold)</dt>
+            <dd className="text-right">{targetNetwork.label}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Chain ID (scaffold)</dt>
+            <dd className="font-mono">{targetNetwork.chainId}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Live execution</dt>
+            <dd>{ENABLE_LIVE_EXECUTION ? 'Enabled (env)' : 'Disabled'}</dd>
+          </div>
+        </dl>
+      </div>
 
       <div className="card mb-6 space-y-4">
         <h2 className="font-bold">Wallet & Network</h2>

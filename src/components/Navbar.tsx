@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { BUTTON_LABELS } from '@/config/uiCopy'
+import { AppModeBadge } from './AppModeIndicator'
 import { Logo } from './Logo'
 import { WalletButton } from './WalletButton'
 
@@ -19,7 +20,10 @@ export function Navbar() {
       <div className="glass-nav max-w-7xl mx-auto rounded-xl pointer-events-auto">
         <div className="relative px-3 sm:px-5 lg:px-6">
           <div className="flex items-center justify-between gap-3 py-1.5">
-            <Logo variant="header" height="sm" className="max-w-[min(36vw,120px)] sm:max-w-[130px]" />
+            <div className="flex items-center gap-2 min-w-0">
+              <Logo variant="header" height="sm" className="max-w-[min(36vw,120px)] sm:max-w-[130px]" />
+              <AppModeBadge className="sm:hidden" />
+            </div>
 
             <nav className="hidden lg:flex items-center gap-0.5">
               {links.map(({ to, label }) => (
@@ -40,6 +44,7 @@ export function Navbar() {
             </nav>
 
             <div className="flex items-center gap-2">
+              <AppModeBadge className="hidden sm:inline-flex" />
               <NavLink to="/dashboard" className="btn-primary text-sm py-1.5 px-3.5 hidden sm:inline-flex">
                 Launch App
               </NavLink>
