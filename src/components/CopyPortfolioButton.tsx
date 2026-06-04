@@ -3,6 +3,7 @@ import type { NotablePortfolio } from '@/types/whale'
 import type { Basket } from '@/types/basket'
 import { withDefaultChainMetadata } from '@/types/basketChain'
 import type { Token } from '@/types/token'
+import { BUTTON_LABELS } from '@/config/uiCopy'
 import { useBasketStore } from '@/store/basketStore'
 import { useTokens } from '@/hooks/useTokens'
 
@@ -76,7 +77,7 @@ export function CopyPortfolioButton({ portfolio, className = '', onCopied }: Cop
       disabled={copied}
       className={`${copied ? 'btn-secondary border-portx-green text-portx-green' : 'btn-primary'} ${className}`}
     >
-      {copied ? 'Copied to your baskets ✓' : 'Copy as Basket'}
+      {copied ? `${BUTTON_LABELS.copiedBasket} ✓` : BUTTON_LABELS.copyBasket}
     </button>
   )
 }

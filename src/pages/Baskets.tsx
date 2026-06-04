@@ -4,10 +4,21 @@ import { BasketCard } from '@/components/BasketCard'
 import { QuotePreviewCard } from '@/components/QuotePreviewCard'
 import { TransactionReviewModal } from '@/components/TransactionReviewModal'
 import { ExecutionWarning } from '@/components/ExecutionWarning'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { StatusBanner } from '@/components/ui/StatusBanner'
 import { useBasket } from '@/hooks/useBasket'
 import { useQuotePreview } from '@/hooks/useQuotePreview'
 import { executeDemoPlan } from '@/services/transactionBuilder'
 import { DEFAULT_BUY_AMOUNT_USD } from '@/config/constants'
+import {
+  BUTTON_LABELS,
+  EMPTY_MESSAGES,
+  ERROR_MESSAGES,
+  INFO_MESSAGES,
+  LOADING_MESSAGES,
+  SUCCESS_MESSAGES,
+  WARNING_MESSAGES,
+} from '@/config/uiCopy'
 import type { Basket } from '@/types/basket'
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 
@@ -108,7 +119,7 @@ export function Baskets() {
   const handleSell = async (basketId: string) => {
     setTxMsg(null)
     sellBasket(basketId)
-    setTxMsg('Demo basket sold.')
+    setTxMsg('Demo basket position removed.')
   }
 
   const clearSelection = () => {
@@ -133,10 +144,10 @@ export function Baskets() {
         </p>
       </div>
 
-      <ExecutionWarning variant="info" />
+      <ExecutionWarning variant="info" warnings={[INFO_MESSAGES.demoMode]} />
 
       <div className="mt-6 mb-8 card flex flex-col sm:flex-row sm:items-end gap-4">
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <label className="label" htmlFor="buy-amount">
             Basket buy amount (USDC)
           </label>
@@ -147,8 +158,9 @@ export function Baskets() {
             step={100}
             value={buyAmount}
             onChange={(e) => setBuyAmount(parseFloat(e.target.value) || 0)}
-            className="input-field max-w-xs font-mono"
+            className="input-field max-w-xs font-mono w-full"
             disabled={showPlannedPanel}
+            aria-disabled={showPlannedPanel}
           />
         </div>
         <p className="text-xs text-portx-muted sm:max-w-md">
@@ -158,63 +170,64 @@ export function Baskets() {
       </div>
 
       {basketsLoading && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted">
-          Loading baskets from API…
-        </div>
+        <StatusBanner variant="loading" className="mb-6">
+          {LOADING_MESSAGES.baskets}
+        </StatusBanner>
       )}
 
-      {basketsError && basketsSource === 'fallback' && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning">
-          Could not reach API ({basketsError}). Showing offline fallback baskets.
-        </div>
+      {basketsError && basketsSource === 'fallback' && !basketsLoading && (
+        <StatusBanner variant="warning" className="mb-6">
+          {WARNING_MESSAGES.apiOfflineFallback('basket')} ({basketsError})
+        </StatusBanner>
       )}
 
       {basketsSource === 'api' && !basketsLoading && (
-        <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green">
-          Baskets loaded from PortX API
-        </div>
+        <StatusBanner variant="success" className="mb-6" compact>
+          {SUCCESS_MESSAGES.basketsApi}
+        </StatusBanner>
       )}
 
       {loading && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted">
-          Loading quote preview from API…
-        </div>
+        <StatusBanner variant="loading" className="mb-6">
+          {LOADING_MESSAGES.quotePreview}
+        </StatusBanner>
       )}
 
       {quoteSource === 'fallback' && preview && !loading && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <span>Using local quote fallback</span>
-          <button
-            type="button"
-            onClick={() => void retryBuyQuote()}
-            className="btn-secondary text-sm py-2 px-4 shrink-0"
-          >
-            Retry API
-          </button>
-        </div>
+        <StatusBanner variant="warning" className="mb-6" onRetry={() => void retryBuyQuote()}>
+          {WARNING_MESSAGES.quoteFallback}
+        </StatusBanner>
       )}
 
       {quoteSource === 'api' && preview && !loading && (
-        <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green">
-          Quote loaded from PortX API
-        </div>
+        <StatusBanner variant="success" className="mb-6" compact>
+          {SUCCESS_MESSAGES.quoteApi}
+        </StatusBanner>
       )}
 
       {error && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-danger/50 bg-portx-danger/10 text-sm text-portx-danger">
-          {error}
-        </div>
+        <StatusBanner variant="error" className="mb-6">
+          {error || ERROR_MESSAGES.quoteFailed}
+        </StatusBanner>
       )}
 
       {txMsg && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-green/30 bg-portx-green/10 text-sm text-portx-green">
+        <StatusBanner variant="success" className="mb-6">
           {txMsg}
-        </div>
+        </StatusBanner>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 grid md:grid-cols-2 gap-6">
-          {!basketsLoading &&
+      <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
+        <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4 sm:gap-6 min-w-0">
+          {!basketsLoading && allBaskets.length === 0 ? (
+            <div className="sm:col-span-2">
+              <EmptyState
+                title={EMPTY_MESSAGES.noBaskets.title}
+                description={EMPTY_MESSAGES.noBaskets.description}
+              />
+            </div>
+          ) : (
+            !basketsLoading &&
             allBaskets.map((basket) => (
               <BasketCard
                 key={basket.id}
@@ -230,48 +243,60 @@ export function Baskets() {
                   selectedBasket?.id === basket.id && (showQuotePreview || showPlannedPanel)
                 }
               />
-            ))}
+            ))
+          )}
         </div>
 
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 min-w-0">
           {showPlannedPanel && selectedBasket ? (
             <div className="sticky top-24 space-y-3">
-              <div className="card-glow border-portx-warning/40">
+              <div className="card-glow border-portx-warning/40 p-4 sm:p-6">
                 <p className="text-xs font-semibold uppercase tracking-wide text-portx-warning mb-2">
-                  Planned chain — quotes blocked
+                  {WARNING_MESSAGES.plannedChainBlocked}
                 </p>
                 <h3 className="text-lg font-bold mb-1">{selectedBasket.name}</h3>
                 <p className="text-sm text-portx-muted mb-4">
                   {selectedBasket.chainLabel} · {selectedBasket.chainStatus}
                 </p>
                 <ExecutionWarning
-                  variant="info"
+                  variant="warning"
                   warnings={[getPlannedChainMessage(selectedBasket)]}
                 />
                 <p className="text-xs text-portx-muted mt-4">
                   No quote API call was made. Transaction review and execution readiness are not
-                  available for this basket until {selectedBasket.chainLabel} routing is live.
+                  available until {selectedBasket.chainLabel} routing is live.
                 </p>
               </div>
-              <button type="button" onClick={clearSelection} className="btn-secondary w-full text-sm">
-                Clear selection
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="btn-secondary w-full text-sm"
+              >
+                {BUTTON_LABELS.clearSelection}
               </button>
             </div>
           ) : showQuotePreview && preview ? (
             <div className="sticky top-24">
-              <QuotePreviewCard preview={preview} onReview={handleReview} loading={loading} />
-              <button type="button" onClick={clearSelection} className="btn-secondary w-full mt-3 text-sm">
-                Clear Preview
+              <QuotePreviewCard
+                preview={preview}
+                quoteSource={quoteSource}
+                onReview={handleReview}
+                loading={loading}
+                reviewLabel={BUTTON_LABELS.reviewExecute}
+              />
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="btn-secondary w-full mt-3 text-sm"
+              >
+                {BUTTON_LABELS.clearPreview}
               </button>
             </div>
           ) : (
-            <div className="card border-dashed text-center py-12">
-              <p className="text-portx-muted text-sm">
-                Select <span className="text-portx-green">Preview Quote</span> on an Ethereum
-                (Active) basket to see allocation breakdown, routes, gas, and slippage. Planned
-                chains show routing status only.
-              </p>
-            </div>
+            <EmptyState
+              title={EMPTY_MESSAGES.noQuotePreview.title}
+              description={EMPTY_MESSAGES.noQuotePreview.description}
+            />
           )}
         </div>
       </div>

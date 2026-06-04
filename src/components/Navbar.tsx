@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { BUTTON_LABELS } from '@/config/uiCopy'
 import { Logo } from './Logo'
 import { WalletButton } from './WalletButton'
 
@@ -7,7 +8,7 @@ const links = [
   { to: '/discover', label: 'Discover' },
   { to: '/baskets', label: 'Baskets' },
   { to: '/create-basket', label: 'Create' },
-  { to: '/sell-all', label: 'Sell All' },
+  { to: '/sell-all', label: BUTTON_LABELS.sellAllNav },
   { to: '/agents', label: 'Agents' },
   { to: '/settings', label: 'Settings' },
 ]

@@ -4,9 +4,18 @@ import { PortfolioSummary, PortfolioCard } from '@/components/PortfolioCard'
 import { TokenRow } from '@/components/TokenRow'
 import { BasketCard } from '@/components/BasketCard'
 import { WhalePortfolioCard } from '@/components/WhalePortfolioCard'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { StatusBanner } from '@/components/ui/StatusBanner'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useBasket } from '@/hooks/useBasket'
 import { NOTABLE_PORTFOLIOS } from '@/data/notablePortfolios'
+import {
+  BUTTON_LABELS,
+  EMPTY_MESSAGES,
+  LOADING_MESSAGES,
+  SUCCESS_MESSAGES,
+  WARNING_MESSAGES,
+} from '@/config/uiCopy'
 import { formatUsd, formatPercent } from '@/utils/format'
 
 export function Dashboard() {
@@ -23,42 +32,37 @@ export function Dashboard() {
             {isConnected ? 'Wallet connected · Demo portfolio' : 'Connect wallet to continue (demo data shown)'}
           </p>
         </div>
-        <Link to="/sell-all" className="btn-danger text-sm w-fit">
-          Sell All
+        <Link to="/sell-all" className="btn-danger text-sm w-fit shrink-0">
+          {BUTTON_LABELS.sellAllNav}
         </Link>
       </div>
 
       {portfolio.portfolioLoading && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted">
-          Loading portfolio from API…
-        </div>
+        <StatusBanner variant="loading" className="mb-6">
+          {LOADING_MESSAGES.portfolio}
+        </StatusBanner>
       )}
 
-      {portfolio.portfolioSource === 'fallback' && !portfolio.portfolioLoading && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <span>Using local portfolio fallback</span>
-          <button
-            type="button"
-            onClick={portfolio.retryPortfolio}
-            className="btn-secondary text-sm py-2 px-4 shrink-0"
-          >
-            Retry API
-          </button>
-        </div>
+      {portfolio.portfolioError && portfolio.portfolioSource === 'fallback' && !portfolio.portfolioLoading && (
+        <StatusBanner variant="warning" className="mb-6" onRetry={portfolio.retryPortfolio}>
+          {WARNING_MESSAGES.apiOfflineFallback('portfolio')} ({portfolio.portfolioError})
+        </StatusBanner>
       )}
 
       {portfolio.portfolioSource === 'api' && !portfolio.portfolioLoading && (
-        <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green">
-          Portfolio loaded from PortX API
-        </div>
+        <StatusBanner variant="success" className="mb-6" compact>
+          {SUCCESS_MESSAGES.portfolioApi}
+        </StatusBanner>
       )}
 
-      <PortfolioSummary
-        totalValueUsd={portfolio.totalValueUsd}
-        pnlUsd={portfolio.pnlUsd}
-        pnlPercent={portfolio.pnlPercent}
-        costBasisUsd={portfolio.costBasisUsd}
-      />
+      {!portfolio.portfolioLoading && (
+        <PortfolioSummary
+          totalValueUsd={portfolio.totalValueUsd}
+          pnlUsd={portfolio.pnlUsd}
+          pnlPercent={portfolio.pnlPercent}
+          costBasisUsd={portfolio.costBasisUsd}
+        />
+      )}
 
       {!portfolio.portfolioLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
@@ -77,7 +81,7 @@ export function Dashboard() {
             subValue={
               portfolio.largestPosition
                 ? formatUsd(portfolio.largestPosition.valueUsd)
-                : 'No holdings'
+                : EMPTY_MESSAGES.noHoldings.title
             }
             highlight={!!portfolio.largestPosition}
           />
@@ -92,33 +96,39 @@ export function Dashboard() {
       )}
 
       {(portfolio.targetStatus.takeProfitHit || portfolio.targetStatus.stopLossHit) && (
-        <div className="mt-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-portx-warning">
+        <StatusBanner variant="warning" className="mt-6">
           {portfolio.targetStatus.takeProfitHit && 'Take-profit target reached (demo alert). '}
           {portfolio.targetStatus.stopLossHit && 'Stop-loss threshold breached (demo alert). '}
           <Link to="/sell-all" className="underline ml-1">
             Review exits →
           </Link>
-        </div>
+        </StatusBanner>
       )}
 
       <div className="grid lg:grid-cols-2 gap-6 mt-8">
-        <div className="card">
+        <div className="card min-w-0">
           <h2 className="text-lg font-bold mb-4">Tokens Held</h2>
           {portfolio.portfolioLoading ? (
-            <p className="text-portx-muted text-sm">Loading holdings…</p>
+            <p className="text-portx-muted text-sm" role="status">
+              {LOADING_MESSAGES.holdings}
+            </p>
           ) : portfolio.heldTokens.length === 0 ? (
-            <p className="text-portx-muted text-sm">No tokens in demo portfolio.</p>
+            <EmptyState
+              title={EMPTY_MESSAGES.noHoldings.title}
+              description={EMPTY_MESSAGES.noHoldings.description}
+              className="border-0 py-6"
+            />
           ) : (
             portfolio.heldTokens.map((h) => <TokenRow key={h.token.symbol} holding={h} />)
           )}
         </div>
 
-        <div className="card">
+        <div className="card min-w-0">
           <h2 className="text-lg font-bold mb-4">Target Sell Status</h2>
           <dl className="space-y-3 text-sm">
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
               <dt className="text-portx-muted">Take-profit</dt>
-              <dd className="font-mono">
+              <dd className="font-mono text-right">
                 {portfolio.targets.takeProfitMultiplier
                   ? `${portfolio.targets.takeProfitMultiplier}x`
                   : portfolio.targets.targetSellPriceUsd
@@ -126,19 +136,19 @@ export function Dashboard() {
                     : 'Not set'}
               </dd>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
               <dt className="text-portx-muted">Stop-loss</dt>
-              <dd className="font-mono">
+              <dd className="font-mono text-right">
                 {portfolio.targets.stopLossPercent != null
                   ? `-${portfolio.targets.stopLossPercent}%`
                   : 'Not set'}
               </dd>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
               <dt className="text-portx-muted">Portfolio P/L</dt>
               <dd className="font-mono text-portx-green">{formatPercent(portfolio.pnlPercent)}</dd>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between gap-4">
               <dt className="text-portx-muted">Current value</dt>
               <dd className="font-mono text-portx-green">{formatUsd(portfolio.totalValueUsd)}</dd>
             </div>
@@ -150,16 +160,16 @@ export function Dashboard() {
       </div>
 
       <section className="mt-10">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 gap-4">
           <div>
             <h2 className="text-xl font-bold">Trending now</h2>
             <p className="text-sm text-portx-muted">Demo portfolios — copy as basket templates</p>
           </div>
-          <Link to="/discover" className="text-sm text-portx-green hover:underline">
+          <Link to="/discover" className="text-sm text-portx-green hover:underline shrink-0">
             Discover more →
           </Link>
         </div>
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {NOTABLE_PORTFOLIOS.slice(0, 3).map((p) => (
             <WhalePortfolioCard key={p.id} portfolio={p} compact />
           ))}
@@ -174,23 +184,24 @@ export function Dashboard() {
           </Link>
         </div>
         {basketsLoading || portfolio.portfolioLoading ? (
-          <div className="card text-center py-8 text-sm text-portx-muted">
-            Loading basket details…
-          </div>
+          <StatusBanner variant="loading">{LOADING_MESSAGES.basketDetails}</StatusBanner>
         ) : portfolio.activeBaskets.length === 0 ? (
-          <div className="card text-center py-12">
-            <p className="text-portx-muted mb-4">No active basket positions.</p>
-            <Link to="/baskets" className="btn-primary">
-              Explore Baskets
-            </Link>
-          </div>
+          <EmptyState
+            title={EMPTY_MESSAGES.noActiveBaskets.title}
+            description={EMPTY_MESSAGES.noActiveBaskets.description}
+            action={
+              <Link to="/baskets" className="btn-primary">
+                {BUTTON_LABELS.exploreBaskets}
+              </Link>
+            }
+          />
         ) : (
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
             {portfolio.activeBaskets.map((purchase) => {
               const basket = getBasketById(purchase.basketId)
               if (!basket) return null
               return (
-                <div key={purchase.basketId} className="card-glow">
+                <div key={purchase.basketId} className="card-glow min-w-0">
                   <BasketCard basket={basket} isOwned />
                   <p className="text-xs text-portx-muted mt-3 font-mono">
                     Position: {formatUsd(purchase.amountUsd)} · Entry {formatUsd(purchase.entryValueUsd)}

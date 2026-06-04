@@ -3,7 +3,16 @@ import { Link } from 'react-router-dom'
 import { TrendingAddresses } from '@/components/TrendingAddresses'
 import { NotablePortfolios } from '@/components/NotablePortfolios'
 import { WhalePortfolioCard } from '@/components/WhalePortfolioCard'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { StatusBanner } from '@/components/ui/StatusBanner'
 import { useNotablePortfolios } from '@/hooks/useNotablePortfolios'
+import {
+  BUTTON_LABELS,
+  EMPTY_MESSAGES,
+  LOADING_MESSAGES,
+  SUCCESS_MESSAGES,
+  WARNING_MESSAGES,
+} from '@/config/uiCopy'
 import {
   DISCOVER_CHAIN_FILTERS,
   matchesDiscoverChainFilter,
@@ -67,6 +76,7 @@ export function Discover() {
               key={id}
               type="button"
               onClick={() => setChainFilter(id)}
+              aria-pressed={chainFilter === id}
               className={
                 chainFilter === id
                   ? 'btn-primary text-sm py-2 px-4'
@@ -77,8 +87,8 @@ export function Discover() {
             </button>
           ))}
         </div>
-        {chainFilter !== 'all' && (
-          <p className="text-xs text-portx-muted mt-2">
+        {chainFilter !== 'all' && !loading && (
+          <p className="text-xs text-portx-muted mt-2" role="status">
             Showing {filteredPortfolios.length} notable and {filteredWhalePortfolios.length} whale
             portfolio(s) on {DISCOVER_CHAIN_FILTERS.find((f) => f.id === chainFilter)?.label}
           </p>
@@ -86,43 +96,42 @@ export function Discover() {
       </div>
 
       {loading && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted">
-          Loading trending portfolios from API…
-        </div>
+        <StatusBanner variant="loading" className="mb-6">
+          {LOADING_MESSAGES.discover}
+        </StatusBanner>
       )}
 
       {source === 'fallback' && !loading && (
-        <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <span>Using local portfolio fallback</span>
-          <button type="button" onClick={retry} className="btn-secondary text-sm py-2 px-4 shrink-0">
-            Retry API
-          </button>
-        </div>
+        <StatusBanner variant="warning" className="mb-6" onRetry={retry}>
+          {WARNING_MESSAGES.apiOfflineFallback('discover portfolio')}
+        </StatusBanner>
       )}
 
       {source === 'api' && !loading && (
-        <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green">
-          Trending portfolios loaded from PortX API
-        </div>
+        <StatusBanner variant="success" className="mb-6" compact>
+          {SUCCESS_MESSAGES.discoverApi}
+        </StatusBanner>
       )}
 
-      <div
-        className="rounded-xl border p-4 mb-10 text-sm"
-        style={{
-          borderColor: 'rgba(255, 170, 0, 0.4)',
-          backgroundColor: 'rgba(255, 170, 0, 0.08)',
-          color: '#ffaa00',
-        }}
-      >
-        <p className="font-semibold mb-1">Risk & verification disclaimer</p>
-        <p className="text-portx-muted leading-relaxed">{disclaimer}</p>
-      </div>
+      <StatusBanner variant="info" className="mb-10">
+        <span>
+          <strong className="block mb-1">Risk & verification disclaimer</strong>
+          <span className="text-portx-muted leading-relaxed">{disclaimer}</span>
+        </span>
+      </StatusBanner>
 
       <div className="space-y-14">
         <TrendingAddresses showViewAll={false} />
 
-        {!loading && (
-          <NotablePortfolios title="Notable Portfolios" portfolios={filteredPortfolios} />
+        {!loading && filteredPortfolios.length === 0 ? (
+          <EmptyState
+            title={EMPTY_MESSAGES.noDiscoverNotable.title}
+            description={EMPTY_MESSAGES.noDiscoverNotable.description}
+          />
+        ) : (
+          !loading && (
+            <NotablePortfolios title="Notable Portfolios" portfolios={filteredPortfolios} />
+          )
         )}
 
         {!loading && (
@@ -134,11 +143,13 @@ export function Discover() {
               </p>
             </div>
             {filteredWhalePortfolios.length === 0 ? (
-              <p className="text-sm text-portx-muted p-4 rounded-xl border border-portx-border bg-portx-surface">
-                No whale portfolios on this chain in the demo set.
-              </p>
+              <EmptyState
+                title={EMPTY_MESSAGES.noDiscoverWhale.title}
+                description={EMPTY_MESSAGES.noDiscoverWhale.description}
+                className="py-8"
+              />
             ) : (
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
                 {filteredWhalePortfolios.map((p) => (
                   <WhalePortfolioCard key={p.id} portfolio={p} />
                 ))}
@@ -147,15 +158,15 @@ export function Discover() {
           </section>
         )}
 
-        <section className="card-glow text-center p-8 md:p-12">
-          <h2 className="text-2xl font-bold mb-2">Copy Portfolio CTA</h2>
+        <section className="card-glow text-center p-6 sm:p-8 md:p-12">
+          <h2 className="text-2xl font-bold mb-2">Copy a portfolio template</h2>
           <p className="text-portx-muted mb-6 max-w-xl mx-auto">
-            Found a portfolio you like? Copy it as a basket template, then head to Baskets to
-            preview quotes and execute when you are ready — fully non-custodial.
+            Found a portfolio you like? {BUTTON_LABELS.copyBasket}, then head to Baskets to
+            preview quotes when you are ready — fully non-custodial.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link to="/baskets" className="btn-primary px-8">
-              View My Baskets
+              {BUTTON_LABELS.viewBaskets}
             </Link>
             <Link to="/create-basket" className="btn-secondary px-8">
               Build Custom Basket

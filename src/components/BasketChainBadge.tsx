@@ -1,5 +1,6 @@
 import type { ChainStatus } from '@/types/basketChain'
 import { formatChainBadgeLabel } from '@/types/basketChain'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 interface BasketChainBadgeProps {
   chainLabel: string
@@ -7,17 +8,13 @@ interface BasketChainBadgeProps {
 }
 
 export function BasketChainBadge({ chainLabel, chainStatus }: BasketChainBadgeProps) {
-  const isActive = chainStatus === 'active'
+  const variant = chainStatus === 'active' ? 'active' : 'planned'
 
   return (
-    <span
-      className={
-        isActive
-          ? 'badge text-[10px] shrink-0'
-          : 'badge-blue text-[10px] shrink-0'
-      }
-    >
-      {formatChainBadgeLabel(chainLabel, chainStatus)}
-    </span>
+    <StatusBadge
+      variant={variant}
+      label={formatChainBadgeLabel(chainLabel, chainStatus)}
+      size="sm"
+    />
   )
 }

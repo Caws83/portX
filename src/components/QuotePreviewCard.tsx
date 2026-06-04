@@ -1,13 +1,16 @@
 import type { BasketQuotePreview } from '@/types/quote'
+import { BUTTON_LABELS, WARNING_MESSAGES } from '@/config/uiCopy'
 import { formatUsd } from '@/utils/format'
 import { formatSlippage, isHighSlippage } from '@/utils/slippage'
 import { buildLiveExecutionSummaryFromPreview } from '@/services/transactionBuilder'
 import { AllocationBreakdown } from './AllocationBreakdown'
 import { ExecutionWarning } from './ExecutionWarning'
 import { RouteProviderBadge } from './RouteProviderBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 interface QuotePreviewCardProps {
   preview: BasketQuotePreview
+  quoteSource?: 'api' | 'fallback' | null
   onReview?: () => void
   reviewLabel?: string
   loading?: boolean
@@ -21,8 +24,9 @@ const TYPE_LABELS = {
 
 export function QuotePreviewCard({
   preview,
+  quoteSource,
   onReview,
-  reviewLabel = 'Review & Execute',
+  reviewLabel = BUTTON_LABELS.reviewExecute,
   loading,
 }: QuotePreviewCardProps) {
   const direction = preview.type === 'buy' ? 'buy' : 'sell'
@@ -38,16 +42,26 @@ export function QuotePreviewCard({
       ? 'border-portx-green/40 bg-portx-green/10 text-portx-green'
       : 'border-portx-warning/40 bg-portx-warning/10 text-portx-warning'
 
+  const quoteModeBadge =
+    quoteSource === 'fallback' ? (
+      <StatusBadge variant="fallback-quote" size="md" />
+    ) : !preview.isDemo ? (
+      <StatusBadge variant="live-quote" size="md" />
+    ) : (
+      <StatusBadge variant="demo" label="Demo Quote" size="md" />
+    )
+
   return (
-    <div className="card-glow space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
+    <div className="card-glow space-y-6 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div className="min-w-0">
           <h3 className="text-lg font-bold">{TYPE_LABELS[preview.type]}</h3>
           {preview.basketName && (
-            <p className="text-sm text-portx-muted">{preview.basketName}</p>
+            <p className="text-sm text-portx-muted truncate">{preview.basketName}</p>
           )}
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 shrink-0">
+          {quoteModeBadge}
           {[...new Set(preview.legs.map((l) => l.bestQuote.provider))].map((p) => (
             <RouteProviderBadge key={p} provider={p} size="md" />
           ))}
@@ -126,11 +140,11 @@ export function QuotePreviewCard({
 
       {hasUnsupportedLegs && (
         <ExecutionWarning
-          variant="info"
+          variant="warning"
           warnings={
             unsupportedWarnings.length > 0
               ? unsupportedWarnings
-              : ['One or more tokens are unsupported on Ethereum mainnet.']
+              : [WARNING_MESSAGES.unsupportedRoute]
           }
         />
       )}
@@ -141,10 +155,12 @@ export function QuotePreviewCard({
         <button
           type="button"
           onClick={onReview}
-          disabled={loading}
+          disabled={loading || hasUnsupportedLegs}
+          aria-busy={loading}
+          aria-disabled={loading || hasUnsupportedLegs}
           className="btn-primary w-full py-3 disabled:opacity-50"
         >
-          {loading ? 'Building...' : reviewLabel}
+          {loading ? BUTTON_LABELS.buildingReview : reviewLabel}
         </button>
       )}
 

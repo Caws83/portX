@@ -8,7 +8,17 @@ import { PortfolioSummary } from '@/components/PortfolioCard'
 import { SellAllPreviewCard } from '@/components/SellAllPreviewCard'
 import { TransactionReviewModal } from '@/components/TransactionReviewModal'
 import { ExecutionWarning } from '@/components/ExecutionWarning'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { StatusBanner } from '@/components/ui/StatusBanner'
 import { executeDemoPlan } from '@/services/transactionBuilder'
+import {
+  BUTTON_LABELS,
+  EMPTY_MESSAGES,
+  ERROR_MESSAGES,
+  LOADING_MESSAGES,
+  SUCCESS_MESSAGES,
+  WARNING_MESSAGES,
+} from '@/config/uiCopy'
 import { formatUsd } from '@/utils/format'
 
 export function SellAll() {
@@ -30,9 +40,11 @@ export function SellAll() {
   const [confirming, setConfirming] = useState(false)
   const [txMsg, setTxMsg] = useState<string | null>(null)
 
+  const hasHoldings = portfolio.heldTokens.length > 0
+
   const handlePreview = async () => {
     setTxMsg(null)
-    if (portfolio.heldTokens.length === 0) return
+    if (!hasHoldings) return
     await previewSellAllPortfolio(portfolio.heldTokens)
   }
 
@@ -58,17 +70,31 @@ export function SellAll() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
-      <h1 className="section-title mb-2">Sell All & Exits</h1>
+      <h1 className="section-title mb-2">{BUTTON_LABELS.sellAll}</h1>
       <p className="text-portx-muted mb-8">
         Preview full portfolio unwind quotes, then confirm demo execution.
       </p>
+
+      {portfolio.portfolioLoading && (
+        <StatusBanner variant="loading" className="mb-6">
+          {LOADING_MESSAGES.portfolio}
+        </StatusBanner>
+      )}
+
+      {portfolio.portfolioError && portfolio.portfolioSource === 'fallback' && !portfolio.portfolioLoading && (
+        <StatusBanner variant="warning" className="mb-6" onRetry={portfolio.retryPortfolio}>
+          {WARNING_MESSAGES.apiOfflineFallback('portfolio')} ({portfolio.portfolioError})
+        </StatusBanner>
+      )}
 
       <ExecutionWarning variant="demo" />
 
       <div className="card border-portx-danger/40 bg-portx-danger/5 mb-8 mt-6">
         <div className="flex items-start gap-3">
-          <span className="text-2xl">⚠️</span>
-          <div>
+          <span className="text-2xl shrink-0" aria-hidden>
+            ⚠️
+          </span>
+          <div className="min-w-0">
             <h2 className="text-lg font-bold text-portx-danger mb-2">Non-custodial exit</h2>
             <p className="text-sm text-portx-muted">
               PortX never holds your funds. Each token sells back to USDC via the best route
@@ -79,72 +105,80 @@ export function SellAll() {
         </div>
       </div>
 
-      <PortfolioSummary
-        totalValueUsd={portfolio.totalValueUsd}
-        pnlUsd={portfolio.pnlUsd}
-        pnlPercent={portfolio.pnlPercent}
-        costBasisUsd={portfolio.costBasisUsd}
-      />
+      {!portfolio.portfolioLoading && (
+        <PortfolioSummary
+          totalValueUsd={portfolio.totalValueUsd}
+          pnlUsd={portfolio.pnlUsd}
+          pnlPercent={portfolio.pnlPercent}
+          costBasisUsd={portfolio.costBasisUsd}
+        />
+      )}
 
-      <div className="card-glow my-8 p-8">
+      <div className="card-glow my-8 p-6 sm:p-8 min-w-0">
         <p className="text-portx-muted text-sm mb-2 text-center">Full portfolio value</p>
-        <p className="text-4xl font-bold font-mono gradient-text mb-6 text-center">
+        <p className="text-3xl sm:text-4xl font-bold font-mono gradient-text mb-6 text-center">
           {formatUsd(portfolio.totalValueUsd)}
         </p>
 
+        {!hasHoldings && !portfolio.portfolioLoading && (
+          <EmptyState
+            title={EMPTY_MESSAGES.noSellAllHoldings.title}
+            description={EMPTY_MESSAGES.noSellAllHoldings.description}
+            className="mb-6 border-0 py-6"
+          />
+        )}
+
         {loading && (
-          <div className="mb-6 p-4 rounded-xl border border-portx-border bg-portx-surface text-sm text-portx-muted text-center">
-            Loading sell-all quote from API…
-          </div>
+          <StatusBanner variant="loading" className="mb-6">
+            {LOADING_MESSAGES.sellAllQuote}
+          </StatusBanner>
         )}
 
         {quoteSource === 'fallback' && preview && !loading && (
-          <div className="mb-6 p-4 rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-sm text-portx-warning flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <span>Using local sell-all fallback</span>
-            <button
-              type="button"
-              onClick={() => void retrySellAllQuote(portfolio.heldTokens)}
-              className="btn-secondary text-sm py-2 px-4 shrink-0"
-            >
-              Retry API
-            </button>
-          </div>
+          <StatusBanner variant="warning" className="mb-6" onRetry={() => void retrySellAllQuote(portfolio.heldTokens)}>
+            {WARNING_MESSAGES.sellAllFallback}
+          </StatusBanner>
         )}
 
         {quoteSource === 'api' && preview && !loading && (
-          <div className="mb-6 p-3 rounded-xl border border-portx-green/30 bg-portx-green/10 text-xs text-portx-green text-center">
-            Sell-all quote loaded from PortX API
-          </div>
+          <StatusBanner variant="success" className="mb-6" compact>
+            {SUCCESS_MESSAGES.sellAllQuoteApi}
+          </StatusBanner>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
-          <button
-            type="button"
-            onClick={handlePreview}
-            disabled={loading || portfolio.heldTokens.length === 0}
-            className="btn-primary flex-1 py-3 disabled:opacity-50"
-          >
-            {loading ? 'Fetching quotes...' : 'Preview Sell All'}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handlePreview}
+          disabled={loading || !hasHoldings || portfolio.portfolioLoading}
+          aria-busy={loading}
+          aria-disabled={loading || !hasHoldings}
+          className="btn-primary w-full py-3 mb-6 disabled:opacity-50"
+        >
+          {loading ? BUTTON_LABELS.fetchingQuotes : BUTTON_LABELS.previewSellAll}
+        </button>
 
         {error && (
-          <p className="text-sm text-portx-danger text-center mb-4">{error}</p>
+          <StatusBanner variant="error" className="mb-4">
+            {error || ERROR_MESSAGES.sellAllFailed}
+          </StatusBanner>
         )}
 
         {txMsg && (
-          <p className="text-sm text-portx-green text-center mb-4">{txMsg}</p>
+          <StatusBanner variant="success" className="mb-4">
+            {txMsg}
+          </StatusBanner>
         )}
 
         {preview && (
           <div className="mb-6">
             <SellAllPreviewCard
               preview={preview}
+              quoteSource={quoteSource}
               onReview={handleReview}
-              reviewLabel="Review & Confirm Demo Sell"
+              reviewLabel={BUTTON_LABELS.reviewDemoSell}
             />
             <button type="button" onClick={clear} className="btn-secondary w-full mt-3 text-sm">
-              Clear Preview
+              {BUTTON_LABELS.clearPreview}
             </button>
           </div>
         )}

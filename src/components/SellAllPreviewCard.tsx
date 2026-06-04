@@ -1,12 +1,15 @@
 import type { BasketQuotePreview } from '@/types/quote'
+import { BUTTON_LABELS } from '@/config/uiCopy'
 import { formatUsd } from '@/utils/format'
 import { formatSlippage, isHighSlippage } from '@/utils/slippage'
 import { AllocationBreakdown } from './AllocationBreakdown'
 import { ExecutionWarning } from './ExecutionWarning'
 import { RouteProviderBadge } from './RouteProviderBadge'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 interface SellAllPreviewCardProps {
   preview: BasketQuotePreview
+  quoteSource?: 'api' | 'fallback' | null
   onReview?: () => void
   reviewLabel?: string
   loading?: boolean
@@ -14,23 +17,34 @@ interface SellAllPreviewCardProps {
 
 export function SellAllPreviewCard({
   preview,
+  quoteSource,
   onReview,
-  reviewLabel = 'Review & Confirm Demo Sell',
+  reviewLabel = BUTTON_LABELS.reviewDemoSell,
   loading,
 }: SellAllPreviewCardProps) {
   const highSlippage = isHighSlippage(preview.slippageBps)
   const destination = preview.legs[0]?.bestQuote.outputToken.symbol ?? 'USDC'
 
+  const quoteModeBadge =
+    quoteSource === 'fallback' ? (
+      <StatusBadge variant="fallback-quote" size="md" />
+    ) : !preview.isDemo ? (
+      <StatusBadge variant="live-quote" size="md" />
+    ) : (
+      <StatusBadge variant="demo" label="Demo Quote" size="md" />
+    )
+
   return (
-    <div className="card-glow space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
+    <div className="card-glow space-y-6 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div className="min-w-0">
           <h3 className="text-lg font-bold">Sell All Portfolio Quote</h3>
           {preview.basketName && (
-            <p className="text-sm text-portx-muted">{preview.basketName}</p>
+            <p className="text-sm text-portx-muted truncate">{preview.basketName}</p>
           )}
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 shrink-0">
+          {quoteModeBadge}
           {[...new Set(preview.legs.map((l) => l.bestQuote.provider))].map((p) => (
             <RouteProviderBadge key={p} provider={p} size="md" />
           ))}
@@ -73,9 +87,10 @@ export function SellAllPreviewCard({
           type="button"
           onClick={onReview}
           disabled={loading}
+          aria-busy={loading}
           className="btn-primary w-full py-3 disabled:opacity-50"
         >
-          {loading ? 'Building...' : reviewLabel}
+          {loading ? BUTTON_LABELS.buildingReview : reviewLabel}
         </button>
       )}
     </div>

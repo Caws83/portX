@@ -1,26 +1,34 @@
 import type { QuoteProvider } from '@/types/route'
-import { PROVIDER_LABELS } from '@/types/route'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 interface RouteProviderBadgeProps {
   provider: QuoteProvider
   size?: 'sm' | 'md'
 }
 
-const COLORS: Record<QuoteProvider, string> = {
-  '0x': 'bg-portx-green/10 text-portx-green border-portx-green/30',
-  '1inch': 'bg-portx-blue/10 text-portx-blue border-portx-blue/30',
-  uniswap: 'bg-pink-500/10 text-pink-400 border-pink-500/30',
-  unsupported: 'bg-portx-warning/10 text-portx-warning border-portx-warning/30',
+const PROVIDER_VARIANT: Record<
+  QuoteProvider,
+  'live-quote' | 'fallback-quote' | 'unsupported' | 'demo'
+> = {
+  '0x': 'live-quote',
+  '1inch': 'demo',
+  uniswap: 'demo',
+  unsupported: 'unsupported',
+}
+
+const PROVIDER_LABEL: Record<QuoteProvider, string> = {
+  '0x': '0x',
+  '1inch': '1inch',
+  uniswap: 'Uniswap',
+  unsupported: 'Unsupported',
 }
 
 export function RouteProviderBadge({ provider, size = 'sm' }: RouteProviderBadgeProps) {
   return (
-    <span
-      className={`inline-flex items-center font-mono font-medium border rounded-full ${
-        COLORS[provider]
-      } ${size === 'sm' ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2.5 py-1'}`}
-    >
-      {PROVIDER_LABELS[provider]}
-    </span>
+    <StatusBadge
+      variant={PROVIDER_VARIANT[provider]}
+      label={PROVIDER_LABEL[provider]}
+      size={size}
+    />
   )
 }

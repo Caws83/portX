@@ -2,16 +2,18 @@ import { ENABLE_DEMO_QUOTES } from '@/config/constants'
 
 interface ExecutionWarningProps {
   warnings?: string[]
-  variant?: 'info' | 'demo' | 'slippage'
+  variant?: 'info' | 'demo' | 'slippage' | 'warning' | 'error'
 }
 
 export function ExecutionWarning({ warnings = [], variant = 'demo' }: ExecutionWarningProps) {
   const base =
-    variant === 'slippage'
+    variant === 'slippage' || variant === 'warning'
       ? 'border-portx-warning/50 bg-portx-warning/10 text-portx-warning'
-      : variant === 'info'
-        ? 'border-portx-blue/30 bg-portx-blue/5 text-portx-blue'
-        : 'border-portx-green/30 bg-portx-green/5 text-portx-muted'
+      : variant === 'error'
+        ? 'border-portx-danger/50 bg-portx-danger/10 text-portx-danger'
+        : variant === 'info'
+          ? 'border-portx-blue/30 bg-portx-blue/5 text-portx-blue'
+          : 'border-portx-green/30 bg-portx-green/5 text-portx-muted'
 
   const defaultMessage = ENABLE_DEMO_QUOTES
     ? 'Demo mode — quotes are simulated. Real swap execution is not live yet. API keys for 0x / 1inch route through the PortX backend when enabled.'

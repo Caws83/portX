@@ -1,6 +1,7 @@
 import type { Basket } from '@/types/basket'
 import { BasketChainBadge } from '@/components/BasketChainBadge'
 import { formatUsd } from '@/utils/format'
+import { BUTTON_LABELS } from '@/config/uiCopy'
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 
 interface BasketCardProps {
@@ -32,7 +33,7 @@ export function BasketCard({
 
   return (
     <div
-      className={`card-glow flex flex-col h-full hover:border-portx-green/30 transition-colors ${
+      className={`card-glow flex flex-col h-full min-w-0 hover:border-portx-green/30 transition-colors ${
         isSelected ? 'border-portx-green/50 shadow-glow' : ''
       }`}
     >
@@ -78,7 +79,9 @@ export function BasketCard({
               quotesAvailable ? onPreviewBuy(basket) : onPlannedChainSelect?.(basket)
             }
             disabled={quotesAvailable && loading}
-            title={quotesAvailable ? undefined : plannedMessage}
+            aria-busy={quotesAvailable && loading}
+            aria-disabled={quotesAvailable && loading}
+            title={quotesAvailable ? BUTTON_LABELS.previewQuote : plannedMessage}
             className={
               quotesAvailable
                 ? 'btn-primary w-full text-sm py-2.5 disabled:opacity-50'
@@ -86,10 +89,10 @@ export function BasketCard({
             }
           >
             {loading && quotesAvailable
-              ? 'Fetching quotes...'
+              ? BUTTON_LABELS.fetchingQuotes
               : quotesAvailable
-                ? 'Preview Quote'
-                : 'Quotes unavailable (planned chain)'}
+                ? BUTTON_LABELS.previewQuote
+                : BUTTON_LABELS.quotesUnavailable}
           </button>
         )}
         {isOwned && onPreviewSell && (
@@ -102,7 +105,7 @@ export function BasketCard({
             title={quotesAvailable ? undefined : plannedMessage}
             className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
           >
-            Preview Sell Quote
+            {BUTTON_LABELS.previewSellQuote}
           </button>
         )}
         <div className="flex flex-col sm:flex-row gap-2">

@@ -23,8 +23,8 @@ export function WhalePortfolioCard({ portfolio, compact = false }: WhalePortfoli
 
   return (
     <div
-      className={`card-glow flex flex-col h-full hover:border-portx-green/30 transition-colors ${
-        compact ? 'min-w-[280px]' : ''
+      className={`card-glow flex flex-col h-full min-w-0 hover:border-portx-green/30 transition-colors ${
+        compact ? 'min-w-[260px] sm:min-w-[280px]' : ''
       }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
