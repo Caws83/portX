@@ -1,4 +1,11 @@
-export type QuoteProviderId = '0x' | '1inch' | 'uniswap' | '0x-demo' | '1inch-demo' | 'uniswap-demo'
+export type QuoteProviderId =
+  | '0x'
+  | '1inch'
+  | 'uniswap'
+  | 'unsupported'
+  | '0x-demo'
+  | '1inch-demo'
+  | 'uniswap-demo'
 
 export interface QuoteRequest {
   inputToken: string
@@ -18,8 +25,9 @@ export interface ProviderQuote {
   estimatedGasUsd: number
   priceImpactPercent: number
   routeSummary: string
-  calldata: string
-  routerAddress: string
+  calldata: string | null
+  routerAddress: string | null
+  warnings?: string[]
 }
 
 export interface LegQuoteResponse extends ProviderQuote {

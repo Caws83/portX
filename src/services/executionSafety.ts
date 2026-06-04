@@ -2,6 +2,7 @@ import type { ExecutionPlan } from '@/types/execution'
 import { isSupportedExecutionChain } from '@/types/execution'
 import {
   allZeroExCalldataAvailable,
+  hasUnsupportedRoute,
   hasZeroExRoute,
 } from '@/services/transactionBuilder'
 
@@ -12,6 +13,7 @@ export const EXECUTION_BLOCKED_REASONS = {
   UNSUPPORTED_CHAIN: 'Unsupported chain',
   MISSING_CALLDATA: 'Missing calldata',
   INVALID_ROUTE: 'Invalid route',
+  UNSUPPORTED_ROUTE: 'Unsupported route',
 } as const
 
 export type ExecutionBlockedReason =
@@ -61,7 +63,8 @@ function buildSafetyChecks(
   const networkChainId = context.currentChainId ?? plan.chainId
   const chainSupported =
     isSupportedExecutionChain(networkChainId) && networkChainId === plan.chainId
-  const zeroExRoute = !plan.isDemo && hasZeroExRoute(quotes)
+  const unsupportedRoute = !plan.isDemo && hasUnsupportedRoute(quotes)
+  const zeroExRoute = !plan.isDemo && hasZeroExRoute(quotes) && !unsupportedRoute
   const calldataReady = !plan.isDemo && allZeroExCalldataAvailable(quotes, plan.isDemo)
   const walletOk = context.walletConnected && Boolean(plan.walletAddress)
   const slippageOk = isSlippageWithinLimits(plan.slippageBps)
@@ -89,8 +92,14 @@ function buildSafetyChecks(
       id: 'route',
       label: '0x route found',
       passed: zeroExRoute,
-      detail: zeroExRoute ? '0x aggregator route selected' : 'Quote must use 0x provider',
-      blockedReason: EXECUTION_BLOCKED_REASONS.INVALID_ROUTE,
+      detail: unsupportedRoute
+        ? 'Unsupported route'
+        : zeroExRoute
+          ? '0x aggregator route selected'
+          : 'Quote must use 0x provider',
+      blockedReason: unsupportedRoute
+        ? EXECUTION_BLOCKED_REASONS.UNSUPPORTED_ROUTE
+        : EXECUTION_BLOCKED_REASONS.INVALID_ROUTE,
       weight: 20,
     },
     {

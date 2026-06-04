@@ -315,7 +315,9 @@ export function TransactionReviewModal({
                           ? `${leg.calldataDisplay} (${leg.calldata.length} chars)`
                           : leg.calldataStatus === 'demo'
                             ? 'Demo placeholder'
-                            : 'Missing'}
+                            : leg.calldataStatus === 'unsupported'
+                              ? 'Unsupported on Ethereum'
+                              : 'Missing'}
                       </span>
                     </p>
                   </div>

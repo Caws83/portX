@@ -44,6 +44,7 @@ export function isValidCalldata(calldata: string): boolean {
 }
 
 export function getCalldataStatus(quote: QuoteResponse, isDemoPlan: boolean): CalldataStatus {
+  if (quote.provider === 'unsupported') return 'unsupported'
   if (isDemoPlan) return 'demo'
   if (quote.provider === '0x' && isValidCalldata(quote.calldata) && isValidRouterAddress(quote.routerAddress)) {
     return 'available'
@@ -52,6 +53,10 @@ export function getCalldataStatus(quote: QuoteResponse, isDemoPlan: boolean): Ca
     return 'available'
   }
   return 'missing'
+}
+
+export function hasUnsupportedRoute(quotes: QuoteResponse[]): boolean {
+  return quotes.some((q) => q.provider === 'unsupported')
 }
 
 export function hasZeroExRoute(quotes: QuoteResponse[]): boolean {
@@ -69,6 +74,7 @@ export function allZeroExCalldataAvailable(quotes: QuoteResponse[], isDemoPlan: 
 
 export function getExecutionStatus(quotes: QuoteResponse[], isDemoPlan: boolean): ExecutionStatus {
   if (isDemoPlan) return 'preview_only'
+  if (hasUnsupportedRoute(quotes)) return 'preview_only'
   if (hasZeroExRoute(quotes) && allZeroExCalldataAvailable(quotes, isDemoPlan)) {
     return 'ready_for_wallet'
   }
@@ -154,8 +160,12 @@ export function assessExecutionReadiness(
     {
       id: 'route',
       label: '0x route found',
-      passed: zeroExRoute,
-      detail: zeroExRoute ? '0x aggregator route selected' : 'No 0x route in quote',
+      passed: zeroExRoute && !hasUnsupportedRoute(quotes),
+      detail: hasUnsupportedRoute(quotes)
+        ? 'Unsupported route'
+        : zeroExRoute
+          ? '0x aggregator route selected'
+          : 'No 0x route in quote',
     },
     {
       id: 'calldata',

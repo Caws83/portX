@@ -1,14 +1,16 @@
 import { env } from '../config/env.js'
-import { getToken, requireToken } from '../data/tokens.js'
+import {
+  ETHEREUM_MAINNET_CHAIN_ID,
+  getTokenRouteMetadata,
+  normalizeRouteSymbol,
+  resolveQuoteTokenAddress,
+  validateQuotePair,
+} from '../config/supportedTokens.js'
 import { getTokenPrices } from './coingecko.js'
 import type { ProviderQuote, QuoteRequest } from '../types/quote.js'
 
 const ZEROX_QUOTE_URL = 'https://api.0x.org/swap/allowance-holder/quote'
-const NATIVE_ETH = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 const DEFAULT_TAKER = '0x0000000000000000000000000000000000000000'
-
-/** Symbols supported for live 0x quotes on Ethereum mainnet */
-const ZEROX_SYMBOLS = new Set(['ETH', 'USDC', 'WBTC', 'BTC', 'SOL', 'LINK', 'UNI', 'AAVE'])
 
 export interface ZeroExSwapQuoteParams {
   chainId: number
@@ -39,49 +41,37 @@ export function isZeroExConfigured(): boolean {
   return Boolean(env.zeroXApiKey?.trim())
 }
 
-function normalizeSymbol(symbol: string): string {
-  const upper = symbol.toUpperCase()
-  if (upper === 'BTC') return 'WBTC'
-  return upper
-}
-
-function isZeroExSupportedPair(sellSymbol: string, buySymbol: string): boolean {
-  return ZEROX_SYMBOLS.has(normalizeSymbol(sellSymbol)) && ZEROX_SYMBOLS.has(normalizeSymbol(buySymbol))
-}
-
-function resolveTokenAddress(symbol: string): string {
-  const normalized = normalizeSymbol(symbol)
-  if (normalized === 'ETH') return NATIVE_ETH
-  return requireToken(normalized).address
-}
-
 async function usdToSellAmountBase(sellSymbol: string, sellAmountUsd: number): Promise<string> {
-  const symbol = normalizeSymbol(sellSymbol)
+  const symbol = normalizeRouteSymbol(sellSymbol)
   const prices = await getTokenPrices()
+  const meta = getTokenRouteMetadata(sellSymbol)
+  if (!meta) throw new Error(`Unknown token: ${sellSymbol}`)
+
   const live = prices[symbol]
-  const token = getToken(symbol)!
-  const priceUsd = live?.priceUsd ?? token.priceUsd
+  const priceUsd = live?.priceUsd ?? 0
   if (priceUsd <= 0) throw new Error(`Invalid price for ${symbol}`)
 
   const amount = sellAmountUsd / priceUsd
-  const base = BigInt(Math.floor(amount * Math.pow(10, token.decimals)))
+  const base = BigInt(Math.floor(amount * Math.pow(10, meta.decimals)))
   if (base <= 0n) throw new Error(`Sell amount too small for ${symbol}`)
   return base.toString()
 }
 
 function formatTokenAmount(symbol: string, amountBase: string): string {
-  const token = getToken(normalizeSymbol(symbol))!
-  const value = Number(amountBase) / Math.pow(10, token.decimals)
+  const meta = getTokenRouteMetadata(symbol)
+  if (!meta) return '0'
+  const value = Number(amountBase) / Math.pow(10, meta.decimals)
   if (!Number.isFinite(value)) return '0'
-  return value.toFixed(Math.min(8, token.decimals))
+  return value.toFixed(Math.min(8, meta.decimals))
 }
 
 function estimateGasUsd(totalNetworkFeeWei: string | undefined): number {
   if (!totalNetworkFeeWei) return 3.5
-  const eth = requireToken('ETH')
+  const ethMeta = getTokenRouteMetadata('ETH')
+  const ethPrice = ethMeta ? 3450 : 3450
   const feeEth = Number(totalNetworkFeeWei) / 1e18
   if (!Number.isFinite(feeEth)) return 3.5
-  return Math.round(feeEth * eth.priceUsd * 100) / 100
+  return Math.round(feeEth * ethPrice * 100) / 100
 }
 
 function buildRouteSummary(data: ZeroExApiQuote, sellSymbol: string, buySymbol: string): string {
@@ -101,24 +91,29 @@ export async function getSwapQuote(params: ZeroExSwapQuoteParams): Promise<Provi
     throw new Error('ZEROX_API_KEY is not configured')
   }
 
-  if (params.chainId !== 1) {
+  const routeCheck = validateQuotePair(
+    params.sellTokenSymbol,
+    params.buyTokenSymbol,
+    params.chainId
+  )
+  if (!routeCheck.supported) {
+    throw new Error(routeCheck.reason)
+  }
+
+  if (params.chainId !== ETHEREUM_MAINNET_CHAIN_ID) {
     throw new Error(`0x quotes only supported on chainId 1 (got ${params.chainId})`)
   }
 
-  const sellSymbol = normalizeSymbol(params.sellTokenSymbol)
-  const buySymbol = normalizeSymbol(params.buyTokenSymbol)
-
-  if (!isZeroExSupportedPair(sellSymbol, buySymbol)) {
-    throw new Error(`0x pair not supported: ${sellSymbol} → ${buySymbol}`)
-  }
+  const sellSymbol = normalizeRouteSymbol(params.sellTokenSymbol)
+  const buySymbol = normalizeRouteSymbol(params.buyTokenSymbol)
 
   const sellAmount = await usdToSellAmountBase(sellSymbol, params.sellAmountUsd)
   const taker = params.walletAddress ?? DEFAULT_TAKER
 
   const query = new URLSearchParams({
     chainId: String(params.chainId),
-    sellToken: resolveTokenAddress(sellSymbol),
-    buyToken: resolveTokenAddress(buySymbol),
+    sellToken: resolveQuoteTokenAddress(sellSymbol),
+    buyToken: resolveQuoteTokenAddress(buySymbol),
     sellAmount,
     taker,
     slippageBps: String(params.slippageBps),
@@ -152,6 +147,9 @@ export async function getSwapQuote(params: ZeroExSwapQuoteParams): Promise<Provi
     ? Math.abs(parseFloat(data.estimatedPriceImpact) * 100)
     : 0.1
 
+  const calldata = data.transaction?.data
+  const routerAddress = data.transaction?.to
+
   return {
     provider: '0x',
     fromToken: params.sellTokenSymbol,
@@ -161,8 +159,9 @@ export async function getSwapQuote(params: ZeroExSwapQuoteParams): Promise<Provi
     estimatedGasUsd: estimateGasUsd(data.totalNetworkFee),
     priceImpactPercent: Number.isFinite(priceImpact) ? priceImpact : 0.1,
     routeSummary: buildRouteSummary(data, sellSymbol, buySymbol),
-    calldata: data.transaction?.data ?? '0x',
-    routerAddress: data.transaction?.to ?? '0x0000000000001ff3684f28c67538d4d072c22734',
+    calldata: calldata && calldata.length > 2 ? calldata : null,
+    routerAddress: routerAddress ?? null,
+    warnings: [],
   }
 }
 

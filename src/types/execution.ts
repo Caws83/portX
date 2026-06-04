@@ -28,7 +28,7 @@ export interface ExecutionPlan {
 /** Whether the quote includes executable 0x calldata or is preview-only */
 export type ExecutionStatus = 'ready_for_wallet' | 'preview_only'
 
-export type CalldataStatus = 'available' | 'missing' | 'demo'
+export type CalldataStatus = 'available' | 'missing' | 'demo' | 'unsupported'
 
 export interface LegExecutionInfo {
   index: number

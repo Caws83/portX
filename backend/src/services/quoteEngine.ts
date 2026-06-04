@@ -2,7 +2,7 @@ import type { BasketQuoteResponse, LegQuoteResponse } from '../types/quote.js'
 import { requireBasket } from '../data/demoBaskets.js'
 import { getDemoPortfolio } from '../data/demoPortfolio.js'
 import { calculateBuyLegs, calculateSellLegs, calculateSellAllLegs } from './allocationEngine.js'
-import { getBestQuote, getQuotesStatus } from './quoteProviders.js'
+import { getBestQuote } from './quoteProviders.js'
 import { sum } from '../utils/math.js'
 
 const DEMO_WARNINGS = [
@@ -137,8 +137,24 @@ function buildResponse(
     return s + (Number.isNaN(out) ? 0 : out)
   }, 0)
 
-  const quotesSource = getQuotesStatus()
-  const isLive = quotesSource === '0x'
+  const liveLegs = quotes.filter((q) => q.provider === '0x').length
+  const unsupportedLegs = quotes.filter((q) => q.provider === 'unsupported').length
+  const isLive = liveLegs > 0
+
+  const warnings = isLive ? [...LIVE_WARNINGS] : [...DEMO_WARNINGS]
+  if (unsupportedLegs > 0) {
+    warnings.push(
+      `${unsupportedLegs} leg(s) unsupported on Ethereum mainnet — no 0x calldata for those tokens.`
+    )
+  }
+
+  for (const leg of quotes) {
+    if (leg.warnings?.length) {
+      for (const w of leg.warnings) {
+        if (!warnings.includes(w)) warnings.push(w)
+      }
+    }
+  }
 
   return {
     mode: isLive ? 'live' : 'demo',
@@ -148,6 +164,6 @@ function buildResponse(
     totalOutputUsd,
     quotes,
     totalEstimatedGasUsd: Math.round(totalGas * 100) / 100,
-    warnings: isLive ? [...LIVE_WARNINGS] : [...DEMO_WARNINGS],
+    warnings,
   }
 }

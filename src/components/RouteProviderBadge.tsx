@@ -10,6 +10,7 @@ const COLORS: Record<QuoteProvider, string> = {
   '0x': 'bg-portx-green/10 text-portx-green border-portx-green/30',
   '1inch': 'bg-portx-blue/10 text-portx-blue border-portx-blue/30',
   uniswap: 'bg-pink-500/10 text-pink-400 border-pink-500/30',
+  unsupported: 'bg-portx-warning/10 text-portx-warning border-portx-warning/30',
 }
 
 export function RouteProviderBadge({ provider, size = 'sm' }: RouteProviderBadgeProps) {

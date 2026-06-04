@@ -2,13 +2,13 @@ import type { QuoteRequest, QuoteResponse } from '@/types/quote'
 import type { QuoteProvider } from '@/types/route'
 import { ROUTER_ADDRESSES } from '@/utils/addresses'
 
-const PROVIDER_JITTER: Record<QuoteProvider, number> = {
+const PROVIDER_JITTER: Record<Exclude<QuoteProvider, 'unsupported'>, number> = {
   '0x': 1.002,
   '1inch': 0.998,
   uniswap: 0.995,
 }
 
-const PROVIDER_GAS: Record<QuoteProvider, number> = {
+const PROVIDER_GAS: Record<Exclude<QuoteProvider, 'unsupported'>, number> = {
   '0x': 180_000,
   '1inch': 195_000,
   uniswap: 210_000,
@@ -18,7 +18,10 @@ function simulateLatency(): Promise<void> {
   return new Promise((r) => setTimeout(r, 80 + Math.random() * 120))
 }
 
-function buildMockQuote(request: QuoteRequest, provider: QuoteProvider): QuoteResponse {
+function buildMockQuote(
+  request: QuoteRequest,
+  provider: Exclude<QuoteProvider, 'unsupported'>
+): QuoteResponse {
   const { inputToken, outputToken, inputAmountUsd } = request
   const jitter = PROVIDER_JITTER[provider]
   const rawOutput = inputAmountUsd / outputToken.priceUsd

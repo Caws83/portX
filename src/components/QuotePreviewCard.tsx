@@ -28,7 +28,11 @@ export function QuotePreviewCard({
   const direction = preview.type === 'buy' ? 'buy' : 'sell'
   const highSlippage = isHighSlippage(preview.slippageBps)
   const execution = buildLiveExecutionSummaryFromPreview(preview)
-  const showLivePrep = !preview.isDemo && execution.hasZeroExRoute
+  const hasUnsupportedLegs = preview.legs.some((l) => l.bestQuote.provider === 'unsupported')
+  const unsupportedWarnings = preview.legs.flatMap((l) =>
+    l.bestQuote.provider === 'unsupported' ? l.bestQuote.warnings : []
+  )
+  const showLivePrep = !preview.isDemo && execution.hasZeroExRoute && !hasUnsupportedLegs
   const statusTone =
     execution.status === 'ready_for_wallet'
       ? 'border-portx-green/40 bg-portx-green/10 text-portx-green'
@@ -79,7 +83,9 @@ export function QuotePreviewCard({
                       ? `${leg.calldataDisplay} · ready`
                       : leg.calldataStatus === 'demo'
                         ? 'demo placeholder'
-                        : 'missing'}
+                        : leg.calldataStatus === 'unsupported'
+                          ? 'unsupported'
+                          : 'missing'}
                   </p>
                 </div>
               ))}
@@ -117,6 +123,17 @@ export function QuotePreviewCard({
       )}
 
       <AllocationBreakdown legs={preview.legs} direction={direction} />
+
+      {hasUnsupportedLegs && (
+        <ExecutionWarning
+          variant="info"
+          warnings={
+            unsupportedWarnings.length > 0
+              ? unsupportedWarnings
+              : ['One or more tokens are unsupported on Ethereum mainnet.']
+          }
+        />
+      )}
 
       <ExecutionWarning warnings={preview.warnings} />
 

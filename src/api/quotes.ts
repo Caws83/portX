@@ -27,8 +27,9 @@ export interface BuyBasketLegQuote {
   estimatedGasUsd: number
   priceImpactPercent: number
   routeSummary: string
-  calldata: string
-  routerAddress: string
+  calldata: string | null
+  routerAddress: string | null
+  warnings?: string[]
   allocationPercent: number
 }
 
@@ -67,9 +68,18 @@ export async function previewBuyBasket(
 }
 
 function normalizeProvider(provider: string): QuoteProvider {
+  if (provider === 'unsupported') return 'unsupported'
   if (provider.startsWith('0x')) return '0x'
   if (provider.startsWith('1inch')) return '1inch'
   return 'uniswap'
+}
+
+function mapCalldata(calldata: string | null | undefined): string {
+  return calldata ?? ''
+}
+
+function mapRouterAddress(router: string | null | undefined): string {
+  return router ?? ''
 }
 
 function requireToken(symbol: string): Token {
@@ -96,9 +106,9 @@ function legQuoteFromApi(leg: BuyBasketLegQuote, stablecoin: Token): LegQuote {
     estimatedGasUnits: Math.round(leg.estimatedGasUsd * 1e9),
     priceImpactPercent: leg.priceImpactPercent,
     routeSummary: leg.routeSummary ? [leg.routeSummary] : [],
-    calldata: leg.calldata,
-    routerAddress: leg.routerAddress,
-    warnings: [],
+    calldata: mapCalldata(leg.calldata),
+    routerAddress: mapRouterAddress(leg.routerAddress),
+    warnings: leg.warnings ?? [],
   }
 
   return {
@@ -158,8 +168,9 @@ export interface SellAllLegQuote {
   estimatedGasUsd: number
   priceImpactPercent: number
   routeSummary: string
-  calldata: string
-  routerAddress: string
+  calldata: string | null
+  routerAddress: string | null
+  warnings?: string[]
   allocationPercent: number
 }
 
@@ -216,9 +227,9 @@ function sellLegQuoteFromApi(leg: SellAllLegQuote, outputToken: Token): LegQuote
     estimatedGasUnits: Math.round(leg.estimatedGasUsd * 1e9),
     priceImpactPercent: leg.priceImpactPercent,
     routeSummary: leg.routeSummary ? [leg.routeSummary] : [],
-    calldata: leg.calldata,
-    routerAddress: leg.routerAddress,
-    warnings: [],
+    calldata: mapCalldata(leg.calldata),
+    routerAddress: mapRouterAddress(leg.routerAddress),
+    warnings: leg.warnings ?? [],
   }
 
   return {

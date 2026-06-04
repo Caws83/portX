@@ -8,7 +8,7 @@ import { getBuyBasketQuotePreview } from './quoteEngine'
 import { executeDemoPlan, buildExecutionPlan } from './transactionBuilder'
 import { mainnet } from 'wagmi/chains'
 
-export type DexProvider = '0x' | '1inch' | 'uniswap'
+export type DexProvider = '0x' | '1inch' | 'uniswap' | 'unsupported'
 
 export interface SwapQuote {
   provider: DexProvider

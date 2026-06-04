@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { getRouteSupportStats } from '../config/supportedTokens.js'
 import { getPricingStatus, getTokenPrices } from '../services/coingecko.js'
 import { isZeroExConfigured } from '../services/zeroEx.js'
 
@@ -7,6 +8,7 @@ export async function healthRoutes(app: FastifyInstance) {
     await getTokenPrices()
     const { pricing, cacheAge } = getPricingStatus()
     const quotes = isZeroExConfigured() ? '0x' : 'fallback'
+    const supportedRoutes = getRouteSupportStats()
 
     if (pricing === 'coingecko') {
       return {
@@ -14,6 +16,7 @@ export async function healthRoutes(app: FastifyInstance) {
         pricing: 'coingecko',
         quotes,
         cacheAge,
+        supportedRoutes,
       }
     }
 
@@ -21,6 +24,7 @@ export async function healthRoutes(app: FastifyInstance) {
       status: 'ok',
       pricing: 'fallback',
       quotes,
+      supportedRoutes,
     }
   })
 }
