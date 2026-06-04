@@ -1,9 +1,15 @@
+import { useMemo, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import type { ExecutionPlan } from '@/types/execution'
 import { formatUsd, formatTokenAmount } from '@/utils/format'
 import { formatSlippage } from '@/utils/slippage'
 import { assessExecutionReadiness } from '@/services/transactionBuilder'
 import { assessExecutionSafety } from '@/services/executionSafety'
+import {
+  prepareExecution,
+  simulateExecution,
+  type SimulationResult,
+} from '@/services/executionService'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
@@ -55,10 +61,17 @@ export function TransactionReviewModal({
   const { isConnected, address } = useAccount()
   const chainId = useChainId()
   const { enableLiveExecution } = useFeatureFlags()
-
-  if (!open || !plan) return null
+  const [simulation, setSimulation] = useState<SimulationResult | null>(null)
+  const [simulating, setSimulating] = useState(false)
 
   const walletConnected = isConnected && Boolean(address)
+
+  const prepared = useMemo(
+    () => (plan && open ? prepareExecution(plan) : null),
+    [plan, open]
+  )
+
+  if (!open || !plan) return null
   const readiness =
     plan.readiness ??
     assessExecutionReadiness(plan, {
@@ -77,6 +90,24 @@ export function TransactionReviewModal({
     readiness.status === 'ready_for_wallet'
       ? 'border-portx-green/40 bg-portx-green/10 text-portx-green'
       : 'border-portx-warning/40 bg-portx-warning/10 text-portx-warning'
+
+  const simulationTone =
+    simulation?.passed === true
+      ? 'border-portx-green/40 bg-portx-green/10 text-portx-green'
+      : simulation?.passed === false
+        ? 'border-portx-danger/40 bg-portx-danger/10 text-portx-danger'
+        : 'border-portx-border bg-portx-surface text-portx-muted'
+
+  const handleSimulate = async () => {
+    if (!prepared) return
+    setSimulating(true)
+    try {
+      const result = await simulateExecution(prepared, { currentChainId: chainId })
+      setSimulation(result)
+    } finally {
+      setSimulating(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4">
@@ -152,6 +183,74 @@ export function TransactionReviewModal({
               variant="info"
               warnings={['Live execution coming soon — swaps are not sent on-chain in v1 preview.']}
             />
+
+            {prepared && (
+              <div className="p-4 rounded-xl bg-portx-surface border border-portx-border space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+                  Transaction simulation
+                </p>
+
+                <div className={`rounded-xl border p-3 ${simulationTone}`}>
+                  <p className="text-xs uppercase tracking-wide opacity-80 mb-1">Simulation Status</p>
+                  <p className="font-bold">
+                    {simulation ? simulation.label : 'Not simulated'}
+                  </p>
+                  {simulation && (
+                    <p className="text-xs mt-1 opacity-90">{simulation.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {prepared.legs.map((leg) => (
+                    <div
+                      key={leg.legIndex}
+                      className="p-3 rounded-xl bg-black/20 border border-portx-border text-xs space-y-2 font-mono"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium font-sans">
+                          Leg {leg.legIndex + 1}: {leg.inputSymbol} → {leg.outputSymbol}
+                        </span>
+                        <RouteProviderBadge provider={leg.provider} />
+                      </div>
+                      <p>
+                        <span className="text-portx-muted">chainId: </span>
+                        {leg.chainId}
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">router: </span>
+                        {leg.routerDisplay}
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">target: </span>
+                        {leg.targetAddress}
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">calldata size: </span>
+                        {leg.calldataSize} chars
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">estimated gas: </span>
+                        {leg.estimatedGasUnits.toLocaleString()} units (
+                        {formatUsd(leg.estimatedGasUsd)})
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">provider: </span>
+                        {leg.provider}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void handleSimulate()}
+                  disabled={simulating}
+                  className="btn-secondary w-full py-3 disabled:opacity-50"
+                >
+                  {simulating ? 'Simulating...' : 'Simulate Transaction'}
+                </button>
+              </div>
+            )}
 
             <div className="p-4 rounded-xl bg-portx-surface border border-portx-border space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
