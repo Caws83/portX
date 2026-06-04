@@ -53,8 +53,10 @@ Contract calls external routers in one tx → SwapExecuted × N → BasketExecut
 
 | File | Purpose |
 |------|---------|
-| `BundleExecutor.sol` | Draft executor: multi-leg router calls, events, owner rescue, reentrancy guard |
-| `interfaces/IERC20.sol` | Minimal ERC-20 interface for planning |
+| `src/BundleExecutor.sol` | Draft executor: multi-leg router calls, events, owner rescue, reentrancy guard |
+| `src/interfaces/IERC20.sol` | Minimal ERC-20 interface for planning |
+| `src/mocks/` | `MockRouter`, `MockERC20`, `ReentrancyRouter`, `InvalidDataRouter` (tests only) |
+| `test/BundleExecutor.test.ts` | Hardhat + Chai local tests |
 
 There is **no** deploy script, **no** Hardhat/Foundry project wiring, and **no** frontend/backend integration in this phase.
 
@@ -114,9 +116,23 @@ Do **not** deploy `BundleExecutor.sol` to mainnet until:
 
 ---
 
+## Local Hardhat tests
+
+From the `contracts/` directory:
+
+```bash
+npm install
+npx hardhat compile
+npx hardhat test
+```
+
+See `scripts/README.md` for details. No deployment scripts are included.
+
+---
+
 ## Recommended next steps (in order)
 
-1. **Foundry or Hardhat scaffold** — compile/test `BundleExecutor` in isolation (no deploy to mainnet)
+1. **Expand Hardhat tests** — fuzz / invariant tests before any testnet
 2. **Unit tests** — revert paths, reentrancy, rescue, failed router calls
 3. **Slippage design** — enforce `minAmountOut` per router response shape (0x-specific)
 4. **Security audit** — before any testnet with real funds
