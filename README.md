@@ -115,6 +115,10 @@ src/
 
 Integration comments mark where **smart contracts**, **DEX aggregators**, and **AI agents** will connect.
 
+## Multi-chain architecture (planned)
+
+Single-chain Ethereum quotes are live today; other chains are documented for future phases only. See **[docs/MULTICHAIN_ARCHITECTURE.md](./docs/MULTICHAIN_ARCHITECTURE.md)** for Phase 1–4 baskets (Ethereum, Base, Avalanche, Solana), bridge aggregators, and type/config references (`src/types/chain.ts`, `backend/src/config/chains.ts`).
+
 ## DEX Routing Architecture
 
 PortX is **non-custodial**. The platform never holds user funds or private keys. Baskets are **execution strategies** at the MVP stage — not vault tokens. Users sign every swap from their connected wallet.
