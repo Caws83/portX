@@ -7,7 +7,6 @@ dotenv.config()
 
 const deployerKey = process.env.DEPLOYER_PRIVATE_KEY
 const sepoliaRpc = process.env.SEPOLIA_RPC_URL ?? ''
-const etherscanKey = process.env.ETHERSCAN_API_KEY ?? ''
 
 /**
  * Hardhat config: local tests + Sepolia testnet scaffold only.
@@ -37,9 +36,7 @@ const config: HardhatUserConfig = {
     },
   },
   etherscan: {
-    apiKey: {
-      sepolia: etherscanKey,
-    },
+    apiKey: process.env.ETHERSCAN_API_KEY,
   },
 }
 
