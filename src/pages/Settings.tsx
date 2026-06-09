@@ -19,6 +19,7 @@ import {
   getExpectedBundleExecutorNetworkLabel,
   useBundleExecutorHealth,
 } from '@/hooks/useBundleExecutorHealth'
+import { useBundleExecutorExecutionReadiness } from '@/hooks/useBundleExecutorExecutionReadiness'
 import { usePortfolio } from '@/hooks/usePortfolio'
 
 const SETTINGS_KEY = 'portx-settings'
@@ -58,6 +59,7 @@ export function Settings() {
 
   const targetNetwork = getActiveNetworkConfig()
   const contractHealth = useBundleExecutorHealth()
+  const executionReadiness = useBundleExecutorExecutionReadiness()
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -207,6 +209,42 @@ export function Settings() {
             </dd>
           </div>
         </dl>
+      </div>
+
+      <div className="card mb-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-bold">Execution Readiness (Testnet)</h2>
+          <span className="text-xs font-mono text-portx-muted">Phase B scaffold</span>
+        </div>
+        <StatusBanner variant="info" compact>
+          {executionReadiness.executionLabel} — validation only; no transactions are sent.
+        </StatusBanner>
+        <dl className="space-y-2 text-sm">
+          {executionReadiness.items.map((item) => (
+            <div key={item.id} className="flex justify-between gap-4">
+              <dt className="text-portx-muted">{item.label}</dt>
+              <dd
+                className={`text-right ${
+                  item.passed ? 'text-portx-green' : 'text-portx-muted'
+                }`}
+              >
+                {item.passed ? 'Yes' : 'No'}
+              </dd>
+            </div>
+          ))}
+          <div className="flex justify-between gap-4 pt-1 border-t border-portx-border">
+            <dt className="text-portx-muted font-medium">Execution status</dt>
+            <dd className="text-right font-medium text-portx-warning">
+              {executionReadiness.executionLabel}
+            </dd>
+          </div>
+        </dl>
+        {executionReadiness.prepareResult.status === 'validation_errors' &&
+        executionReadiness.prepareResult.errors.length > 0 ? (
+          <p className="text-xs text-portx-muted">
+            Validation scaffold: {executionReadiness.prepareResult.errors[0].message}
+          </p>
+        ) : null}
       </div>
 
       <div className="card mb-6 space-y-4">
