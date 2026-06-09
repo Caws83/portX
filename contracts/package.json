@@ -8,7 +8,9 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy:sepolia:mock-router": "hardhat ignition deploy ignition/modules/MockRouter.ts --network sepolia --deployment-id portx-sepolia-mock-router",
-    "deploy:sepolia:mock-erc20": "hardhat ignition deploy ignition/modules/MockERC20.ts --network sepolia --deployment-id portx-sepolia-mock-erc20"
+    "deploy:sepolia:mock-erc20": "hardhat ignition deploy ignition/modules/MockERC20.ts --network sepolia --deployment-id portx-sepolia-mock-erc20",
+    "testnet:mock-eth": "hardhat run scripts/testnet/executeMockEthBasket.ts --network sepolia",
+    "testnet:mock-erc20": "hardhat run scripts/testnet/executeMockErc20Basket.ts --network sepolia"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.9",
