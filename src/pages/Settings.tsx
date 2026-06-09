@@ -15,6 +15,10 @@ import { SUPPORTED_CHAINS } from '@/config/chains'
 import { AppModeBadge } from '@/components/AppModeIndicator'
 import { StatusBanner } from '@/components/ui/StatusBanner'
 import { truncateAddress, formatUsd } from '@/utils/format'
+import {
+  getExpectedBundleExecutorNetworkLabel,
+  useBundleExecutorHealth,
+} from '@/hooks/useBundleExecutorHealth'
 import { usePortfolio } from '@/hooks/usePortfolio'
 
 const SETTINGS_KEY = 'portx-settings'
@@ -53,6 +57,7 @@ export function Settings() {
   }
 
   const targetNetwork = getActiveNetworkConfig()
+  const contractHealth = useBundleExecutorHealth()
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -138,6 +143,68 @@ export function Settings() {
         >
           View on Sepolia Etherscan
         </a>
+      </div>
+
+      <div className="card mb-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-bold">Contract Health</h2>
+          <span className="text-xs font-mono text-portx-muted">Read-only</span>
+        </div>
+        {contractHealth.statusMessage ? (
+          <StatusBanner
+            variant={contractHealth.status === 'disconnected' ? 'info' : 'warning'}
+            compact
+          >
+            {contractHealth.statusMessage}
+            {contractHealth.status === 'wrong-network' && (
+              <span className="block mt-1 text-xs opacity-90">
+                Switch wallet to {getExpectedBundleExecutorNetworkLabel()} to probe the contract.
+              </span>
+            )}
+          </StatusBanner>
+        ) : null}
+        <dl className="space-y-2 text-sm">
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Connected Network</dt>
+            <dd className="text-right">{contractHealth.connectedNetwork}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Contract Address</dt>
+            <dd className="font-mono text-xs text-right break-all">
+              {contractHealth.contractAddress}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Owner Address</dt>
+            <dd className="font-mono text-xs text-right break-all">
+              {contractHealth.isLoading
+                ? 'Checking…'
+                : contractHealth.ownerAddress
+                  ? truncateAddress(contractHealth.ownerAddress, 6)
+                  : '—'}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Contract Reachable</dt>
+            <dd
+              className={`text-right ${
+                contractHealth.contractReachable === true
+                  ? 'text-portx-green'
+                  : contractHealth.contractReachable === false
+                    ? 'text-portx-danger'
+                    : ''
+              }`}
+            >
+              {contractHealth.isLoading
+                ? 'Checking…'
+                : contractHealth.contractReachable === true
+                  ? 'Yes'
+                  : contractHealth.contractReachable === false
+                    ? 'No'
+                    : '—'}
+            </dd>
+          </div>
+        </dl>
       </div>
 
       <div className="card mb-6 space-y-4">
