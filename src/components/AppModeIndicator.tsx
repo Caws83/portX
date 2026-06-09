@@ -1,4 +1,5 @@
 import { APP_MODE_BADGE_LABEL, APP_MODE_BANNER_MESSAGE, IS_TESTNET_MODE } from '@/config/appMode'
+import { SHOW_ALPHA_WARNINGS } from '@/config/features'
 import { getActiveNetworkConfig } from '@/config/networks'
 import { StatusBanner } from '@/components/ui/StatusBanner'
 
@@ -20,6 +21,8 @@ export function AppModeBadge({ className = '' }: { className?: string }) {
 
 /** Global mode banner below navbar */
 export function AppModeBanner() {
+  if (!SHOW_ALPHA_WARNINGS) return null
+
   return (
     <StatusBanner
       variant={IS_TESTNET_MODE ? 'warning' : 'info'}

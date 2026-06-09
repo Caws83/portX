@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAccount, useChainId } from 'wagmi'
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
+import { SUPPORTED_CHAINS } from '@/config/chains'
 import { getNetworkByChainId } from '@/config/networks'
 import {
   fetchBundleExecutorReadStatus,
@@ -32,8 +33,9 @@ export function useBundleExecutorHealth(): BundleExecutorHealth {
       ? 'wrong-network'
       : 'ready'
 
+  const walletChain = SUPPORTED_CHAINS.find((c) => c.id === walletChainId)
   const connectedNetwork = isConnected
-    ? (getNetworkByChainId(walletChainId)?.label ?? `Chain ${walletChainId}`)
+    ? (walletChain?.name ?? getNetworkByChainId(walletChainId)?.label ?? `Chain ${walletChainId}`)
     : '—'
 
   const query = useQuery({

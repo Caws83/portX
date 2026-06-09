@@ -10,7 +10,7 @@ import {
 import { APP_MODE, APP_MODE_BADGE_LABEL, APP_MODE_BANNER_MESSAGE } from '@/config/appMode'
 import { getActiveNetworkConfig } from '@/config/networks'
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
-import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
+import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE, SHOW_ALPHA_WARNINGS } from '@/config/features'
 import { SUPPORTED_CHAINS } from '@/config/chains'
 import { AppModeBadge } from '@/components/AppModeIndicator'
 import { StatusBanner } from '@/components/ui/StatusBanner'
@@ -66,13 +66,15 @@ export function Settings() {
         <AppModeBadge />
       </div>
 
-      <StatusBanner
-        variant={ENABLE_TESTNET_MODE ? 'warning' : 'info'}
-        className="mb-6"
-        compact
-      >
-        {APP_MODE_BANNER_MESSAGE}
-      </StatusBanner>
+      {SHOW_ALPHA_WARNINGS ? (
+        <StatusBanner
+          variant={ENABLE_TESTNET_MODE ? 'warning' : 'info'}
+          className="mb-6"
+          compact
+        >
+          {APP_MODE_BANNER_MESSAGE}
+        </StatusBanner>
+      ) : null}
 
       <div className="card mb-6 space-y-4">
         <h2 className="font-bold">App mode</h2>
