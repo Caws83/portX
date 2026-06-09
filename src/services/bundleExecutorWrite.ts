@@ -1,3 +1,4 @@
+import type { ExecutionPlan } from '@/types/execution'
 import type { BasketQuotePreview } from '@/types/quote'
 import type { QuoteResponse } from '@/types/quote'
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
@@ -63,6 +64,33 @@ export interface TestnetExecutionReadiness {
 }
 
 export const EXECUTION_DISABLED_ALPHA_LABEL = 'Execution Disabled (Alpha)' as const
+
+/** Map wallet execution plan to basket quote preview for BundleExecutor encoding */
+export function executionPlanToQuotePreview(plan: ExecutionPlan): BasketQuotePreview {
+  return {
+    type: plan.type,
+    basketId: plan.basketId,
+    basketName: plan.basketName,
+    totalInputUsd: plan.totalInputUsd,
+    totalOutputUsd: plan.totalOutputUsd,
+    totalGasUsd: plan.totalGasUsd,
+    slippageBps: plan.slippageBps,
+    chainId: plan.chainId,
+    legs: plan.legs.map((leg) => ({
+      allocation: {
+        token: leg.quote.inputToken,
+        weightPercent: 0,
+        inputAmountUsd: leg.quote.inputAmountUsd,
+        inputAmount: leg.quote.inputAmount,
+      },
+      bestQuote: leg.quote,
+      allQuotes: [leg.quote],
+    })),
+    warnings: plan.warnings,
+    isDemo: plan.isDemo,
+    createdAt: Date.now(),
+  }
+}
 
 const SEPOLIA_CHAIN_ID = getBundleExecutorChainId()
 const MAINNET_CHAIN_ID = 1

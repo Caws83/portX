@@ -1,10 +1,22 @@
 import { useMemo, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import type { ExecutionPlan } from '@/types/execution'
-import { formatUsd, formatTokenAmount } from '@/utils/format'
+import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
+import { formatUsd, formatTokenAmount, truncateAddress } from '@/utils/format'
 import { formatSlippage } from '@/utils/slippage'
-import { assessExecutionReadiness } from '@/services/transactionBuilder'
+import { ZERO_ADDRESS } from '@/utils/addresses'
+import {
+  assessExecutionReadiness,
+  getCalldataStatus,
+  truncateCalldata,
+} from '@/services/transactionBuilder'
 import { assessExecutionSafety } from '@/services/executionSafety'
+import { getBundleExecutorChainId } from '@/services/bundleExecutorContract'
+import {
+  buildSwapCalls,
+  executionPlanToQuotePreview,
+  prepareBundleExecution,
+} from '@/services/bundleExecutorWrite'
 import {
   prepareExecution,
   simulateExecution,
@@ -70,6 +82,29 @@ export function TransactionReviewModal({
     () => (plan && open ? prepareExecution(plan) : null),
     [plan, open]
   )
+
+  const bundleQuotePreview = useMemo(
+    () => (plan && open && !plan.isDemo ? executionPlanToQuotePreview(plan) : null),
+    [plan, open]
+  )
+
+  const bundlePrepareResult = useMemo(() => {
+    if (!bundleQuotePreview) return null
+    return prepareBundleExecution({
+      walletConnected,
+      chainId,
+      walletAddress: address,
+      quotePreview: bundleQuotePreview,
+    })
+  }, [bundleQuotePreview, walletConnected, chainId, address])
+
+  const bundleBuildResult = useMemo(() => {
+    if (!bundleQuotePreview) return null
+    return buildSwapCalls(bundleQuotePreview)
+  }, [bundleQuotePreview])
+
+  const sepoliaChainId = getBundleExecutorChainId()
+  const walletOnSepolia = chainId === sepoliaChainId
 
   if (!open || !plan) return null
   const readiness =
@@ -327,6 +362,148 @@ export function TransactionReviewModal({
           </div>
         )}
 
+        {!plan.isDemo && bundleQuotePreview && (
+          <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-border space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+              BundleExecutor Testnet Payload Preview
+            </p>
+
+            {!walletOnSepolia && (
+              <div className="rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-portx-warning p-3 text-sm">
+                Sepolia required for BundleExecutor testnet execution.
+              </div>
+            )}
+
+            {bundlePrepareResult?.status === 'validation_errors' && (
+              <div className="rounded-xl border border-portx-danger/40 bg-portx-danger/5 p-3 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-portx-danger">
+                  Validation errors
+                </p>
+                <ul className="space-y-1 text-xs text-portx-muted">
+                  {bundlePrepareResult.errors.map((error) => (
+                    <li key={`${error.code}-${error.field ?? error.message}`}>
+                      <span className="font-mono text-portx-danger">{error.code}</span>
+                      {' — '}
+                      {error.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {bundleBuildResult?.status === 'ready' ? (
+              <div className="space-y-3">
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <dt className="text-portx-muted text-xs">basketId</dt>
+                    <dd className="font-mono text-xs break-all">{bundleBuildResult.basketId}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-portx-muted text-xs">Swap calls</dt>
+                    <dd className="font-mono">{bundleBuildResult.legCount}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-portx-muted text-xs">Chain target</dt>
+                    <dd>
+                      {BUNDLE_EXECUTOR_SEPOLIA.networkLabel} ({bundleBuildResult.chainId})
+                    </dd>
+                  </div>
+                </dl>
+
+                {bundleBuildResult.swapCalls.map((swapCall, index) => {
+                  const legQuote = plan.legs[index]?.quote
+                  const calldataStatus = legQuote
+                    ? getCalldataStatus(legQuote, plan.isDemo)
+                    : 'missing'
+                  const calldataLabel =
+                    calldataStatus === 'available'
+                      ? `Available (${legQuote?.calldata.length ?? 0} chars)`
+                      : calldataStatus === 'demo'
+                        ? 'Demo placeholder'
+                        : calldataStatus === 'unsupported'
+                          ? 'Unsupported'
+                          : 'Missing'
+
+                  return (
+                    <div
+                      key={index}
+                      className="p-3 rounded-xl bg-black/20 border border-portx-border text-xs space-y-2 font-mono"
+                    >
+                      <p className="font-sans font-medium text-sm text-white">
+                        Leg {index + 1}
+                        {legQuote
+                          ? `: ${legQuote.inputToken.symbol} → ${legQuote.outputToken.symbol}`
+                          : ''}
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">router: </span>
+                        {truncateAddress(swapCall.router, 6)}
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">tokenIn: </span>
+                        {swapCall.tokenIn === ZERO_ADDRESS
+                          ? 'ETH (native)'
+                          : truncateAddress(swapCall.tokenIn, 6)}
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">tokenOut: </span>
+                        {truncateAddress(swapCall.tokenOut, 6)}
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">amountIn: </span>
+                        {swapCall.amountIn.toString()}
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">minAmountOut: </span>
+                        {swapCall.minAmountOut.toString()}
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">calldata status: </span>
+                        <span
+                          className={
+                            calldataStatus === 'available' ? 'text-portx-green' : 'text-portx-warning'
+                          }
+                        >
+                          {calldataLabel}
+                        </span>
+                      </p>
+                      {legQuote?.calldata?.startsWith('0x') && (
+                        <p>
+                          <span className="text-portx-muted">calldata: </span>
+                          {truncateCalldata(legQuote.calldata, 24)}
+                        </p>
+                      )}
+                      <p>
+                        <span className="text-portx-muted">chain target: </span>
+                        {BUNDLE_EXECUTOR_SEPOLIA.networkLabel} ({sepoliaChainId})
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : bundleBuildResult?.status === 'validation_errors' ? (
+              <div className="rounded-xl border border-portx-warning/40 bg-portx-warning/10 p-3 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-portx-warning">
+                  SwapCall build errors
+                </p>
+                <ul className="space-y-1 text-xs text-portx-muted">
+                  {bundleBuildResult.errors.map((error) => (
+                    <li key={`build-${error.code}-${error.field ?? error.message}`}>
+                      <span className="font-mono text-portx-warning">{error.code}</span>
+                      {' — '}
+                      {error.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <p className="text-xs text-portx-muted">
+              Payload preview only — no wallet writes or contract calls.
+            </p>
+          </div>
+        )}
+
         <div className="space-y-3 mb-6">
           {plan.legs.map((leg) => {
             const q = leg.quote
@@ -407,10 +584,10 @@ export function TransactionReviewModal({
             <button
               type="button"
               disabled
-              title="Live wallet execution is not enabled in v1 preview"
+              title="Execution disabled in Alpha"
               className="btn-primary flex-1 opacity-50 cursor-not-allowed"
             >
-              Execute disabled in v1 preview
+              Execution disabled in Alpha
             </button>
           )}
         </div>
