@@ -6,7 +6,9 @@
   "scripts": {
     "build": "hardhat compile",
     "compile": "hardhat compile",
-    "test": "hardhat test"
+    "test": "hardhat test",
+    "deploy:sepolia:mock-router": "hardhat ignition deploy ignition/modules/MockRouter.ts --network sepolia --deployment-id portx-sepolia-mock-router",
+    "deploy:sepolia:mock-erc20": "hardhat ignition deploy ignition/modules/MockERC20.ts --network sepolia --deployment-id portx-sepolia-mock-erc20"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.9",
