@@ -9,6 +9,7 @@ import {
 } from '@/config/constants'
 import { APP_MODE, APP_MODE_BADGE_LABEL, APP_MODE_BANNER_MESSAGE } from '@/config/appMode'
 import { getActiveNetworkConfig } from '@/config/networks'
+import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
 import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
 import { SUPPORTED_CHAINS } from '@/config/chains'
 import { AppModeBadge } from '@/components/AppModeIndicator'
@@ -92,6 +93,51 @@ export function Settings() {
             <dd>{ENABLE_LIVE_EXECUTION ? 'Enabled (env)' : 'Disabled'}</dd>
           </div>
         </dl>
+      </div>
+
+      <div className="card mb-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-bold">BundleExecutor (Sepolia)</h2>
+          <span className="text-xs font-mono text-portx-muted">Read-only</span>
+        </div>
+        <p className="text-xs text-portx-muted">
+          Verified testnet deployment — status display only. No wallet writes or{' '}
+          <code className="text-[11px]">executeBasket()</code> calls from PortX Alpha.
+        </p>
+        <dl className="space-y-2 text-sm">
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Contract</dt>
+            <dd className="font-medium text-right">{BUNDLE_EXECUTOR_SEPOLIA.name}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Address</dt>
+            <dd className="font-mono text-xs text-right break-all">
+              {BUNDLE_EXECUTOR_SEPOLIA.address}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Network</dt>
+            <dd className="text-right">{BUNDLE_EXECUTOR_SEPOLIA.networkLabel}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Verification</dt>
+            <dd className="text-portx-green text-right">
+              {BUNDLE_EXECUTOR_SEPOLIA.verified ? 'Verified' : 'Unverified'}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="text-portx-muted">Live execution</dt>
+            <dd className="text-right">{ENABLE_LIVE_EXECUTION ? 'Enabled' : 'Disabled'}</dd>
+          </div>
+        </dl>
+        <a
+          href={BUNDLE_EXECUTOR_SEPOLIA.explorerUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-secondary w-full text-center text-sm py-2.5"
+        >
+          View on Sepolia Etherscan
+        </a>
       </div>
 
       <div className="card mb-6 space-y-4">
