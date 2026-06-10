@@ -69,6 +69,7 @@ export async function previewBuyBasket(
 
 function normalizeProvider(provider: string): QuoteProvider {
   if (provider === 'unsupported') return 'unsupported'
+  if (provider === 'uniswap-sepolia') return 'uniswap-sepolia'
   if (provider.startsWith('0x')) return '0x'
   if (provider.startsWith('1inch')) return '1inch'
   return 'uniswap'

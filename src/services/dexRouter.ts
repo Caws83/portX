@@ -4,11 +4,17 @@
  */
 import type { Basket } from '@/types/basket'
 import type { Token } from '@/types/token'
+import type { QuoteProvider } from '@/types/route'
 import { getBuyBasketQuotePreview } from './quoteEngine'
 import { executeDemoPlan, buildExecutionPlan } from './transactionBuilder'
 import { mainnet } from 'wagmi/chains'
 
 export type DexProvider = '0x' | '1inch' | 'uniswap' | 'unsupported'
+
+function toDexProvider(provider: QuoteProvider): DexProvider {
+  if (provider === 'uniswap-sepolia') return 'uniswap'
+  return provider
+}
 
 export interface SwapQuote {
   provider: DexProvider
@@ -45,7 +51,7 @@ export async function getBasketSwapQuotes(
     slippageBps: request.slippageBps,
   })
   return preview.legs.map((leg) => ({
-    provider: leg.bestQuote.provider,
+    provider: toDexProvider(leg.bestQuote.provider),
     sellToken: leg.bestQuote.inputToken,
     buyToken: leg.bestQuote.outputToken,
     sellAmount: leg.bestQuote.inputAmount,

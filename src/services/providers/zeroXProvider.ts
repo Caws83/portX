@@ -6,12 +6,14 @@ const PROVIDER_JITTER: Record<Exclude<QuoteProvider, 'unsupported'>, number> = {
   '0x': 1.002,
   '1inch': 0.998,
   uniswap: 0.995,
+  'uniswap-sepolia': 1,
 }
 
 const PROVIDER_GAS: Record<Exclude<QuoteProvider, 'unsupported'>, number> = {
   '0x': 180_000,
   '1inch': 195_000,
   uniswap: 210_000,
+  'uniswap-sepolia': 150_000,
 }
 
 function simulateLatency(): Promise<void> {
@@ -20,7 +22,7 @@ function simulateLatency(): Promise<void> {
 
 function buildMockQuote(
   request: QuoteRequest,
-  provider: Exclude<QuoteProvider, 'unsupported'>
+  provider: Exclude<QuoteProvider, 'unsupported' | 'uniswap-sepolia'>
 ): QuoteResponse {
   const { inputToken, outputToken, inputAmountUsd } = request
   const jitter = PROVIDER_JITTER[provider]

@@ -13,6 +13,7 @@ const PROVIDER_VARIANT: Record<
   '0x': 'live-quote',
   '1inch': 'demo',
   uniswap: 'demo',
+  'uniswap-sepolia': 'fallback-quote',
   unsupported: 'unsupported',
 }
 
@@ -20,6 +21,7 @@ const PROVIDER_LABEL: Record<QuoteProvider, string> = {
   '0x': '0x',
   '1inch': '1inch',
   uniswap: 'Uniswap',
+  'uniswap-sepolia': 'Uniswap Sepolia',
   unsupported: 'Unsupported',
 }
 
