@@ -20,7 +20,12 @@ import {
   useBundleExecutorHealth,
 } from '@/hooks/useBundleExecutorHealth'
 import { useBundleExecutorExecutionReadiness } from '@/hooks/useBundleExecutorExecutionReadiness'
+import {
+  MOCK_ETH_TEST_AMOUNT,
+  useMockExecuteBasket,
+} from '@/hooks/useMockExecuteBasket'
 import { usePortfolio } from '@/hooks/usePortfolio'
+import { formatEther } from 'viem'
 
 const SETTINGS_KEY = 'portx-settings'
 
@@ -60,6 +65,7 @@ export function Settings() {
   const targetNetwork = getActiveNetworkConfig()
   const contractHealth = useBundleExecutorHealth()
   const executionReadiness = useBundleExecutorExecutionReadiness()
+  const mockExecute = useMockExecuteBasket()
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -210,6 +216,90 @@ export function Settings() {
           </div>
         </dl>
       </div>
+
+      {mockExecute.isSectionVisible ? (
+        <div className="card mb-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-bold">Sepolia Mock Execute Test</h2>
+            <span className="text-xs font-mono text-portx-warning">Testnet only</span>
+          </div>
+          <StatusBanner variant="warning" compact>
+            Real Sepolia transaction: sends {formatEther(MOCK_ETH_TEST_AMOUNT)} ETH through
+            BundleExecutor to MockRouter. Not for production. No 0x or aggregator routes.
+          </StatusBanner>
+          <dl className="space-y-2 text-sm">
+            {mockExecute.gates.map((gate) => (
+              <div key={gate.id} className="flex justify-between gap-4">
+                <dt className="text-portx-muted">{gate.label}</dt>
+                <dd
+                  className={`text-right ${
+                    gate.passed ? 'text-portx-green' : 'text-portx-muted'
+                  }`}
+                >
+                  {gate.passed ? 'Yes' : 'No'}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {mockExecute.disabledReason && !mockExecute.canExecute ? (
+            <p className="text-xs text-portx-muted">
+              Disabled: {mockExecute.disabledReason}
+            </p>
+          ) : null}
+          {mockExecute.status === 'pending' ? (
+            <StatusBanner variant="info" compact>
+              Waiting for wallet signature or Sepolia confirmation…
+            </StatusBanner>
+          ) : null}
+          {mockExecute.status === 'success' ? (
+            <StatusBanner variant="success" compact>
+              Mock ETH basket executed successfully.
+            </StatusBanner>
+          ) : null}
+          {mockExecute.status === 'error' && mockExecute.errorMessage ? (
+            <StatusBanner variant="error" compact>
+              {mockExecute.errorMessage}
+            </StatusBanner>
+          ) : null}
+          {mockExecute.txHash ? (
+            <div className="text-sm space-y-1">
+              <p className="text-portx-muted">Transaction hash</p>
+              <p className="font-mono text-xs break-all">{mockExecute.txHash}</p>
+              {mockExecute.explorerUrl ? (
+                <a
+                  href={mockExecute.explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-portx-green text-sm underline"
+                >
+                  View on Sepolia Etherscan
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              onClick={() => void mockExecute.execute()}
+              disabled={!mockExecute.canExecute}
+              className="btn-primary w-full sm:flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {mockExecute.status === 'pending'
+                ? 'Running Mock ETH Basket Test…'
+                : 'Run Mock ETH Basket Test'}
+            </button>
+            {mockExecute.status === 'success' || mockExecute.status === 'error' ? (
+              <button
+                type="button"
+                onClick={mockExecute.reset}
+                className="btn-secondary w-full sm:w-auto"
+              >
+                Reset
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="card mb-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
