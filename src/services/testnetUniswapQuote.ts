@@ -190,7 +190,7 @@ export async function buildTestnetEthToUsdcBasketPreview(
     legs: [
       {
         allocation: {
-          token: quote.inputToken,
+          token: quote.outputToken,
           weightPercent: 100,
           inputAmountUsd: 0,
           inputAmount: quote.inputAmount,

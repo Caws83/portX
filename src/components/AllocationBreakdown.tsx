@@ -1,6 +1,18 @@
+import { formatUnits } from 'viem'
 import type { LegQuote } from '@/types/quote'
 import { formatUsd, formatTokenAmount } from '@/utils/format'
 import { RouteProviderBadge } from './RouteProviderBadge'
+
+function displayQuoteAmount(amount: string, decimals: number): string {
+  if (amount.includes('.')) {
+    return formatTokenAmount(Number.parseFloat(amount))
+  }
+  try {
+    return formatTokenAmount(Number.parseFloat(formatUnits(BigInt(amount), decimals)))
+  } catch {
+    return formatTokenAmount(Number.parseFloat(amount))
+  }
+}
 
 interface AllocationBreakdownProps {
   legs: LegQuote[]
@@ -34,15 +46,17 @@ export function AllocationBreakdown({ legs, direction }: AllocationBreakdownProp
                   </div>
                   <div className="text-xs text-portx-muted">
                     {direction === 'buy'
-                      ? `${formatUsd(leg.allocation.inputAmountUsd)} in`
-                      : `${formatTokenAmount(parseFloat(q.inputAmount) / Math.pow(10, q.inputToken.decimals))} ${q.inputToken.symbol}`}
+                      ? leg.allocation.inputAmountUsd > 0
+                        ? `${formatUsd(leg.allocation.inputAmountUsd)} in`
+                        : `${displayQuoteAmount(leg.allocation.inputAmount, q.inputToken.decimals)} ${q.inputToken.symbol} in`
+                      : `${displayQuoteAmount(q.inputAmount, q.inputToken.decimals)} ${q.inputToken.symbol}`}
                   </div>
                 </div>
               </div>
               <div className="flex items-center gap-3 sm:text-right">
                 <div>
                   <div className="font-mono text-sm text-portx-green">
-                    {formatTokenAmount(parseFloat(q.outputAmount))} {q.outputToken.symbol}
+                    {displayQuoteAmount(q.outputAmount, q.outputToken.decimals)} {q.outputToken.symbol}
                   </div>
                   <div className="text-xs text-portx-muted">≈ {formatUsd(q.outputAmountUsd)}</div>
                   {q.routeSummary.length > 0 && (

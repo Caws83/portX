@@ -5,6 +5,8 @@ import type { HeldToken } from '@/types/portfolio'
 import type { BasketQuotePreview } from '@/types/quote'
 import type { ExecutionPlan } from '@/types/execution'
 import { DEFAULT_SLIPPAGE_BPS, DEFAULT_STABLECOIN } from '@/config/constants'
+import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
+import { TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
 import {
   previewBuyBasket,
   mapBuyBasketResponseToPreview,
@@ -15,9 +17,19 @@ import {
   getSellBasketQuotePreview,
   getSellAllQuotePreview,
 } from '@/services/quoteEngine'
+import { buildTestnetEthToUsdcBasketPreview } from '@/services/testnetUniswapQuote'
 import { buildExecutionPlan } from '@/services/transactionBuilder'
+import { canPreviewQuoteForBasket } from '@/utils/chainRouting'
 
-export type QuoteSource = 'api' | 'fallback' | null
+export type QuoteSource = 'api' | 'fallback' | 'testnet' | null
+
+function shouldUseTestnetUniswapQuote(chainId: number): boolean {
+  return (
+    ENABLE_TESTNET_MODE &&
+    ENABLE_LIVE_EXECUTION &&
+    chainId === TESTNET_SEPOLIA_CHAIN_ID
+  )
+}
 
 function loadSlippage(): number {
   try {
@@ -59,6 +71,27 @@ export function useQuotePreview() {
       const params = getParams()
 
       try {
+        if (ENABLE_TESTNET_MODE && ENABLE_LIVE_EXECUTION && params.chainId !== TESTNET_SEPOLIA_CHAIN_ID) {
+          setError('Switch wallet to Sepolia (chain 11155111) for testnet basket preview.')
+          return null
+        }
+
+        if (shouldUseTestnetUniswapQuote(params.chainId)) {
+          if (!canPreviewQuoteForBasket(basket)) {
+            setError('Testnet preview is only available for active Ethereum baskets.')
+            return null
+          }
+
+          const result = await buildTestnetEthToUsdcBasketPreview({
+            basketId: basket.id,
+            basketName: basket.name,
+            slippageBps: params.slippageBps,
+          })
+          setPreview(result)
+          setQuoteSource('testnet')
+          return result
+        }
+
         const response = await previewBuyBasket({
           walletAddress: params.walletAddress,
           chainId: params.chainId,

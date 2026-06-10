@@ -1,8 +1,11 @@
+import { formatEther } from 'viem'
 import type { BasketQuotePreview } from '@/types/quote'
 import { BUTTON_LABELS, WARNING_MESSAGES } from '@/config/uiCopy'
+import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI, TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
 import { formatUsd } from '@/utils/format'
 import { formatSlippage, isHighSlippage } from '@/utils/slippage'
 import { buildLiveExecutionSummaryFromPreview } from '@/services/transactionBuilder'
+import { isTestnetSepoliaUniswapPreview } from '@/utils/testnetPreview'
 import { AllocationBreakdown } from './AllocationBreakdown'
 import { ExecutionWarning } from './ExecutionWarning'
 import { RouteProviderBadge } from './RouteProviderBadge'
@@ -10,7 +13,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 
 interface QuotePreviewCardProps {
   preview: BasketQuotePreview
-  quoteSource?: 'api' | 'fallback' | null
+  quoteSource?: 'api' | 'fallback' | 'testnet' | null
   onReview?: () => void
   reviewLabel?: string
   loading?: boolean
@@ -36,14 +39,17 @@ export function QuotePreviewCard({
   const unsupportedWarnings = preview.legs.flatMap((l) =>
     l.bestQuote.provider === 'unsupported' ? l.bestQuote.warnings : []
   )
-  const showLivePrep = !preview.isDemo && execution.hasZeroExRoute && !hasUnsupportedLegs
+  const isTestnetPreview = isTestnetSepoliaUniswapPreview(preview)
+  const showLivePrep = !preview.isDemo && execution.hasZeroExRoute && !hasUnsupportedLegs && !isTestnetPreview
   const statusTone =
     execution.status === 'ready_for_wallet'
       ? 'border-portx-green/40 bg-portx-green/10 text-portx-green'
       : 'border-portx-warning/40 bg-portx-warning/10 text-portx-warning'
 
   const quoteModeBadge =
-    quoteSource === 'fallback' ? (
+    quoteSource === 'testnet' ? (
+      <StatusBadge variant="fallback-quote" label="Sepolia Testnet" size="md" />
+    ) : quoteSource === 'fallback' ? (
       <StatusBadge variant="fallback-quote" size="md" />
     ) : !preview.isDemo ? (
       <StatusBadge variant="live-quote" size="md" />
@@ -113,11 +119,26 @@ export function QuotePreviewCard({
         </div>
       )}
 
+      {isTestnetPreview && (
+        <div className="p-3 rounded-xl bg-portx-surface border border-portx-border text-sm space-y-1">
+          <p>
+            <span className="text-portx-muted">Chain: </span>
+            <span className="font-mono font-semibold">Sepolia ({TESTNET_SEPOLIA_CHAIN_ID})</span>
+          </p>
+          <p>
+            <span className="text-portx-muted">Route: </span>
+            <span className="font-semibold">Uniswap V3 Sepolia ETH → USDC</span>
+          </p>
+        </div>
+      )}
+
       {preview.type === 'buy' && (
         <div className="p-3 rounded-xl bg-portx-surface border border-portx-border text-sm">
           <span className="text-portx-muted">Input: </span>
           <span className="font-mono font-semibold text-portx-green">
-            {formatUsd(preview.totalInputUsd)} USDC
+            {isTestnetPreview
+              ? `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} ETH`
+              : `${formatUsd(preview.totalInputUsd)} USDC`}
           </span>
         </div>
       )}

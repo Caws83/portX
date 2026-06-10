@@ -205,6 +205,12 @@ export function Baskets() {
         </StatusBanner>
       )}
 
+      {quoteSource === 'testnet' && preview && !loading && (
+        <StatusBanner variant="warning" className="mb-6" compact>
+          Sepolia testnet quote — frontend Uniswap V3 only (no backend /quotes).
+        </StatusBanner>
+      )}
+
       {error && (
         <StatusBanner variant="error" className="mb-6">
           {error || ERROR_MESSAGES.quoteFailed}
