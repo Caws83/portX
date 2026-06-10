@@ -6,19 +6,13 @@ import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
 import {
   getBundleExecutorAddress,
   getBundleExecutorChainId,
+  type BundleExecutorSwapCall,
 } from '@/services/bundleExecutorContract'
 import { isValidCalldata, isValidRouterAddress } from '@/services/transactionBuilder'
 import { isZeroAddress, ZERO_ADDRESS } from '@/utils/addresses'
 
-/** Matches BundleExecutor.SwapCall — encode-only; no on-chain writes in Phase B */
-export interface BundleSwapCall {
-  router: `0x${string}`
-  data: `0x${string}`
-  tokenIn: `0x${string}`
-  amountIn: bigint
-  minAmountOut: bigint
-  tokenOut: `0x${string}`
-}
+/** @deprecated alias — prefer BundleExecutorSwapCall from bundleExecutorContract */
+export type BundleSwapCall = BundleExecutorSwapCall
 
 export interface BundleExecutionContext {
   walletConnected: boolean
