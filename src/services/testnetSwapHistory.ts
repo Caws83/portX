@@ -1,8 +1,12 @@
-import { formatEther, formatUnits } from 'viem'
+import { formatEther } from 'viem'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI } from '@/config/testnetExecution'
 import type { ExecutionPlan } from '@/types/execution'
 import type { QuoteProvider } from '@/types/route'
+import {
+  formatTestnetPlanTotalInput,
+  formatTestnetPlanTotalOutput,
+} from '@/utils/testnetPreview'
 
 export type TestnetSwapHistoryStatus = 'success' | 'failed'
 
@@ -23,18 +27,6 @@ const STORAGE_KEY = 'portx-testnet-swap-history'
 const MAX_RECORDS = 10
 
 export const TESTNET_SWAP_HISTORY_UPDATED_EVENT = 'portx-testnet-swap-history-updated'
-
-function formatStoredAmount(amount: string, decimals: number, symbol: string): string {
-  if (amount.includes('.')) {
-    return `${amount} ${symbol}`
-  }
-  try {
-    const value = Number.parseFloat(formatUnits(BigInt(amount), decimals))
-    return `${value.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${symbol}`
-  } catch {
-    return `${amount} ${symbol}`
-  }
-}
 
 export function shouldShowRecentTestSwaps(): boolean {
   return ENABLE_TESTNET_MODE || loadTestnetSwapHistory().length > 0
@@ -63,20 +55,19 @@ export function buildTestnetSwapRecordFromPlan(
     status: TestnetSwapHistoryStatus
   },
 ): TestnetSwapHistoryRecord {
-  const leg = plan.legs[0]?.quote
   const basketLabel = plan.basketName ?? plan.basketId ?? 'Sepolia test basket'
+  const legCount = plan.legs.length
   const routeLabel =
-    leg?.routeSummary?.length > 0
-      ? leg.routeSummary.join(' → ')
-      : 'Uniswap V3 Sepolia ETH → USDC'
+    legCount > 1
+      ? `${legCount}-leg Uniswap V3 Sepolia ETH → USDC basket`
+      : plan.legs[0]?.quote.routeSummary?.length > 0
+        ? plan.legs[0].quote.routeSummary.join(' → ')
+        : 'Uniswap V3 Sepolia ETH → USDC'
 
-  const inputAmount = leg
-    ? formatStoredAmount(leg.inputAmount, leg.inputToken.decimals, leg.inputToken.symbol)
-    : `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} ETH`
+  const inputAmount =
+    legCount > 0 ? formatTestnetPlanTotalInput(plan) : `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} ETH`
 
-  const outputAmount = leg
-    ? formatStoredAmount(leg.outputAmount, leg.outputToken.decimals, leg.outputToken.symbol)
-    : '—'
+  const outputAmount = legCount > 0 ? formatTestnetPlanTotalOutput(plan) : '—'
 
   return {
     txHash: params.txHash,
@@ -86,7 +77,7 @@ export function buildTestnetSwapRecordFromPlan(
     routeLabel,
     inputAmount,
     outputAmount,
-    provider: leg?.provider ?? 'uniswap-sepolia',
+    provider: plan.legs[0]?.quote.provider ?? 'uniswap-sepolia',
     timestamp: Date.now(),
     status: params.status,
   }

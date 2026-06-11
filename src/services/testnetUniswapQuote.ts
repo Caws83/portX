@@ -13,6 +13,8 @@ import {
   TESTNET_WETH_ADDRESS,
 } from '@/config/testnetExecution'
 import type { BasketQuotePreview, QuoteResponse } from '@/types/quote'
+import type { TokenAllocation } from '@/types/token'
+import { TESTNET_MAX_BASKET_LEGS } from '@/config/testnetExecution'
 import { ZERO_ADDRESS } from '@/utils/addresses'
 
 const sepoliaPublicClient = createPublicClient({
@@ -51,6 +53,8 @@ export interface TestnetUniswapQuoteParams {
   basketName?: string
   amountInWei?: bigint
   slippageBps?: number
+  /** Basket allocation weights — up to 4 legs, each quoted ETH → USDC */
+  allocations?: TokenAllocation[]
 }
 
 export interface TestnetUniswapQuoteDetails {
@@ -145,6 +149,48 @@ export async function buildTestnetUniswapQuoteDetails(
   }
 }
 
+/** Select up to 4 allocation legs and renormalize weights to 100% */
+export function selectTestnetBasketAllocations(
+  allocations: TokenAllocation[],
+): TokenAllocation[] {
+  if (allocations.length === 0) return []
+  if (allocations.length <= TESTNET_MAX_BASKET_LEGS) return allocations
+
+  const selected = allocations.slice(0, TESTNET_MAX_BASKET_LEGS)
+  const weightSum = selected.reduce((sum, leg) => sum + leg.weightPercent, 0)
+  if (weightSum <= 0) return selected
+
+  return selected.map((leg) => ({
+    ...leg,
+    weightPercent: (leg.weightPercent / weightSum) * 100,
+  }))
+}
+
+/** Split total ETH wei across allocation weights; last leg receives remainder */
+export function splitTestnetEthAcrossLegs(
+  totalWei: bigint,
+  weights: number[],
+): bigint[] {
+  if (weights.length === 0) return []
+  const weightSum = weights.reduce((sum, weight) => sum + weight, 0)
+  if (weightSum <= 0) return weights.map(() => 0n)
+
+  const amounts: bigint[] = []
+  let allocated = 0n
+
+  for (let index = 0; index < weights.length; index++) {
+    if (index === weights.length - 1) {
+      amounts.push(totalWei - allocated)
+      continue
+    }
+    const share = (totalWei * BigInt(Math.round(weights[index] * 100))) / BigInt(Math.round(weightSum * 100))
+    amounts.push(share)
+    allocated += share
+  }
+
+  return amounts
+}
+
 function buildQuoteResponse(
   details: TestnetUniswapQuoteDetails,
 ): QuoteResponse {
@@ -171,37 +217,100 @@ function buildQuoteResponse(
   }
 }
 
-/** Build BasketQuotePreview for testnet single-leg ETH → USDC — read-only RPC only */
+async function buildTestnetLegQuote(
+  amountInWei: bigint,
+  slippageBps: number,
+): Promise<{ details: TestnetUniswapQuoteDetails; quote: QuoteResponse }> {
+  const details = await buildTestnetUniswapQuoteDetails({ amountInWei, slippageBps })
+  return { details, quote: buildQuoteResponse(details) }
+}
+
+/** Build BasketQuotePreview for testnet ETH → USDC — single or multi-leg by allocation */
 export async function buildTestnetEthToUsdcBasketPreview(
   params: TestnetUniswapQuoteParams = {},
 ): Promise<BasketQuotePreview> {
-  const details = await buildTestnetUniswapQuoteDetails(params)
-  const quote = buildQuoteResponse(details)
+  const totalAmountWei = params.amountInWei ?? TESTNET_DEFAULT_SWAP_AMOUNT_WEI
+  const slippageBps = params.slippageBps ?? TESTNET_DEFAULT_SLIPPAGE_BPS
+  assertTestnetSwapAmount(totalAmountWei)
+
+  const selectedAllocations = selectTestnetBasketAllocations(params.allocations ?? [])
+  const useMultiLeg = selectedAllocations.length > 1
+
+  if (!useMultiLeg) {
+    const { details, quote } = await buildTestnetLegQuote(totalAmountWei, slippageBps)
+    return {
+      type: 'buy',
+      basketId: params.basketId,
+      basketName: params.basketName,
+      totalInputUsd: 0,
+      totalOutputUsd: quote.outputAmountUsd,
+      totalGasUsd: quote.estimatedGasUsd,
+      slippageBps: details.slippageBps,
+      chainId: TESTNET_SEPOLIA_CHAIN_ID,
+      legs: [
+        {
+          allocation: {
+            token: quote.outputToken,
+            weightPercent: 100,
+            inputAmountUsd: 0,
+            inputAmount: quote.inputAmount,
+          },
+          bestQuote: quote,
+          allQuotes: [quote],
+        },
+      ],
+      warnings: [
+        'Frontend-only Sepolia Uniswap quote — does not use backend or 0x routes.',
+        ...quote.warnings,
+      ],
+      isDemo: false,
+      createdAt: Date.now(),
+    }
+  }
+
+  const legAmounts = splitTestnetEthAcrossLegs(
+    totalAmountWei,
+    selectedAllocations.map((allocation) => allocation.weightPercent),
+  )
+
+  const legResults = await Promise.all(
+    legAmounts.map((amountInWei) => buildTestnetLegQuote(amountInWei, slippageBps)),
+  )
+
+  const legs = legResults.map(({ quote }, index) => ({
+    allocation: {
+      token: quote.outputToken,
+      weightPercent: selectedAllocations[index].weightPercent,
+      inputAmountUsd: 0,
+      inputAmount: quote.inputAmount,
+    },
+    bestQuote: quote,
+    allQuotes: [quote],
+  }))
+
+  const totalOutputUsd = legs.reduce((sum, leg) => sum + leg.bestQuote.outputAmountUsd, 0)
+  const totalGasUsd = legs.reduce((sum, leg) => sum + leg.bestQuote.estimatedGasUsd, 0)
+  const truncatedNote =
+    (params.allocations?.length ?? 0) > TESTNET_MAX_BASKET_LEGS
+      ? `Using first ${TESTNET_MAX_BASKET_LEGS} basket allocations for testnet execution.`
+      : null
 
   return {
     type: 'buy',
     basketId: params.basketId,
     basketName: params.basketName,
     totalInputUsd: 0,
-    totalOutputUsd: quote.outputAmountUsd,
-    totalGasUsd: quote.estimatedGasUsd,
-    slippageBps: details.slippageBps,
+    totalOutputUsd,
+    totalGasUsd,
+    slippageBps,
     chainId: TESTNET_SEPOLIA_CHAIN_ID,
-    legs: [
-      {
-        allocation: {
-          token: quote.outputToken,
-          weightPercent: 100,
-          inputAmountUsd: 0,
-          inputAmount: quote.inputAmount,
-        },
-        bestQuote: quote,
-        allQuotes: [quote],
-      },
-    ],
+    legs,
     warnings: [
       'Frontend-only Sepolia Uniswap quote — does not use backend or 0x routes.',
-      ...quote.warnings,
+      `Multi-leg testnet basket: ${legs.length} SwapCall(s) in one executeBasket transaction.`,
+      `Total input: ${formatEther(totalAmountWei)} ETH split across allocation weights.`,
+      ...(truncatedNote ? [truncatedNote] : []),
+      ...legs.flatMap((leg) => leg.bestQuote.warnings),
     ],
     isDemo: false,
     createdAt: Date.now(),

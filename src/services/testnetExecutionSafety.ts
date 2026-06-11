@@ -2,6 +2,7 @@ import type { ExecutionPlan } from '@/types/execution'
 import type { BasketQuotePreview } from '@/types/quote'
 import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
 import {
+  TESTNET_MAX_BASKET_LEGS,
   TESTNET_MAX_SWAP_AMOUNT_WEI,
   TESTNET_SEPOLIA_CHAIN_ID,
   TESTNET_SWAP_ROUTER02_ADDRESS,
@@ -44,28 +45,26 @@ function gate(
   return { id, label, passed, detail }
 }
 
+function sumLegAmountsWei(plan: ExecutionPlan): bigint | null {
+  try {
+    return plan.legs.reduce((sum, leg) => sum + BigInt(leg.quote.inputAmount), 0n)
+  } catch {
+    return null
+  }
+}
+
 function validateTestnetUniswapQuoteShape(
   plan: ExecutionPlan,
 ): BundleExecutionValidationError[] {
   const errors: BundleExecutionValidationError[] = []
 
-  if (plan.legs.length !== 1) {
+  if (plan.legs.length < 1 || plan.legs.length > TESTNET_MAX_BASKET_LEGS) {
     errors.push({
-      code: 'MULTI_LEG_BLOCKED',
-      message: 'Testnet Uniswap execution supports single-leg quotes only',
+      code: 'LEG_COUNT_INVALID',
+      message: `Testnet Uniswap execution supports 1–${TESTNET_MAX_BASKET_LEGS} legs`,
       field: 'plan.legs',
     })
     return errors
-  }
-
-  const quote = plan.legs[0].quote
-
-  if (quote.provider !== 'uniswap-sepolia') {
-    errors.push({
-      code: 'PROVIDER_MISMATCH',
-      message: 'Quote provider must be uniswap-sepolia',
-      field: 'plan.legs[0].quote.provider',
-    })
   }
 
   if (plan.chainId !== TESTNET_SEPOLIA_CHAIN_ID) {
@@ -76,48 +75,77 @@ function validateTestnetUniswapQuoteShape(
     })
   }
 
-  const tokenIn = quote.inputToken.symbol.toUpperCase() === 'ETH' || isZeroAddress(quote.inputToken.address)
-    ? ZERO_ADDRESS
-    : quote.inputToken.address
-
-  if (tokenIn !== ZERO_ADDRESS) {
-    errors.push({
-      code: 'TOKEN_IN_NOT_ETH',
-      message: 'tokenIn must be native ETH (address zero)',
-      field: 'plan.legs[0].quote.inputToken',
-    })
-  }
-
-  if (quote.routerAddress.toLowerCase() !== TESTNET_SWAP_ROUTER02_ADDRESS.toLowerCase()) {
-    errors.push({
-      code: 'ROUTER_NOT_ALLOWED',
-      message: `Router must be Sepolia SwapRouter02 (${TESTNET_SWAP_ROUTER02_ADDRESS})`,
-      field: 'plan.legs[0].quote.routerAddress',
-    })
-  }
-
-  try {
-    const amountIn = BigInt(quote.inputAmount)
-    if (amountIn <= 0n) {
-      errors.push({
-        code: 'INVALID_AMOUNT',
-        message: 'amountIn must be greater than zero',
-        field: 'plan.legs[0].quote.inputAmount',
-      })
-    } else if (amountIn > TESTNET_MAX_SWAP_AMOUNT_WEI) {
-      errors.push({
-        code: 'AMOUNT_EXCEEDS_CAP',
-        message: `amountIn exceeds testnet cap of ${TESTNET_MAX_SWAP_AMOUNT_WEI.toString()} wei`,
-        field: 'plan.legs[0].quote.inputAmount',
-      })
-    }
-  } catch {
+  const totalAmountIn = sumLegAmountsWei(plan)
+  if (totalAmountIn === null) {
     errors.push({
       code: 'INVALID_AMOUNT',
-      message: 'amountIn must be a valid integer string',
-      field: 'plan.legs[0].quote.inputAmount',
+      message: 'Leg amountIn values must be valid integer strings',
+      field: 'plan.legs',
+    })
+  } else if (totalAmountIn <= 0n) {
+    errors.push({
+      code: 'INVALID_AMOUNT',
+      message: 'Total amountIn must be greater than zero',
+      field: 'plan.legs',
+    })
+  } else if (totalAmountIn > TESTNET_MAX_SWAP_AMOUNT_WEI) {
+    errors.push({
+      code: 'AMOUNT_EXCEEDS_CAP',
+      message: `Total amountIn exceeds testnet cap of ${TESTNET_MAX_SWAP_AMOUNT_WEI.toString()} wei`,
+      field: 'plan.legs',
     })
   }
+
+  plan.legs.forEach((leg, index) => {
+    const quote = leg.quote
+    const prefix = `plan.legs[${index}]`
+
+    if (quote.provider !== 'uniswap-sepolia') {
+      errors.push({
+        code: 'PROVIDER_MISMATCH',
+        message: 'Quote provider must be uniswap-sepolia',
+        field: `${prefix}.quote.provider`,
+      })
+    }
+
+    const tokenIn =
+      quote.inputToken.symbol.toUpperCase() === 'ETH' || isZeroAddress(quote.inputToken.address)
+        ? ZERO_ADDRESS
+        : quote.inputToken.address
+
+    if (tokenIn !== ZERO_ADDRESS) {
+      errors.push({
+        code: 'TOKEN_IN_NOT_ETH',
+        message: 'tokenIn must be native ETH (address zero)',
+        field: `${prefix}.quote.inputToken`,
+      })
+    }
+
+    if (quote.routerAddress.toLowerCase() !== TESTNET_SWAP_ROUTER02_ADDRESS.toLowerCase()) {
+      errors.push({
+        code: 'ROUTER_NOT_ALLOWED',
+        message: `Router must be Sepolia SwapRouter02 (${TESTNET_SWAP_ROUTER02_ADDRESS})`,
+        field: `${prefix}.quote.routerAddress`,
+      })
+    }
+
+    try {
+      const amountIn = BigInt(quote.inputAmount)
+      if (amountIn <= 0n) {
+        errors.push({
+          code: 'INVALID_AMOUNT',
+          message: 'Leg amountIn must be greater than zero',
+          field: `${prefix}.quote.inputAmount`,
+        })
+      }
+    } catch {
+      errors.push({
+        code: 'INVALID_AMOUNT',
+        message: 'Leg amountIn must be a valid integer string',
+        field: `${prefix}.quote.inputAmount`,
+      })
+    }
+  })
 
   return errors
 }
@@ -145,6 +173,8 @@ export function assessTestnetUniswapBasketExecution(
   const liveExecution = context.enableLiveExecution ?? ENABLE_LIVE_EXECUTION
   const walletOnSepolia = context.chainId === TESTNET_SEPOLIA_CHAIN_ID
   const shapeErrors = validateTestnetUniswapQuoteShape(plan)
+  const totalAmountIn = sumLegAmountsWei(plan)
+  const allProvidersValid = plan.legs.every((leg) => leg.quote.provider === 'uniswap-sepolia')
 
   const prepareResult = prepareBundleExecution({
     walletConnected: context.walletConnected,
@@ -190,33 +220,35 @@ export function assessTestnetUniswapBasketExecution(
     ),
     gate(
       'provider',
-      'Provider is uniswap-sepolia',
-      plan.legs.length === 1 && plan.legs[0].quote.provider === 'uniswap-sepolia',
-      plan.legs[0]?.quote.provider ?? 'missing',
+      'All legs use uniswap-sepolia',
+      allProvidersValid,
+      allProvidersValid ? 'uniswap-sepolia' : 'mixed or missing provider',
     ),
     gate(
-      'single-leg',
-      'Single swap leg only',
-      plan.legs.length === 1,
+      'leg-count',
+      `Leg count within 1–${TESTNET_MAX_BASKET_LEGS}`,
+      plan.legs.length >= 1 && plan.legs.length <= TESTNET_MAX_BASKET_LEGS,
       `${plan.legs.length} leg(s)`,
     ),
     gate(
       'native-eth',
-      'tokenIn is native ETH',
+      'All legs use native ETH input',
       shapeErrors.every((error) => error.code !== 'TOKEN_IN_NOT_ETH'),
       'ETH / address(0)',
     ),
     gate(
       'swap-router',
-      'Router is SwapRouter02',
+      'All legs use SwapRouter02',
       shapeErrors.every((error) => error.code !== 'ROUTER_NOT_ALLOWED'),
       TESTNET_SWAP_ROUTER02_ADDRESS,
     ),
     gate(
       'amount-cap',
-      'amountIn within testnet cap',
-      shapeErrors.every((error) => error.code !== 'AMOUNT_EXCEEDS_CAP' && error.code !== 'INVALID_AMOUNT'),
-      plan.legs[0]?.quote.inputAmount ?? 'missing',
+      'Total amountIn within testnet cap',
+      shapeErrors.every(
+        (error) => error.code !== 'AMOUNT_EXCEEDS_CAP' && error.code !== 'INVALID_AMOUNT',
+      ),
+      totalAmountIn !== null ? `${totalAmountIn.toString()} wei total` : 'missing',
     ),
     gate(
       'not-demo',

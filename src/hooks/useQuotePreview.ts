@@ -86,6 +86,7 @@ export function useQuotePreview() {
             basketId: basket.id,
             basketName: basket.name,
             slippageBps: params.slippageBps,
+            allocations: basket.allocations,
           })
           setPreview(result)
           setQuoteSource('testnet')

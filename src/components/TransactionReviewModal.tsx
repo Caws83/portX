@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { formatEther } from 'viem'
 import { useAccount, useChainId } from 'wagmi'
 import type { ExecutionPlan } from '@/types/execution'
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
@@ -28,6 +29,11 @@ import {
   useTestnetUniswapBasketExecute,
 } from '@/hooks/useTestnetUniswapBasketExecute'
 import { saveTestnetSwapFromPlan } from '@/services/testnetSwapHistory'
+import {
+  formatTestnetLegOutput,
+  formatTestnetPlanTotalInput,
+  formatTestnetPlanTotalOutput,
+} from '@/utils/testnetPreview'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
 
@@ -564,6 +570,60 @@ export function TransactionReviewModal({
               ]}
             />
 
+            <div className="rounded-xl border border-portx-border bg-black/20 p-3 space-y-3 text-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+                Multi-leg basket breakdown
+              </p>
+              <dl className="grid grid-cols-2 gap-3">
+                <div>
+                  <dt className="text-xs text-portx-muted">Leg count</dt>
+                  <dd className="font-mono font-semibold">{plan.legs.length}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-portx-muted">Total amountIn</dt>
+                  <dd className="font-mono font-semibold text-portx-green">
+                    {formatTestnetPlanTotalInput(plan)}
+                  </dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-xs text-portx-muted mb-1">Est. total output</dt>
+                  <dd className="font-mono font-semibold">{formatTestnetPlanTotalOutput(plan)}</dd>
+                </div>
+              </dl>
+              <ul className="space-y-2">
+                {plan.legs.map((leg, index) => {
+                  const quotePreviewLeg = bundleQuotePreview?.legs[index]
+                  const weight = quotePreviewLeg?.allocation.weightPercent ?? 0
+                  return (
+                    <li
+                      key={leg.index}
+                      className="rounded-lg border border-portx-border bg-portx-surface px-3 py-2 text-xs space-y-1"
+                    >
+                      <p className="font-medium">
+                        Leg {index + 1}: {weight}% allocation
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">amountIn: </span>
+                        <span className="font-mono">
+                          {formatEther(BigInt(leg.quote.inputAmount))} ETH
+                        </span>
+                      </p>
+                      <p>
+                        <span className="text-portx-muted">est. out: </span>
+                        <span className="font-mono text-portx-green">
+                          {formatTestnetLegOutput(
+                            leg.quote.outputAmount,
+                            leg.quote.outputToken.decimals,
+                            leg.quote.outputToken.symbol,
+                          )}
+                        </span>
+                      </p>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
                 Safety gates
@@ -605,7 +665,32 @@ export function TransactionReviewModal({
                     Your transaction was confirmed on Sepolia. Review the hash below or open
                     Etherscan for full details.
                   </p>
+                  <p className="text-sm mt-2">
+                    <span className="text-portx-muted">Total output: </span>
+                    <span className="font-mono font-semibold text-portx-green">
+                      {formatTestnetPlanTotalOutput(plan)}
+                    </span>
+                  </p>
                 </div>
+                {plan.legs.length > 1 ? (
+                  <ul className="space-y-2 text-xs">
+                    {plan.legs.map((leg, index) => (
+                      <li
+                        key={leg.index}
+                        className="rounded-lg border border-portx-green/20 bg-black/20 px-3 py-2"
+                      >
+                        Leg {index + 1} est. out:{' '}
+                        <span className="font-mono text-portx-green">
+                          {formatTestnetLegOutput(
+                            leg.quote.outputAmount,
+                            leg.quote.outputToken.decimals,
+                            leg.quote.outputToken.symbol,
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {testnetExecute.txHash ? (
                   <div className="rounded-lg border border-portx-green/30 bg-black/20 p-3 text-sm space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">

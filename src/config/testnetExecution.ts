@@ -25,3 +25,6 @@ export const TESTNET_DEFAULT_SWAP_AMOUNT_WEI = parseEther('0.0001')
 export const TESTNET_MAX_SWAP_AMOUNT_WEI = parseEther('0.01')
 
 export const TESTNET_DEFAULT_SLIPPAGE_BPS = 300 as const
+
+/** Max SwapCall legs per testnet executeBasket transaction */
+export const TESTNET_MAX_BASKET_LEGS = 4 as const
