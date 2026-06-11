@@ -25,6 +25,7 @@ import {
   useMockExecuteBasket,
 } from '@/hooks/useMockExecuteBasket'
 import { usePortfolio } from '@/hooks/usePortfolio'
+import { RecentTestSwaps } from '@/components/RecentTestSwaps'
 import { formatEther } from 'viem'
 
 const SETTINGS_KEY = 'portx-settings'
@@ -300,6 +301,8 @@ export function Settings() {
           </div>
         </div>
       ) : null}
+
+      <RecentTestSwaps className="mb-6" />
 
       <div className="card mb-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">

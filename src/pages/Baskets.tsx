@@ -20,6 +20,7 @@ import {
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
 import type { Basket } from '@/types/basket'
+import { RecentTestSwaps } from '@/components/RecentTestSwaps'
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 
 export function Baskets() {
@@ -306,6 +307,8 @@ export function Baskets() {
           )}
         </div>
       </div>
+
+      <RecentTestSwaps className="mt-8" compact />
 
       <TransactionReviewModal
         plan={plan}

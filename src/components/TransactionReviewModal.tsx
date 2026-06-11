@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import type { ExecutionPlan } from '@/types/execution'
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
@@ -27,6 +27,7 @@ import {
   getTestnetUniswapExecuteAmountLabel,
   useTestnetUniswapBasketExecute,
 } from '@/hooks/useTestnetUniswapBasketExecute'
+import { saveTestnetSwapFromPlan } from '@/services/testnetSwapHistory'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
 
@@ -80,8 +81,47 @@ export function TransactionReviewModal({
   const [simulation, setSimulation] = useState<SimulationResult | null>(null)
   const [simulating, setSimulating] = useState(false)
   const testnetExecute = useTestnetUniswapBasketExecute(plan, open)
+  const savedHistoryTxRef = useRef<string | null>(null)
 
   const walletConnected = isConnected && Boolean(address)
+
+  useEffect(() => {
+    if (!open) {
+      savedHistoryTxRef.current = null
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (
+      !open ||
+      !plan ||
+      !testnetExecute.isTestnetUniswapPlan ||
+      testnetExecute.status !== 'success' ||
+      !testnetExecute.txHash ||
+      !testnetExecute.explorerUrl
+    ) {
+      return
+    }
+
+    if (savedHistoryTxRef.current === testnetExecute.txHash) {
+      return
+    }
+
+    savedHistoryTxRef.current = testnetExecute.txHash
+    saveTestnetSwapFromPlan(plan, {
+      txHash: testnetExecute.txHash,
+      explorerUrl: testnetExecute.explorerUrl,
+      chainId: plan.chainId,
+      status: 'success',
+    })
+  }, [
+    open,
+    plan,
+    testnetExecute.isTestnetUniswapPlan,
+    testnetExecute.status,
+    testnetExecute.txHash,
+    testnetExecute.explorerUrl,
+  ])
 
   const prepared = useMemo(
     () => (plan && open ? prepareExecution(plan) : null),
