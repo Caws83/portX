@@ -28,6 +28,7 @@ import {
   getTestnetUniswapExecuteAmountLabel,
   useTestnetUniswapBasketExecute,
 } from '@/hooks/useTestnetUniswapBasketExecute'
+import { saveTestnetPortfolioFromPlan } from '@/services/testnetPortfolio'
 import { saveTestnetSwapFromPlan } from '@/services/testnetSwapHistory'
 import {
   formatTestnetLegOutput,
@@ -114,12 +115,14 @@ export function TransactionReviewModal({
     }
 
     savedHistoryTxRef.current = testnetExecute.txHash
-    saveTestnetSwapFromPlan(plan, {
+    const saveParams = {
       txHash: testnetExecute.txHash,
       explorerUrl: testnetExecute.explorerUrl,
       chainId: plan.chainId,
-      status: 'success',
-    })
+      status: 'success' as const,
+    }
+    saveTestnetSwapFromPlan(plan, saveParams)
+    saveTestnetPortfolioFromPlan(plan, saveParams)
   }, [
     open,
     plan,

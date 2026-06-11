@@ -16,6 +16,7 @@ import {
   SUCCESS_MESSAGES,
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
+import { TestnetPortfolioSummary } from '@/components/TestnetPortfolioSummary'
 import { formatUsd, formatPercent } from '@/utils/format'
 
 export function Dashboard() {
@@ -63,6 +64,8 @@ export function Dashboard() {
           costBasisUsd={portfolio.costBasisUsd}
         />
       )}
+
+      <TestnetPortfolioSummary className="mt-6" />
 
       {!portfolio.portfolioLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">

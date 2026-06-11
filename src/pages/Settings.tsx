@@ -26,6 +26,7 @@ import {
 } from '@/hooks/useMockExecuteBasket'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { RecentTestSwaps } from '@/components/RecentTestSwaps'
+import { TestnetPortfolioSummary } from '@/components/TestnetPortfolioSummary'
 import { formatEther } from 'viem'
 
 const SETTINGS_KEY = 'portx-settings'
@@ -303,6 +304,8 @@ export function Settings() {
       ) : null}
 
       <RecentTestSwaps className="mb-6" />
+
+      <TestnetPortfolioSummary className="mb-6" compact />
 
       <div className="card mb-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
