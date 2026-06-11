@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
 import { truncateAddress } from '@/utils/format'
 import {
   getTestnetPortfolioAggregate,
@@ -20,6 +21,11 @@ function formatUsdcTotal(value: number): string {
   return value.toLocaleString('en-US', { maximumFractionDigits: 6 })
 }
 
+function formatUsdcDifference(value: number): string {
+  const prefix = value > 0 ? '+' : ''
+  return `${prefix}${value.toLocaleString('en-US', { maximumFractionDigits: 6 })}`
+}
+
 export function TestnetPortfolioSummary({
   className = '',
   compact = false,
@@ -27,6 +33,7 @@ export function TestnetPortfolioSummary({
   const [aggregate, setAggregate] = useState<TestnetPortfolioAggregate>(() =>
     getTestnetPortfolioAggregate(),
   )
+  const onChainBalances = useTestnetPortfolioBalances()
 
   const refresh = useCallback(() => {
     setAggregate(getTestnetPortfolioAggregate())
@@ -129,6 +136,98 @@ export function TestnetPortfolioSummary({
           </ul>
         </div>
       ) : null}
+
+      <div className="border-t border-portx-border pt-4 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="font-bold">On-Chain Testnet Assets</h3>
+            <p className="text-xs text-portx-muted mt-1">
+              Read-only Sepolia ERC-20 balances held by BundleExecutor.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onChainBalances.refresh}
+            disabled={onChainBalances.isFetching}
+            className="btn-secondary text-sm py-2 px-3"
+          >
+            {onChainBalances.isFetching ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+
+        <p className="text-xs text-portx-muted">
+          BundleExecutor:{' '}
+          <span className="font-mono">
+            {truncateAddress(onChainBalances.bundleExecutorAddress, 6)}
+          </span>
+        </p>
+
+        {onChainBalances.isLoading ? (
+          <p className="text-sm text-portx-muted">Loading on-chain balances…</p>
+        ) : onChainBalances.error ? (
+          <p className="text-sm text-red-400">
+            Failed to load on-chain balances: {onChainBalances.error.message}
+          </p>
+        ) : (
+          <div
+            className={`grid gap-3 ${compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}
+          >
+            <Stat
+              label="On-chain USDC"
+              value={`${onChainBalances.usdcBalanceFormatted} USDC`}
+              highlight
+            />
+            <Stat
+              label="On-chain WETH"
+              value={`${onChainBalances.wethBalanceFormatted} WETH`}
+            />
+            {!compact ? (
+              <Stat
+                label="USDC difference"
+                value={`${formatUsdcDifference(onChainBalances.usdcDifference)} USDC`}
+              />
+            ) : null}
+          </div>
+        )}
+
+        {!onChainBalances.isLoading && !onChainBalances.error ? (
+          <div className="rounded-xl border border-portx-border bg-portx-surface p-3 text-sm space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+              Local tracked vs on-chain USDC
+            </p>
+            <p>
+              <span className="text-portx-muted">Tracked (local): </span>
+              <span className="font-mono">{formatUsdcTotal(onChainBalances.localTrackedUsdc)} USDC</span>
+            </p>
+            <p>
+              <span className="text-portx-muted">On-chain: </span>
+              <span className="font-mono text-portx-green">
+                {onChainBalances.usdcBalanceFormatted} USDC
+              </span>
+            </p>
+            <p>
+              <span className="text-portx-muted">Difference (tracked − on-chain): </span>
+              <span
+                className={`font-mono ${
+                  onChainBalances.usdcDifference === 0
+                    ? ''
+                    : onChainBalances.usdcDifference > 0
+                      ? 'text-amber-400'
+                      : 'text-portx-green'
+                }`}
+              >
+                {formatUsdcDifference(onChainBalances.usdcDifference)} USDC
+              </span>
+            </p>
+          </div>
+        ) : null}
+
+        {onChainBalances.lastRefreshedAt ? (
+          <p className="text-xs text-portx-muted">
+            Last refreshed: {new Date(onChainBalances.lastRefreshedAt).toLocaleString()}
+          </p>
+        ) : null}
+      </div>
     </div>
   )
 }
