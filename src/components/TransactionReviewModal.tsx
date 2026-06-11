@@ -23,6 +23,10 @@ import {
   type SimulationResult,
 } from '@/services/executionService'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import {
+  getTestnetUniswapExecuteAmountLabel,
+  useTestnetUniswapBasketExecute,
+} from '@/hooks/useTestnetUniswapBasketExecute'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
 
@@ -75,6 +79,7 @@ export function TransactionReviewModal({
   const { enableLiveExecution } = useFeatureFlags()
   const [simulation, setSimulation] = useState<SimulationResult | null>(null)
   const [simulating, setSimulating] = useState(false)
+  const testnetExecute = useTestnetUniswapBasketExecute(plan, open)
 
   const walletConnected = isConnected && Boolean(address)
 
@@ -120,7 +125,7 @@ export function TransactionReviewModal({
     featureFlagEnabled: enableLiveExecution,
   })
 
-  const showLivePrep = !plan.isDemo && readiness.hasZeroExRoute
+  const showLivePrep = !plan.isDemo && readiness.hasZeroExRoute && !testnetExecute.isTestnetUniswapPlan
   const statusTone =
     readiness.status === 'ready_for_wallet'
       ? 'border-portx-green/40 bg-portx-green/10 text-portx-green'
@@ -499,8 +504,121 @@ export function TransactionReviewModal({
             ) : null}
 
             <p className="text-xs text-portx-muted">
-              Payload preview only — no wallet writes or contract calls.
+              {testnetExecute.isTestnetUniswapPlan
+                ? 'Sepolia BundleExecutor payload — execute below when all safety gates pass.'
+                : 'Payload preview only — no wallet writes or contract calls.'}
             </p>
+          </div>
+        )}
+
+        {testnetExecute.isTestnetUniswapPlan && (
+          <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-warning/40 space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-portx-warning">
+              Sepolia testnet execution
+            </p>
+
+            <ExecutionWarning
+              variant="warning"
+              warnings={[
+                `Testnet only: sends ${getTestnetUniswapExecuteAmountLabel()} through BundleExecutor to Uniswap V3. Not for production.`,
+              ]}
+            />
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+                Safety gates
+              </p>
+              <ul className="space-y-2">
+                {testnetExecute.gates.map((gate) => (
+                  <ChecklistRow
+                    key={gate.id}
+                    label={gate.label}
+                    passed={gate.passed}
+                    detail={gate.detail}
+                  />
+                ))}
+              </ul>
+            </div>
+
+            {testnetExecute.disabledReason && !testnetExecute.canExecute ? (
+              <p className="text-xs text-portx-muted">
+                Disabled: {testnetExecute.disabledReason}
+              </p>
+            ) : null}
+
+            {testnetExecute.status === 'pending' ? (
+              <div className="rounded-xl border border-portx-border bg-portx-surface p-3 text-sm">
+                Waiting for wallet signature or Sepolia confirmation…
+              </div>
+            ) : null}
+
+            {testnetExecute.status === 'success' ? (
+              <div className="rounded-xl border-2 border-portx-green/50 bg-portx-green/15 p-4 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-portx-green mb-1">
+                    Swap confirmed
+                  </p>
+                  <p className="font-bold text-lg text-portx-green">
+                    Sepolia test swap executed successfully
+                  </p>
+                  <p className="text-sm text-portx-muted mt-1">
+                    Your transaction was confirmed on Sepolia. Review the hash below or open
+                    Etherscan for full details.
+                  </p>
+                </div>
+                {testnetExecute.txHash ? (
+                  <div className="rounded-lg border border-portx-green/30 bg-black/20 p-3 text-sm space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+                      Transaction hash
+                    </p>
+                    <p className="font-mono text-xs break-all text-white">{testnetExecute.txHash}</p>
+                    {testnetExecute.explorerUrl ? (
+                      <a
+                        href={testnetExecute.explorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-portx-green font-medium underline"
+                      >
+                        View on Sepolia Etherscan
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {testnetExecute.status === 'error' && testnetExecute.errorMessage ? (
+              <div className="rounded-xl border border-portx-danger/40 bg-portx-danger/10 text-portx-danger p-3 text-sm">
+                {testnetExecute.errorMessage}
+              </div>
+            ) : null}
+
+            {testnetExecute.txHash && testnetExecute.status !== 'success' ? (
+              <div className="text-sm space-y-1">
+                <p className="text-portx-muted">Transaction hash</p>
+                <p className="font-mono text-xs break-all">{testnetExecute.txHash}</p>
+                {testnetExecute.explorerUrl ? (
+                  <a
+                    href={testnetExecute.explorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-portx-green text-sm underline"
+                  >
+                    View on Sepolia Etherscan
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+
+            {testnetExecute.status === 'error' ? (
+              <button
+                type="button"
+                onClick={testnetExecute.reset}
+                className="btn-secondary w-full text-sm"
+              >
+                Reset
+              </button>
+            ) : null}
           </div>
         )}
 
@@ -560,35 +678,66 @@ export function TransactionReviewModal({
                   'Demo mode. Real swap execution is not live yet.',
                   ...plan.warnings.filter((w) => !w.includes('Demo mode')),
                 ]
-              : [
-                  'Live execution coming soon — transaction calldata is shown for review only.',
-                  ...plan.warnings,
-                ]
+              : testnetExecute.isTestnetUniswapPlan
+                ? plan.warnings
+                : [
+                    'Live execution coming soon — transaction calldata is shown for review only.',
+                    ...plan.warnings,
+                  ]
           }
         />
 
         <div className="flex gap-3 mt-6">
-          <button type="button" onClick={onClose} className="btn-secondary flex-1">
-            Cancel
-          </button>
-          {plan.isDemo ? (
-            <button
-              type="button"
-              onClick={onConfirm}
-              disabled={confirming}
-              className="btn-primary flex-1 disabled:opacity-50"
-            >
-              {confirming ? 'Processing...' : 'Confirm Demo Execution'}
-            </button>
+          {testnetExecute.isTestnetUniswapPlan && testnetExecute.status === 'success' ? (
+            <>
+              <button
+                type="button"
+                onClick={testnetExecute.reset}
+                className="btn-secondary flex-1"
+              >
+                Reset
+              </button>
+              <button type="button" onClick={onClose} className="btn-primary flex-1">
+                Done
+              </button>
+            </>
           ) : (
-            <button
-              type="button"
-              disabled
-              title="Execution disabled in Alpha"
-              className="btn-primary flex-1 opacity-50 cursor-not-allowed"
-            >
-              Execution disabled in Alpha
-            </button>
+            <>
+              <button type="button" onClick={onClose} className="btn-secondary flex-1">
+                Cancel
+              </button>
+              {plan.isDemo ? (
+                <button
+                  type="button"
+                  onClick={onConfirm}
+                  disabled={confirming}
+                  className="btn-primary flex-1 disabled:opacity-50"
+                >
+                  {confirming ? 'Processing...' : 'Confirm Demo Execution'}
+                </button>
+              ) : testnetExecute.isTestnetUniswapPlan ? (
+                <button
+                  type="button"
+                  onClick={() => void testnetExecute.execute()}
+                  disabled={!testnetExecute.canExecute}
+                  title={testnetExecute.disabledReason ?? undefined}
+                  className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {testnetExecute.status === 'pending'
+                    ? 'Executing Sepolia Test Swap…'
+                    : 'Execute Sepolia Test Swap'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  title="Execution disabled in Alpha"
+                  className="btn-primary flex-1 opacity-50 cursor-not-allowed"
+                >
+                  Execution disabled in Alpha
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
