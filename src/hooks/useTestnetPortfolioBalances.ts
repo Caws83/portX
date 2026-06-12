@@ -10,6 +10,10 @@ import {
   TESTNET_WETH_ADDRESS,
 } from '@/config/testnetExecution'
 import { getTestnetPortfolioAggregate } from '@/services/testnetPortfolio'
+import {
+  computeTestnetPortfolioValuation,
+  type TestnetPortfolioValuation,
+} from '@/services/testnetPortfolioPricing'
 
 const ERC20_BALANCE_ABI = [
   {
@@ -66,6 +70,7 @@ export interface TestnetPortfolioBalancesResult {
   usdcDifference: number
   assets: TestnetPortfolioAsset[]
   assetCount: number
+  valuation: TestnetPortfolioValuation
   isLoading: boolean
   isFetching: boolean
   error: Error | null
@@ -165,6 +170,17 @@ export function useTestnetPortfolioBalances(): TestnetPortfolioBalancesResult {
     },
   )
 
+  const valuation = computeTestnetPortfolioValuation(
+    assets.map((asset) => ({
+      symbol: asset.symbol,
+      balanceNumeric: parseTokenAmount(asset.balanceFormatted),
+      balanceDisplay: asset.balanceDisplay,
+      tokenAddress: asset.tokenAddress,
+      decimals: asset.decimals,
+      source: asset.source,
+    })),
+  )
+
   return {
     bundleExecutorAddress: TESTNET_BUNDLE_EXECUTOR_ADDRESS,
     usdcBalance,
@@ -175,6 +191,7 @@ export function useTestnetPortfolioBalances(): TestnetPortfolioBalancesResult {
     usdcDifference,
     assets,
     assetCount: assets.length,
+    valuation,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     error: query.error ?? null,

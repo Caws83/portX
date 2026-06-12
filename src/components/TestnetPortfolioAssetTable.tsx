@@ -1,3 +1,4 @@
+import { TESTNET_PORTFOLIO_PRICING_LABEL } from '@/services/testnetPortfolioPricing'
 import { truncateAddress } from '@/utils/format'
 import type { TestnetPortfolioBalancesResult } from '@/hooks/useTestnetPortfolioBalances'
 
@@ -6,13 +7,16 @@ interface TestnetPortfolioAssetTableProps {
 }
 
 export function TestnetPortfolioAssetTable({ balances }: TestnetPortfolioAssetTableProps) {
+  const { valuation } = balances
+
   return (
     <div className="border-t border-portx-border pt-4 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-bold">Testnet Portfolio Assets</h3>
           <p className="text-xs text-portx-muted mt-1">
-            Read-only ERC-20 balances held by BundleExecutor on Sepolia.
+            Read-only ERC-20 balances with fixed {TESTNET_PORTFOLIO_PRICING_LABEL.toLowerCase()}{' '}
+            pricing.
           </p>
         </div>
         <button
@@ -27,7 +31,7 @@ export function TestnetPortfolioAssetTable({ balances }: TestnetPortfolioAssetTa
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-portx-muted">
         <span>
-          Total assets: <span className="font-mono text-portx-foreground">{balances.assetCount}</span>
+          Total assets: <span className="font-mono font-semibold">{valuation.assetCount}</span>
         </span>
         {balances.lastRefreshedAt ? (
           <span>
@@ -48,22 +52,28 @@ export function TestnetPortfolioAssetTable({ balances }: TestnetPortfolioAssetTa
       ) : (
         <>
           <div className="md:hidden space-y-3">
-            {balances.assets.map((asset) => (
+            {valuation.valuedAssets.map((asset) => (
               <div
                 key={asset.symbol}
                 className="rounded-xl border border-portx-border bg-portx-surface p-3 space-y-2 text-sm"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{asset.symbol}</span>
-                  <span className="font-mono text-portx-green">
-                    {asset.balanceDisplay} {asset.symbol}
-                  </span>
+                  <span className="font-mono text-portx-green">{asset.estimatedValueDisplay}</span>
                 </div>
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <dt className="text-portx-muted">Balance</dt>
+                  <dd className="font-mono text-right">
+                    {asset.balanceDisplay} {asset.symbol}
+                  </dd>
+                  <dt className="text-portx-muted">Est. price</dt>
+                  <dd className="font-mono text-right">{asset.estimatedPriceDisplay}</dd>
+                  <dt className="text-portx-muted">Est. value</dt>
+                  <dd className="font-mono text-right text-portx-green">
+                    {asset.estimatedValueDisplay}
+                  </dd>
                   <dt className="text-portx-muted">Address</dt>
                   <dd className="font-mono text-right">{truncateAddress(asset.tokenAddress, 4)}</dd>
-                  <dt className="text-portx-muted">Decimals</dt>
-                  <dd className="font-mono text-right">{asset.decimals}</dd>
                   <dt className="text-portx-muted">Source</dt>
                   <dd className="text-right">{asset.source}</dd>
                 </dl>
@@ -77,12 +87,13 @@ export function TestnetPortfolioAssetTable({ balances }: TestnetPortfolioAssetTa
                 <tr className="border-b border-portx-border bg-portx-surface text-left text-xs uppercase tracking-wide text-portx-muted">
                   <th className="px-4 py-3 font-semibold">Token</th>
                   <th className="px-4 py-3 font-semibold">Balance</th>
-                  <th className="px-4 py-3 font-semibold">Decimals</th>
+                  <th className="px-4 py-3 font-semibold">Est. price</th>
+                  <th className="px-4 py-3 font-semibold">Est. value</th>
                   <th className="px-4 py-3 font-semibold">Source</th>
                 </tr>
               </thead>
               <tbody>
-                {balances.assets.map((asset) => (
+                {valuation.valuedAssets.map((asset) => (
                   <tr
                     key={asset.symbol}
                     className="border-b border-portx-border last:border-0 hover:bg-portx-surface/50"
@@ -97,7 +108,10 @@ export function TestnetPortfolioAssetTable({ balances }: TestnetPortfolioAssetTa
                       <span className="text-portx-green">{asset.balanceDisplay}</span>{' '}
                       <span className="text-portx-muted">{asset.symbol}</span>
                     </td>
-                    <td className="px-4 py-3 font-mono">{asset.decimals}</td>
+                    <td className="px-4 py-3 font-mono">{asset.estimatedPriceDisplay}</td>
+                    <td className="px-4 py-3 font-mono text-portx-green">
+                      {asset.estimatedValueDisplay}
+                    </td>
                     <td className="px-4 py-3 text-portx-muted">{asset.source}</td>
                   </tr>
                 ))}

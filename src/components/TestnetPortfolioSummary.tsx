@@ -8,6 +8,7 @@ import {
   TESTNET_PORTFOLIO_UPDATED_EVENT,
   type TestnetPortfolioAggregate,
 } from '@/services/testnetPortfolio'
+import { TESTNET_PORTFOLIO_PRICING_LABEL } from '@/services/testnetPortfolioPricing'
 
 interface TestnetPortfolioSummaryProps {
   className?: string
@@ -223,10 +224,50 @@ export function TestnetPortfolioSummary({
           </div>
         ) : null}
 
-        {onChainBalances.lastRefreshedAt ? (
-          <p className="text-xs text-portx-muted">
-            Last refreshed: {new Date(onChainBalances.lastRefreshedAt).toLocaleString()}
-          </p>
+        {!onChainBalances.isLoading && !onChainBalances.error ? (
+          <>
+            <div className="rounded-2xl border border-portx-green/30 bg-gradient-to-br from-portx-green/10 to-portx-blue/5 p-4 sm:p-6">
+              <p className="text-sm font-bold">Estimated Portfolio Value</p>
+              <p className="text-3xl sm:text-4xl font-bold font-mono text-portx-green mt-2">
+                {onChainBalances.valuation.totalEstimatedValueDisplay}
+              </p>
+              <p className="text-xs text-portx-muted mt-2">
+                {TESTNET_PORTFOLIO_PRICING_LABEL} · Testnet estimate only
+              </p>
+            </div>
+
+            <div
+              className={`grid gap-3 ${
+                compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'
+              }`}
+            >
+              <Stat
+                label="Total estimated value"
+                value={onChainBalances.valuation.totalEstimatedValueDisplay}
+                highlight
+              />
+              <Stat
+                label="Largest asset"
+                value={
+                  onChainBalances.valuation.largestAssetSymbol
+                    ? `${onChainBalances.valuation.largestAssetSymbol} (${onChainBalances.valuation.largestAssetValueDisplay})`
+                    : '—'
+                }
+              />
+              <Stat
+                label="Asset count"
+                value={String(onChainBalances.valuation.assetCount)}
+              />
+              <Stat
+                label="Last refreshed"
+                value={
+                  onChainBalances.lastRefreshedAt
+                    ? new Date(onChainBalances.lastRefreshedAt).toLocaleString()
+                    : '—'
+                }
+              />
+            </div>
+          </>
         ) : null}
 
         <TestnetPortfolioAssetTable balances={onChainBalances} />
