@@ -24,9 +24,36 @@ const ERC20_BALANCE_ABI = [
 const USDC_DECIMALS = 6
 const WETH_DECIMALS = 18
 
+const ON_CHAIN_BUNDLE_EXECUTOR_SOURCE = 'On-chain BundleExecutor' as const
+
+const TESTNET_PORTFOLIO_TOKEN_DEFINITIONS = [
+  {
+    symbol: 'USDC',
+    tokenAddress: TESTNET_USDC_ADDRESS,
+    decimals: USDC_DECIMALS,
+    displayFractionDigits: 6,
+  },
+  {
+    symbol: 'WETH',
+    tokenAddress: TESTNET_WETH_ADDRESS,
+    decimals: WETH_DECIMALS,
+    displayFractionDigits: 8,
+  },
+] as const
+
 export interface TestnetOnChainBalances {
   usdcBalanceWei: bigint
   wethBalanceWei: bigint
+}
+
+export interface TestnetPortfolioAsset {
+  symbol: string
+  tokenAddress: Address
+  balanceWei: bigint
+  balanceFormatted: string
+  balanceDisplay: string
+  decimals: number
+  source: typeof ON_CHAIN_BUNDLE_EXECUTOR_SOURCE
 }
 
 export interface TestnetPortfolioBalancesResult {
@@ -37,6 +64,8 @@ export interface TestnetPortfolioBalancesResult {
   wethBalanceFormatted: string
   localTrackedUsdc: number
   usdcDifference: number
+  assets: TestnetPortfolioAsset[]
+  assetCount: number
   isLoading: boolean
   isFetching: boolean
   error: Error | null
@@ -113,6 +142,29 @@ export function useTestnetPortfolioBalances(): TestnetPortfolioBalancesResult {
   const localTrackedUsdc = getTestnetPortfolioAggregate().totalUsdcReceived
   const usdcDifference = localTrackedUsdc - usdcBalance
 
+  const balanceWeiBySymbol: Record<string, bigint> = {
+    USDC: query.data?.usdcBalanceWei ?? 0n,
+    WETH: query.data?.wethBalanceWei ?? 0n,
+  }
+
+  const assets: TestnetPortfolioAsset[] = TESTNET_PORTFOLIO_TOKEN_DEFINITIONS.map(
+    (token) => {
+      const balanceWei = balanceWeiBySymbol[token.symbol] ?? 0n
+      const balanceFormatted = formatUnits(balanceWei, token.decimals)
+      const balanceNumeric = parseTokenAmount(balanceFormatted)
+
+      return {
+        symbol: token.symbol,
+        tokenAddress: token.tokenAddress,
+        balanceWei,
+        balanceFormatted,
+        balanceDisplay: formatTokenAmount(balanceNumeric, token.displayFractionDigits),
+        decimals: token.decimals,
+        source: ON_CHAIN_BUNDLE_EXECUTOR_SOURCE,
+      }
+    },
+  )
+
   return {
     bundleExecutorAddress: TESTNET_BUNDLE_EXECUTOR_ADDRESS,
     usdcBalance,
@@ -121,6 +173,8 @@ export function useTestnetPortfolioBalances(): TestnetPortfolioBalancesResult {
     wethBalanceFormatted: formatTokenAmount(wethBalance, 8),
     localTrackedUsdc,
     usdcDifference,
+    assets,
+    assetCount: assets.length,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     error: query.error ?? null,

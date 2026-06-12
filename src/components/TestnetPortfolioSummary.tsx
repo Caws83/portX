@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TestnetPortfolioAssetTable } from '@/components/TestnetPortfolioAssetTable'
 import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
 import { truncateAddress } from '@/utils/format'
 import {
@@ -227,6 +228,8 @@ export function TestnetPortfolioSummary({
             Last refreshed: {new Date(onChainBalances.lastRefreshedAt).toLocaleString()}
           </p>
         ) : null}
+
+        <TestnetPortfolioAssetTable balances={onChainBalances} />
       </div>
     </div>
   )
