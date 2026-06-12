@@ -97,6 +97,26 @@ npm run build
 npm run preview
 ```
 
+## Vercel frontend deploy
+
+Deploy the repo root as a Vercel project (backend stays on Railway — see [backend/README.md](./backend/README.md)).
+
+| Setting | Value |
+|---------|--------|
+| Build command | `npm run build` |
+| Output directory | `dist` |
+
+Required environment variables:
+
+```
+VITE_APP_MODE=production
+VITE_ENABLE_LIVE_EXECUTION=false
+VITE_PORTX_API_URL=https://<railway-service>.up.railway.app
+VITE_WALLETCONNECT_PROJECT_ID=<real id>
+```
+
+SPA routing for `/baskets`, `/settings`, `/dashboard`, etc. is handled by [`vercel.json`](./vercel.json).
+
 ## Project structure
 
 ```

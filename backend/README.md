@@ -78,7 +78,7 @@ curl -X POST http://localhost:8080/quotes/buy-basket \
 4. **Start command:** `npm start`
 5. Add environment variables:
    - `NODE_ENV=production`
-   - `CORS_ORIGIN=https://your-netlify-app.netlify.app` (your frontend URL)
+   - `CORS_ORIGIN=https://<your-vercel-app>.vercel.app` (your frontend URL)
    - `ENABLE_DEMO_QUOTES=true`
 6. Railway assigns `PORT` automatically — do not hardcode.
 7. Copy the public URL (e.g. `https://portx-api.up.railway.app`) into frontend `.env`:
