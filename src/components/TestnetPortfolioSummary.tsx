@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { TestnetPortfolioAssetTable } from '@/components/TestnetPortfolioAssetTable'
+import { TestnetRebalancePreview } from '@/components/TestnetRebalancePreview'
+import { useBasket } from '@/hooks/useBasket'
 import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
 import { truncateAddress } from '@/utils/format'
 import {
@@ -36,6 +38,7 @@ export function TestnetPortfolioSummary({
     getTestnetPortfolioAggregate(),
   )
   const onChainBalances = useTestnetPortfolioBalances()
+  const { allBaskets } = useBasket()
 
   const refresh = useCallback(() => {
     setAggregate(getTestnetPortfolioAggregate())
@@ -271,6 +274,13 @@ export function TestnetPortfolioSummary({
         ) : null}
 
         <TestnetPortfolioAssetTable balances={onChainBalances} />
+
+        <TestnetRebalancePreview
+          balances={onChainBalances}
+          latestPosition={latest}
+          baskets={allBaskets}
+          compact={compact}
+        />
       </div>
     </div>
   )
