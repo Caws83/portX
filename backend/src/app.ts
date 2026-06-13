@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import { ZodError } from 'zod'
-import { env } from './config/env.js'
+import { env, isAllowedCorsOrigin } from './config/env.js'
 import { AppError } from './utils/errors.js'
 import { healthRoutes } from './routes/health.routes.js'
 import { tokensRoutes } from './routes/tokens.routes.js'
@@ -16,8 +16,22 @@ export async function buildApp() {
   })
 
   await app.register(cors, {
-    origin: env.corsOrigins,
+    origin: (origin, cb) => {
+      if (!origin) {
+        cb(null, false)
+        return
+      }
+      if (isAllowedCorsOrigin(origin)) {
+        cb(null, origin)
+        return
+      }
+      if (!env.isProduction) {
+        app.log.warn({ origin, allowed: env.corsOrigins }, 'CORS origin rejected')
+      }
+      cb(null, false)
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 
   app.setErrorHandler((error: unknown, _request, reply) => {
