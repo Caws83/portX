@@ -196,6 +196,7 @@ export function SellAll() {
 
       <TransactionReviewModal
         plan={plan}
+        quoteSource={quoteSource}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onConfirm={handleConfirmDemo}

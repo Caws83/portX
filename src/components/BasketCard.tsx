@@ -9,7 +9,6 @@ interface BasketCardProps {
   onPreviewBuy?: (basket: Basket) => void
   onPreviewSell?: (basket: Basket) => void
   onBuy?: (basket: Basket) => void
-  onSell?: (basketId: string) => void
   onPlannedChainSelect?: (basket: Basket) => void
   isOwned?: boolean
   loading?: boolean
@@ -21,7 +20,6 @@ export function BasketCard({
   onPreviewBuy,
   onPreviewSell,
   onBuy,
-  onSell,
   onPlannedChainSelect,
   isOwned,
   loading,
@@ -102,34 +100,28 @@ export function BasketCard({
               quotesAvailable ? onPreviewSell(basket) : onPlannedChainSelect?.(basket)
             }
             disabled={quotesAvailable && loading}
+            aria-busy={quotesAvailable && loading}
+            title={quotesAvailable ? BUTTON_LABELS.previewSellQuote : plannedMessage}
+            className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
+          >
+            {loading && quotesAvailable
+              ? BUTTON_LABELS.fetchingQuotes
+              : quotesAvailable
+                ? BUTTON_LABELS.previewSellQuote
+                : BUTTON_LABELS.quotesUnavailable}
+          </button>
+        )}
+        {onBuy && (
+          <button
+            type="button"
+            onClick={() => (quotesAvailable ? onBuy(basket) : onPlannedChainSelect?.(basket))}
+            disabled={quotesAvailable && loading}
             title={quotesAvailable ? undefined : plannedMessage}
             className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
           >
-            {BUTTON_LABELS.previewSellQuote}
+            Quick Buy (Demo)
           </button>
         )}
-        <div className="flex flex-col sm:flex-row gap-2">
-          {onBuy && (
-            <button
-              type="button"
-              onClick={() => (quotesAvailable ? onBuy(basket) : onPlannedChainSelect?.(basket))}
-              disabled={quotesAvailable && loading}
-              title={quotesAvailable ? undefined : plannedMessage}
-              className="btn-secondary flex-1 text-sm py-2.5 disabled:opacity-50"
-            >
-              Quick Buy (Demo)
-            </button>
-          )}
-          {isOwned && onSell && (
-            <button
-              type="button"
-              onClick={() => onSell(basket.id)}
-              className="btn-secondary flex-1 text-sm py-2.5"
-            >
-              Sell Basket
-            </button>
-          )}
-        </div>
       </div>
     </div>
   )

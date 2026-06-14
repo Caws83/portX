@@ -49,6 +49,8 @@ export function QuotePreviewCard({
   const quoteModeBadge =
     quoteSource === 'testnet' ? (
       <StatusBadge variant="fallback-quote" label="Sepolia Testnet" size="md" />
+    ) : quoteSource === 'api' ? (
+      <StatusBadge variant="live-quote" label="PortX API" size="md" />
     ) : quoteSource === 'fallback' ? (
       <StatusBadge variant="fallback-quote" size="md" />
     ) : !preview.isDemo ? (
@@ -56,6 +58,11 @@ export function QuotePreviewCard({
     ) : (
       <StatusBadge variant="demo" label="Demo Quote" size="md" />
     )
+
+  const soldAssetSymbols =
+    preview.type !== 'buy'
+      ? preview.legs.map((l) => l.allocation.token.symbol).join(', ')
+      : null
 
   return (
     <div className="card-glow space-y-6 min-w-0">
@@ -140,6 +147,25 @@ export function QuotePreviewCard({
               ? `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} ETH`
               : `${formatUsd(preview.totalInputUsd)} USDC`}
           </span>
+        </div>
+      )}
+
+      {(preview.type === 'sell_basket' || preview.type === 'sell_all') && (
+        <div className="p-3 rounded-xl bg-portx-surface border border-portx-border text-sm space-y-2">
+          <p>
+            <span className="text-portx-muted">Assets sold: </span>
+            <span className="font-mono font-semibold">{soldAssetSymbols}</span>
+          </p>
+          <p>
+            <span className="text-portx-muted">Est. proceeds: </span>
+            <span className="font-mono font-semibold text-portx-green">
+              {formatUsd(preview.totalOutputUsd)} USDC
+            </span>
+          </p>
+          <p>
+            <span className="text-portx-muted">Position value: </span>
+            <span className="font-mono font-semibold">{formatUsd(preview.totalInputUsd)}</span>
+          </p>
         </div>
       )}
 

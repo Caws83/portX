@@ -38,13 +38,36 @@ import {
 } from '@/utils/testnetPreview'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+
+type ReviewQuoteSource = 'api' | 'fallback' | 'testnet' | null
 
 interface TransactionReviewModalProps {
   plan: ExecutionPlan | null
+  quoteSource?: ReviewQuoteSource
   open: boolean
   onClose: () => void
   onConfirm: () => void
   confirming?: boolean
+}
+
+function getPlanTypeLabel(plan: ExecutionPlan): string {
+  if (plan.type === 'buy') return 'Buy Basket'
+  if (plan.type === 'sell_basket') return 'Sell Basket'
+  return 'Sell All Portfolio'
+}
+
+function getQuoteSourceBadge(quoteSource: ReviewQuoteSource) {
+  if (quoteSource === 'api') {
+    return <StatusBadge variant="live-quote" label="PortX API" size="md" />
+  }
+  if (quoteSource === 'fallback') {
+    return <StatusBadge variant="fallback-quote" size="md" />
+  }
+  if (quoteSource === 'testnet') {
+    return <StatusBadge variant="fallback-quote" label="Sepolia Testnet" size="md" />
+  }
+  return null
 }
 
 function getAlphaExecutionDisabledLabel(plan: ExecutionPlan): string {
@@ -86,6 +109,7 @@ function ChecklistRow({
 
 export function TransactionReviewModal({
   plan,
+  quoteSource = null,
   open,
   onClose,
   onConfirm,
@@ -171,8 +195,14 @@ export function TransactionReviewModal({
 
   const sepoliaChainId = getBundleExecutorChainId()
   const walletOnSepolia = chainId === sepoliaChainId
+  const isSellPlan = plan?.type === 'sell_basket' || plan?.type === 'sell_all'
+  const soldAssetSymbols =
+    plan && isSellPlan
+      ? plan.legs.map((leg) => leg.quote.inputToken.symbol).join(', ')
+      : null
 
   if (!open || !plan) return null
+  const quoteSourceBadge = getQuoteSourceBadge(quoteSource)
   const readiness =
     plan.readiness ??
     assessExecutionReadiness(plan, {
@@ -219,12 +249,19 @@ export function TransactionReviewModal({
         aria-label="Close"
       />
       <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto card-glow border-portx-green/20 shadow-glow">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">Review Transaction</h2>
+        <div className="flex items-start justify-between mb-6 gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-xl font-bold">Review Transaction</h2>
+            <p className="text-sm text-portx-muted mt-0.5">{getPlanTypeLabel(plan)}</p>
+            {quoteSourceBadge ? (
+              <div className="flex flex-wrap gap-1.5 mt-2">{quoteSourceBadge}</div>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-portx-muted hover:text-white text-2xl leading-none"
+            className="text-portx-muted hover:text-white text-2xl leading-none shrink-0"
+            aria-label="Close"
           >
             ×
           </button>
@@ -762,6 +799,21 @@ export function TransactionReviewModal({
           </div>
         )}
 
+        {isSellPlan && soldAssetSymbols && (
+          <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-border text-sm space-y-2">
+            <p>
+              <span className="text-portx-muted">Assets sold: </span>
+              <span className="font-mono font-semibold">{soldAssetSymbols}</span>
+            </p>
+            <p>
+              <span className="text-portx-muted">Est. proceeds: </span>
+              <span className="font-mono font-semibold text-portx-green">
+                {formatUsd(plan.totalOutputUsd)} USDC
+              </span>
+            </p>
+          </div>
+        )}
+
         <div className="space-y-3 mb-6">
           {plan.legs.map((leg) => {
             const q = leg.quote
@@ -794,7 +846,9 @@ export function TransactionReviewModal({
 
         <dl className="grid grid-cols-2 gap-3 text-sm mb-6 p-4 rounded-xl bg-portx-surface border border-portx-border">
           <div>
-            <dt className="text-portx-muted text-xs">Est. total out</dt>
+            <dt className="text-portx-muted text-xs">
+              {isSellPlan ? 'Est. proceeds (USDC)' : 'Est. total out'}
+            </dt>
             <dd className="font-mono font-bold text-portx-green">{formatUsd(plan.totalOutputUsd)}</dd>
           </div>
           <div>

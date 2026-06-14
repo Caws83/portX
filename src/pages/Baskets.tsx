@@ -127,21 +127,6 @@ export function Baskets() {
     setModalOpen(true)
   }
 
-  const handleSell = async (basketId: string) => {
-    const basket = allBaskets.find((b) => b.id === basketId)
-    const purchase = activeBaskets.find((b) => b.basketId === basketId)
-    if (!basket || !purchase) return
-
-    setTxMsg(null)
-    sellBasket({
-      basketId,
-      allocations: basket.allocations,
-      positionValueUsd: purchase.amountUsd,
-      entryValueUsd: purchase.entryValueUsd,
-    })
-    setTxMsg('Demo basket position removed.')
-  }
-
   const clearSelection = () => {
     clear()
     setSelectedBasket(null)
@@ -271,7 +256,6 @@ export function Baskets() {
                 onPreviewBuy={handlePreviewBuy}
                 onPreviewSell={handlePreviewSell}
                 onBuy={handleQuickBuy}
-                onSell={handleSell}
                 onPlannedChainSelect={selectPlannedBasket}
                 isOwned={ownedIds.has(basket.id)}
                 loading={loading && selectedBasket?.id === basket.id}
@@ -341,6 +325,7 @@ export function Baskets() {
 
       <TransactionReviewModal
         plan={plan}
+        quoteSource={quoteSource}
         open={modalOpen && showQuotePreview}
         onClose={() => setModalOpen(false)}
         onConfirm={handleConfirm}
