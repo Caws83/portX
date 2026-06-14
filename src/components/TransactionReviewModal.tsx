@@ -24,6 +24,7 @@ import {
   type SimulationResult,
 } from '@/services/executionService'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
 import {
   getTestnetUniswapExecuteAmountLabel,
   useTestnetUniswapBasketExecute,
@@ -44,6 +45,12 @@ interface TransactionReviewModalProps {
   onClose: () => void
   onConfirm: () => void
   confirming?: boolean
+}
+
+function getAlphaExecutionDisabledLabel(plan: ExecutionPlan): string {
+  return plan.type === 'buy'
+    ? 'Buy execution disabled in Alpha'
+    : 'Execution disabled in Alpha'
 }
 
 function ChecklistRow({
@@ -88,6 +95,9 @@ export function TransactionReviewModal({
   const [simulation, setSimulation] = useState<SimulationResult | null>(null)
   const [simulating, setSimulating] = useState(false)
   const testnetExecute = useTestnetUniswapBasketExecute(plan, open)
+  const isProductionPreview = !ENABLE_TESTNET_MODE
+  const showTestnetExecute =
+    testnetExecute.isTestnetUniswapPlan && ENABLE_TESTNET_MODE && enableLiveExecution
   const savedHistoryTxRef = useRef<string | null>(null)
 
   const walletConnected = isConnected && Boolean(address)
@@ -416,7 +426,7 @@ export function TransactionReviewModal({
           </div>
         )}
 
-        {!plan.isDemo && bundleQuotePreview && (
+        {ENABLE_TESTNET_MODE && !plan.isDemo && bundleQuotePreview && (
           <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-border space-y-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
               BundleExecutor Testnet Payload Preview
@@ -834,7 +844,7 @@ export function TransactionReviewModal({
               <button type="button" onClick={onClose} className="btn-secondary flex-1">
                 Cancel
               </button>
-              {plan.isDemo ? (
+              {plan.isDemo && !isProductionPreview ? (
                 <button
                   type="button"
                   onClick={onConfirm}
@@ -843,7 +853,7 @@ export function TransactionReviewModal({
                 >
                   {confirming ? 'Processing...' : 'Confirm Demo Execution'}
                 </button>
-              ) : testnetExecute.isTestnetUniswapPlan ? (
+              ) : showTestnetExecute ? (
                 <button
                   type="button"
                   onClick={() => void testnetExecute.execute()}
@@ -859,10 +869,10 @@ export function TransactionReviewModal({
                 <button
                   type="button"
                   disabled
-                  title="Execution disabled in Alpha"
+                  title={getAlphaExecutionDisabledLabel(plan)}
                   className="btn-primary flex-1 opacity-50 cursor-not-allowed"
                 >
-                  Execution disabled in Alpha
+                  {getAlphaExecutionDisabledLabel(plan)}
                 </button>
               )}
             </>

@@ -47,7 +47,7 @@ function parseUsdcAmount(value: string): number {
 }
 
 export function shouldShowTestnetPortfolio(): boolean {
-  return ENABLE_TESTNET_MODE || loadTestnetPortfolioPositions().length > 0
+  return ENABLE_TESTNET_MODE
 }
 
 export function loadTestnetPortfolioPositions(): TestnetPortfolioPosition[] {

@@ -29,7 +29,7 @@ const MAX_RECORDS = 10
 export const TESTNET_SWAP_HISTORY_UPDATED_EVENT = 'portx-testnet-swap-history-updated'
 
 export function shouldShowRecentTestSwaps(): boolean {
-  return ENABLE_TESTNET_MODE || loadTestnetSwapHistory().length > 0
+  return ENABLE_TESTNET_MODE
 }
 
 export function loadTestnetSwapHistory(): TestnetSwapHistoryRecord[] {
