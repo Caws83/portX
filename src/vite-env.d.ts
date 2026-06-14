@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_APP_MODE?: string
   /** Must remain false for Alpha; live execution stays disabled */
   readonly VITE_ENABLE_LIVE_EXECUTION?: string
+  /** Mainnet single-leg buy pilot — keep false unless explicitly testing */
+  readonly VITE_ENABLE_MAINNET_EXECUTION?: string
 }
 
 interface ImportMeta {
