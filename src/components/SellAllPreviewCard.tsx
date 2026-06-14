@@ -1,11 +1,13 @@
+import { useMemo } from 'react'
 import type { BasketQuotePreview } from '@/types/quote'
 import { BUTTON_LABELS } from '@/config/uiCopy'
 import { formatUsd } from '@/utils/format'
 import { formatSlippage, isHighSlippage } from '@/utils/slippage'
+import { assessQuoteQuality } from '@/utils/quoteQuality'
 import { AllocationBreakdown } from './AllocationBreakdown'
 import { ExecutionWarning } from './ExecutionWarning'
 import { RouteProviderBadge } from './RouteProviderBadge'
-import { StatusBadge } from '@/components/ui/StatusBadge'
+import { QuoteQualityBadge, QuoteQualityPanel } from './QuoteQualityPanel'
 
 interface SellAllPreviewCardProps {
   preview: BasketQuotePreview
@@ -24,15 +26,10 @@ export function SellAllPreviewCard({
 }: SellAllPreviewCardProps) {
   const highSlippage = isHighSlippage(preview.slippageBps)
   const destination = preview.legs[0]?.bestQuote.outputToken.symbol ?? 'USDC'
-
-  const quoteModeBadge =
-    quoteSource === 'fallback' ? (
-      <StatusBadge variant="fallback-quote" size="md" />
-    ) : !preview.isDemo ? (
-      <StatusBadge variant="live-quote" size="md" />
-    ) : (
-      <StatusBadge variant="demo" label="Demo Quote" size="md" />
-    )
+  const quality = useMemo(
+    () => assessQuoteQuality(preview, quoteSource ?? null),
+    [preview, quoteSource]
+  )
 
   return (
     <div className="card-glow space-y-6 min-w-0">
@@ -44,12 +41,21 @@ export function SellAllPreviewCard({
           )}
         </div>
         <div className="flex flex-wrap gap-1.5 shrink-0">
-          {quoteModeBadge}
+          <QuoteQualityBadge quality={quality} />
           {[...new Set(preview.legs.map((l) => l.bestQuote.provider))].map((p) => (
             <RouteProviderBadge key={p} provider={p} size="md" />
           ))}
         </div>
       </div>
+
+      <QuoteQualityPanel
+        quality={quality}
+        showLegCounts
+        showProceedsDetail
+        totalOutputUsd={preview.totalOutputUsd}
+        compact
+        hideBadge
+      />
 
       <div className="p-3 rounded-xl bg-portx-surface border border-portx-border text-sm space-y-2">
         <div>

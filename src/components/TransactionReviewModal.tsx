@@ -38,7 +38,8 @@ import {
 } from '@/utils/testnetPreview'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
-import { StatusBadge } from '@/components/ui/StatusBadge'
+import { QuoteQualityPanel } from './QuoteQualityPanel'
+import { assessQuoteQualityFromPlan, isLegUnsupported } from '@/utils/quoteQuality'
 
 type ReviewQuoteSource = 'api' | 'fallback' | 'testnet' | null
 
@@ -55,19 +56,6 @@ function getPlanTypeLabel(plan: ExecutionPlan): string {
   if (plan.type === 'buy') return 'Buy Basket'
   if (plan.type === 'sell_basket') return 'Sell Basket'
   return 'Sell All Portfolio'
-}
-
-function getQuoteSourceBadge(quoteSource: ReviewQuoteSource) {
-  if (quoteSource === 'api') {
-    return <StatusBadge variant="live-quote" label="PortX API" size="md" />
-  }
-  if (quoteSource === 'fallback') {
-    return <StatusBadge variant="fallback-quote" size="md" />
-  }
-  if (quoteSource === 'testnet') {
-    return <StatusBadge variant="fallback-quote" label="Sepolia Testnet" size="md" />
-  }
-  return null
 }
 
 function getAlphaExecutionDisabledLabel(plan: ExecutionPlan): string {
@@ -202,7 +190,7 @@ export function TransactionReviewModal({
       : null
 
   if (!open || !plan) return null
-  const quoteSourceBadge = getQuoteSourceBadge(quoteSource)
+  const quoteQuality = assessQuoteQualityFromPlan(plan, quoteSource ?? null)
   const readiness =
     plan.readiness ??
     assessExecutionReadiness(plan, {
@@ -253,9 +241,14 @@ export function TransactionReviewModal({
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-bold">Review Transaction</h2>
             <p className="text-sm text-portx-muted mt-0.5">{getPlanTypeLabel(plan)}</p>
-            {quoteSourceBadge ? (
-              <div className="flex flex-wrap gap-1.5 mt-2">{quoteSourceBadge}</div>
-            ) : null}
+            <div className="mt-3">
+              <QuoteQualityPanel
+                quality={quoteQuality}
+                showLegCounts
+                showProceedsDetail={isSellPlan}
+                totalOutputUsd={plan.totalOutputUsd}
+              />
+            </div>
           </div>
           <button
             type="button"
@@ -811,16 +804,37 @@ export function TransactionReviewModal({
                 {formatUsd(plan.totalOutputUsd)} USDC
               </span>
             </p>
+            {quoteQuality.proceedsExcludeUnsupported && (
+              <p className="text-xs text-portx-warning">
+                Proceeds exclude {formatUsd(quoteQuality.excludedProceedsUsd)} from{' '}
+                {quoteQuality.unsupportedLegCount} unsupported leg(s).
+              </p>
+            )}
           </div>
         )}
 
         <div className="space-y-3 mb-6">
           {plan.legs.map((leg) => {
             const q = leg.quote
+            const legQuote = {
+              allocation: {
+                token: q.inputToken,
+                weightPercent: 0,
+                inputAmountUsd: q.inputAmountUsd,
+                inputAmount: q.inputAmount,
+              },
+              bestQuote: q,
+              allQuotes: [q],
+            }
+            const unsupported = isLegUnsupported(legQuote)
             return (
               <div
                 key={leg.index}
-                className="p-3 rounded-xl bg-portx-surface border border-portx-border text-sm"
+                className={`p-3 rounded-xl bg-portx-surface border text-sm ${
+                  unsupported
+                    ? 'border-portx-warning/40 bg-portx-warning/5'
+                    : 'border-portx-border'
+                }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium">

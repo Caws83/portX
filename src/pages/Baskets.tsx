@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { BasketCard } from '@/components/BasketCard'
 import { QuotePreviewCard } from '@/components/QuotePreviewCard'
@@ -10,6 +10,7 @@ import { useBasket } from '@/hooks/useBasket'
 import { useQuotePreview } from '@/hooks/useQuotePreview'
 import { executeDemoPlan } from '@/services/transactionBuilder'
 import { DEFAULT_BUY_AMOUNT_USD } from '@/config/constants'
+import { assessQuoteQuality } from '@/utils/quoteQuality'
 import {
   BUTTON_LABELS,
   EMPTY_MESSAGES,
@@ -48,6 +49,11 @@ export function Baskets() {
   const [modalOpen, setModalOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [txMsg, setTxMsg] = useState<string | null>(null)
+
+  const quoteQuality = useMemo(
+    () => (preview && quoteSource ? assessQuoteQuality(preview, quoteSource) : null),
+    [preview, quoteSource]
+  )
 
   const ownedIds = new Set(activeBaskets.map((b) => b.basketId))
 
@@ -212,11 +218,13 @@ export function Baskets() {
         </StatusBanner>
       )}
 
-      {quoteSource === 'api' && preview && !loading && (
-        <StatusBanner variant="success" className="mb-6" compact>
-          {preview.type === 'sell_basket'
-            ? SUCCESS_MESSAGES.sellBasketQuoteApi
-            : SUCCESS_MESSAGES.quoteApi}
+      {quoteSource === 'api' && preview && !loading && quoteQuality && (
+        <StatusBanner
+          variant={quoteQuality.kind === 'live_0x' ? 'success' : 'warning'}
+          className="mb-6"
+          compact
+        >
+          {quoteQuality.bannerMessage}
         </StatusBanner>
       )}
 

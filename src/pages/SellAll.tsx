@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useSellAllPreview } from '@/hooks/useSellAllPreview'
 import { SellAllButton } from '@/components/SellAllButton'
@@ -11,12 +11,12 @@ import { ExecutionWarning } from '@/components/ExecutionWarning'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBanner } from '@/components/ui/StatusBanner'
 import { executeDemoPlan } from '@/services/transactionBuilder'
+import { assessQuoteQuality } from '@/utils/quoteQuality'
 import {
   BUTTON_LABELS,
   EMPTY_MESSAGES,
   ERROR_MESSAGES,
   LOADING_MESSAGES,
-  SUCCESS_MESSAGES,
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
 import { formatUsd } from '@/utils/format'
@@ -39,6 +39,11 @@ export function SellAll() {
   const [modalOpen, setModalOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [txMsg, setTxMsg] = useState<string | null>(null)
+
+  const quoteQuality = useMemo(
+    () => (preview && quoteSource ? assessQuoteQuality(preview, quoteSource) : null),
+    [preview, quoteSource]
+  )
 
   const hasHoldings = portfolio.heldTokens.length > 0
 
@@ -140,9 +145,13 @@ export function SellAll() {
           </StatusBanner>
         )}
 
-        {quoteSource === 'api' && preview && !loading && (
-          <StatusBanner variant="success" className="mb-6" compact>
-            {SUCCESS_MESSAGES.sellAllQuoteApi}
+        {quoteSource === 'api' && preview && !loading && quoteQuality && (
+          <StatusBanner
+            variant={quoteQuality.kind === 'live_0x' ? 'success' : 'warning'}
+            className="mb-6"
+            compact
+          >
+            {quoteQuality.bannerMessage}
           </StatusBanner>
         )}
 

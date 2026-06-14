@@ -1,15 +1,17 @@
+import { useMemo } from 'react'
 import { formatEther } from 'viem'
 import type { BasketQuotePreview } from '@/types/quote'
-import { BUTTON_LABELS, WARNING_MESSAGES } from '@/config/uiCopy'
+import { BUTTON_LABELS } from '@/config/uiCopy'
 import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI, TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
 import { formatUsd } from '@/utils/format'
 import { formatSlippage, isHighSlippage } from '@/utils/slippage'
 import { buildLiveExecutionSummaryFromPreview } from '@/services/transactionBuilder'
 import { isTestnetSepoliaUniswapPreview } from '@/utils/testnetPreview'
+import { assessQuoteQuality } from '@/utils/quoteQuality'
 import { AllocationBreakdown } from './AllocationBreakdown'
 import { ExecutionWarning } from './ExecutionWarning'
 import { RouteProviderBadge } from './RouteProviderBadge'
-import { StatusBadge } from '@/components/ui/StatusBadge'
+import { QuoteQualityBadge, QuoteQualityPanel } from './QuoteQualityPanel'
 
 interface QuotePreviewCardProps {
   preview: BasketQuotePreview
@@ -35,29 +37,20 @@ export function QuotePreviewCard({
   const direction = preview.type === 'buy' ? 'buy' : 'sell'
   const highSlippage = isHighSlippage(preview.slippageBps)
   const execution = buildLiveExecutionSummaryFromPreview(preview)
-  const hasUnsupportedLegs = preview.legs.some((l) => l.bestQuote.provider === 'unsupported')
-  const unsupportedWarnings = preview.legs.flatMap((l) =>
-    l.bestQuote.provider === 'unsupported' ? l.bestQuote.warnings : []
+  const quality = useMemo(
+    () => assessQuoteQuality(preview, quoteSource ?? null),
+    [preview, quoteSource]
   )
   const isTestnetPreview = isTestnetSepoliaUniswapPreview(preview)
-  const showLivePrep = !preview.isDemo && execution.hasZeroExRoute && !hasUnsupportedLegs && !isTestnetPreview
+  const isSell = preview.type === 'sell_basket' || preview.type === 'sell_all'
+  const showLivePrep =
+    quality.kind === 'live_0x' &&
+    execution.hasZeroExRoute &&
+    !isTestnetPreview
   const statusTone =
     execution.status === 'ready_for_wallet'
       ? 'border-portx-green/40 bg-portx-green/10 text-portx-green'
       : 'border-portx-warning/40 bg-portx-warning/10 text-portx-warning'
-
-  const quoteModeBadge =
-    quoteSource === 'testnet' ? (
-      <StatusBadge variant="fallback-quote" label="Sepolia Testnet" size="md" />
-    ) : quoteSource === 'api' ? (
-      <StatusBadge variant="live-quote" label="PortX API" size="md" />
-    ) : quoteSource === 'fallback' ? (
-      <StatusBadge variant="fallback-quote" size="md" />
-    ) : !preview.isDemo ? (
-      <StatusBadge variant="live-quote" size="md" />
-    ) : (
-      <StatusBadge variant="demo" label="Demo Quote" size="md" />
-    )
 
   const soldAssetSymbols =
     preview.type !== 'buy'
@@ -74,12 +67,21 @@ export function QuotePreviewCard({
           )}
         </div>
         <div className="flex flex-wrap gap-1.5 shrink-0">
-          {quoteModeBadge}
+          <QuoteQualityBadge quality={quality} />
           {[...new Set(preview.legs.map((l) => l.bestQuote.provider))].map((p) => (
             <RouteProviderBadge key={p} provider={p} size="md" />
           ))}
         </div>
       </div>
+
+      <QuoteQualityPanel
+        quality={quality}
+        showLegCounts
+        showProceedsDetail={isSell}
+        totalOutputUsd={preview.totalOutputUsd}
+        compact
+        hideBadge
+      />
 
       {showLivePrep && (
         <div className={`rounded-xl border p-4 space-y-3 ${statusTone}`}>
@@ -185,26 +187,15 @@ export function QuotePreviewCard({
 
       <AllocationBreakdown legs={preview.legs} direction={direction} />
 
-      {hasUnsupportedLegs && (
-        <ExecutionWarning
-          variant="warning"
-          warnings={
-            unsupportedWarnings.length > 0
-              ? unsupportedWarnings
-              : [WARNING_MESSAGES.unsupportedRoute]
-          }
-        />
-      )}
-
       <ExecutionWarning warnings={preview.warnings} />
 
       {onReview && (
         <button
           type="button"
           onClick={onReview}
-          disabled={loading || hasUnsupportedLegs}
+          disabled={loading}
           aria-busy={loading}
-          aria-disabled={loading || hasUnsupportedLegs}
+          aria-disabled={loading}
           className="btn-primary w-full py-3 disabled:opacity-50"
         >
           {loading ? BUTTON_LABELS.buildingReview : reviewLabel}
