@@ -37,6 +37,7 @@ export function Baskets() {
     quoteSource,
     previewBuy,
     retryBuyQuote,
+    retrySellQuote,
     previewSellBasket,
     buildPlan,
     clear,
@@ -195,14 +196,24 @@ export function Baskets() {
       )}
 
       {quoteSource === 'fallback' && preview && !loading && (
-        <StatusBanner variant="warning" className="mb-6" onRetry={() => void retryBuyQuote()}>
-          {WARNING_MESSAGES.quoteFallback}
+        <StatusBanner
+          variant="warning"
+          className="mb-6"
+          onRetry={() =>
+            void (preview.type === 'sell_basket' ? retrySellQuote() : retryBuyQuote())
+          }
+        >
+          {preview.type === 'sell_basket'
+            ? WARNING_MESSAGES.sellBasketFallback
+            : WARNING_MESSAGES.quoteFallback}
         </StatusBanner>
       )}
 
       {quoteSource === 'api' && preview && !loading && (
         <StatusBanner variant="success" className="mb-6" compact>
-          {SUCCESS_MESSAGES.quoteApi}
+          {preview.type === 'sell_basket'
+            ? SUCCESS_MESSAGES.sellBasketQuoteApi
+            : SUCCESS_MESSAGES.quoteApi}
         </StatusBanner>
       )}
 

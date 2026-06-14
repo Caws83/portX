@@ -48,9 +48,11 @@ interface TransactionReviewModalProps {
 }
 
 function getAlphaExecutionDisabledLabel(plan: ExecutionPlan): string {
-  return plan.type === 'buy'
-    ? 'Buy execution disabled in Alpha'
-    : 'Execution disabled in Alpha'
+  if (plan.type === 'buy') return 'Buy execution disabled in Alpha'
+  if (plan.type === 'sell_basket' || plan.type === 'sell_all') {
+    return 'Sell execution disabled in Alpha'
+  }
+  return 'Execution disabled in Alpha'
 }
 
 function ChecklistRow({

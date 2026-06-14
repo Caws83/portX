@@ -10,6 +10,8 @@ import { TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
 import {
   previewBuyBasket,
   mapBuyBasketResponseToPreview,
+  previewSellBasket as fetchSellBasketQuote,
+  mapSellBasketResponseToPreview,
   DEMO_QUOTE_WALLET,
 } from '@/api/quotes'
 import {
@@ -50,6 +52,7 @@ export function useQuotePreview() {
   const [error, setError] = useState<string | null>(null)
   const [quoteSource, setQuoteSource] = useState<QuoteSource>(null)
   const lastBuyRef = useRef<{ basket: Basket; amountUsd: number } | null>(null)
+  const lastSellRef = useRef<{ basket: Basket; positionValueUsd: number } | null>(null)
 
   const getParams = useCallback(
     () => ({
@@ -145,20 +148,56 @@ export function useQuotePreview() {
       setError(null)
       setPlan(null)
       setQuoteSource(null)
+      lastSellRef.current = { basket, positionValueUsd }
+
+      const params = getParams()
+
       try {
-        const result = await getSellBasketQuotePreview(basket, positionValueUsd, getParams())
+        const response = await fetchSellBasketQuote({
+          walletAddress: params.walletAddress,
+          chainId: params.chainId,
+          basketId: basket.id,
+          outputToken: DEFAULT_STABLECOIN,
+          slippageBps: params.slippageBps,
+          positionValueUsd,
+        })
+        const result = mapSellBasketResponseToPreview(
+          response,
+          params.chainId,
+          params.slippageBps,
+          DEFAULT_STABLECOIN
+        )
         setPreview(result)
+        setQuoteSource('api')
         return result
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Quote failed'
-        setError(msg)
-        return null
+      } catch (apiErr) {
+        console.warn(
+          '[PortX] Sell-basket quote API unavailable — using local quote fallback.',
+          apiErr
+        )
+        try {
+          const result = await getSellBasketQuotePreview(basket, positionValueUsd, params)
+          setPreview(result)
+          setQuoteSource('fallback')
+          return result
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Quote failed'
+          setError(msg)
+          setQuoteSource(null)
+          return null
+        }
       } finally {
         setLoading(false)
       }
     },
     [getParams]
   )
+
+  const retrySellQuote = useCallback(async () => {
+    const last = lastSellRef.current
+    if (!last) return null
+    return previewSellBasket(last.basket, last.positionValueUsd)
+  }, [previewSellBasket])
 
   const previewSellAll = useCallback(
     async (holdings: HeldToken[]) => {
@@ -196,6 +235,7 @@ export function useQuotePreview() {
     setError(null)
     setQuoteSource(null)
     lastBuyRef.current = null
+    lastSellRef.current = null
   }, [])
 
   return {
@@ -207,6 +247,7 @@ export function useQuotePreview() {
     previewBuy,
     retryBuyQuote,
     previewSellBasket,
+    retrySellQuote,
     previewSellAll,
     buildPlan,
     clear,

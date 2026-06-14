@@ -36,6 +36,7 @@ export const SUCCESS_MESSAGES = {
   portfolioApi: 'Portfolio loaded from PortX API',
   discoverApi: 'Discover portfolios loaded from PortX API',
   quoteApi: 'Quote loaded from PortX API',
+  sellBasketQuoteApi: 'Sell-basket quote loaded from PortX API',
   sellAllQuoteApi: 'Sell-all quote loaded from PortX API',
   tokensApi: 'Tokens loaded from PortX API',
   copyBasket: 'Portfolio copied to your baskets.',
@@ -46,6 +47,7 @@ export const WARNING_MESSAGES = {
   apiOfflineFallback: (resource: string) =>
     `API unavailable — showing offline ${resource} data.`,
   quoteFallback: 'Using local quote fallback.',
+  sellBasketFallback: 'Using local sell-basket quote fallback.',
   sellAllFallback: 'Using local sell-all quote fallback.',
   plannedChainBlocked: 'Planned chain — quotes blocked',
   unsupportedRoute: 'Unsupported route on Ethereum mainnet',

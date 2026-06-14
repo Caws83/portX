@@ -245,6 +245,95 @@ function sellLegQuoteFromApi(leg: SellAllLegQuote, outputToken: Token): LegQuote
   }
 }
 
+export interface SellBasketPreviewRequest {
+  walletAddress?: string
+  chainId: number
+  basketId: string
+  outputToken: string
+  slippageBps: number
+  positionValueUsd?: number
+}
+
+export interface SellBasketLegQuote {
+  provider: string
+  fromToken: string
+  toToken: string
+  inputAmountUsd: number
+  estimatedOutput: string
+  estimatedGasUsd: number
+  priceImpactPercent: number
+  routeSummary: string
+  calldata: string | null
+  routerAddress: string | null
+  warnings?: string[]
+  allocationPercent: number
+}
+
+export interface SellBasketPreviewResponse {
+  mode: 'demo' | 'live'
+  basketId?: string
+  basketName: string
+  inputAmountUsd: number
+  totalOutputUsd?: number
+  quotes: SellBasketLegQuote[]
+  totalEstimatedGasUsd: number
+  warnings: string[]
+}
+
+/**
+ * POST ${VITE_PORTX_API_URL}/quotes/sell-basket
+ */
+export async function previewSellBasket(
+  payload: SellBasketPreviewRequest
+): Promise<SellBasketPreviewResponse> {
+  if (!PORTX_API_URL) {
+    throw new ApiError('VITE_PORTX_API_URL is not configured')
+  }
+
+  return apiClient<SellBasketPreviewResponse>('/quotes/sell-basket', {
+    method: 'POST',
+    body: {
+      walletAddress: payload.walletAddress ?? DEMO_QUOTE_WALLET,
+      chainId: payload.chainId,
+      basketId: payload.basketId,
+      outputToken: payload.outputToken,
+      slippageBps: payload.slippageBps,
+      positionValueUsd: payload.positionValueUsd,
+    },
+  })
+}
+
+/** Map backend sell-basket response into UI BasketQuotePreview */
+export function mapSellBasketResponseToPreview(
+  response: SellBasketPreviewResponse,
+  chainId: number,
+  slippageBps: number,
+  outputTokenSymbol = 'USDC'
+): BasketQuotePreview {
+  const outputToken = requireToken(outputTokenSymbol)
+  const legs = response.quotes.map((q) => sellLegQuoteFromApi(q, outputToken))
+  const totalInputUsd =
+    response.inputAmountUsd ?? legs.reduce((sum, l) => sum + l.allocation.inputAmountUsd, 0)
+  const totalOutputUsd =
+    response.totalOutputUsd ??
+    legs.reduce((sum, l) => sum + l.bestQuote.outputAmountUsd, 0)
+
+  return {
+    type: 'sell_basket',
+    basketId: response.basketId,
+    basketName: response.basketName,
+    totalInputUsd,
+    totalOutputUsd,
+    totalGasUsd: response.totalEstimatedGasUsd,
+    slippageBps,
+    chainId,
+    legs,
+    warnings: response.warnings,
+    isDemo: response.mode === 'demo',
+    createdAt: Date.now(),
+  }
+}
+
 /** Map backend sell-all response into UI BasketQuotePreview */
 export function mapSellAllResponseToPreview(
   response: SellAllPreviewResponse,
