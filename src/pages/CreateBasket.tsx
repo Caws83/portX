@@ -5,8 +5,39 @@ import { useBasketStore } from '@/store/basketStore'
 import type { TokenAllocation } from '@/types/token'
 import type { Basket } from '@/types/basket'
 import { getChainLabel } from '@/types/basketChain'
-import { isValidAllocationTotal } from '@/utils/validation'
+import { validateCreateBasket } from '@/utils/createBasketValidation'
+import {
+  CREATE_BASKET_NETWORK_LABEL,
+  getTokenRoutingSupportLabel,
+  getTokenRoutingSupportStatus,
+  summarizeBasketRoutingSupport,
+  type TokenRoutingSupportStatus,
+} from '@/utils/tokenRoutingSupport'
 import { sum } from '@/utils/math'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+
+function tokenSupportBadgeVariant(
+  status: TokenRoutingSupportStatus
+): 'active' | 'planned' | 'unsupported' {
+  if (status === 'supported') return 'active'
+  if (status === 'planned') return 'planned'
+  return 'unsupported'
+}
+
+function basketSupportTone(
+  status: ReturnType<typeof summarizeBasketRoutingSupport>['status']
+): string {
+  switch (status) {
+    case 'fully-supported':
+      return 'border-portx-green/40 bg-portx-green/10 text-portx-green'
+    case 'partially-supported':
+      return 'border-portx-warning/40 bg-portx-warning/10 text-portx-warning'
+    case 'planned-routing':
+      return 'border-portx-blue/40 bg-portx-blue/10 text-portx-blue'
+    default:
+      return 'border-portx-danger/40 bg-portx-danger/10 text-portx-danger'
+  }
+}
 
 export function CreateBasket() {
   const navigate = useNavigate()
@@ -37,12 +68,18 @@ export function CreateBasket() {
     setSelected((prev) => ({ ...prev, [symbol]: weight }))
   }
 
+  const selectedSymbols = Object.keys(selected)
   const weights = Object.values(selected)
   const totalWeight = sum(weights)
-  const valid = name.trim().length > 0 && isValidAllocationTotal(weights) && Object.keys(selected).length > 0
+  const validation = validateCreateBasket({
+    name,
+    selectedSymbols,
+    weights,
+  })
+  const routingSummary = summarizeBasketRoutingSupport(selectedSymbols)
 
   const handleSave = () => {
-    if (!valid) return
+    if (!validation.isValid) return
 
     const allocations: TokenAllocation[] = Object.entries(selected).map(([symbol, weightPercent]) => {
       const token = getTokenBySymbol(symbol)
@@ -112,9 +149,13 @@ export function CreateBasket() {
             id="basket-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="input-field"
+            className={`input-field ${validation.nameError ? 'border-portx-danger/50' : ''}`}
             placeholder="My Growth Basket"
+            aria-invalid={Boolean(validation.nameError)}
           />
+          {validation.nameError ? (
+            <p className="text-xs text-portx-danger mt-2">{validation.nameError}</p>
+          ) : null}
         </div>
         <div>
           <label className="label" htmlFor="basket-desc">
@@ -128,6 +169,18 @@ export function CreateBasket() {
             placeholder="Optional description"
           />
         </div>
+        <div>
+          <label className="label">Network</label>
+          <div
+            className="input-field bg-portx-surface text-portx-muted cursor-not-allowed opacity-90"
+            aria-readonly="true"
+          >
+            {CREATE_BASKET_NETWORK_LABEL}
+          </div>
+          <p className="text-xs text-portx-muted mt-2">
+            Multi-chain basket creation is coming soon. New baskets are scoped to Ethereum Mainnet.
+          </p>
+        </div>
       </div>
 
       <div className="card mb-6">
@@ -137,14 +190,23 @@ export function CreateBasket() {
             Auto-balance 100%
           </button>
         </div>
-        <p className={`text-sm mb-4 ${totalWeight === 100 ? 'text-portx-green' : 'text-portx-danger'}`}>
+        <p
+          className={`text-sm mb-2 ${totalWeight === 100 ? 'text-portx-green' : 'text-portx-danger'}`}
+        >
           Total: {totalWeight.toFixed(1)}% {totalWeight === 100 ? '✓' : '(must equal 100%)'}
         </p>
+        {validation.allocationError ? (
+          <p className="text-xs text-portx-danger mb-2">{validation.allocationError}</p>
+        ) : null}
+        {validation.assetsError ? (
+          <p className="text-xs text-portx-danger mb-4">{validation.assetsError}</p>
+        ) : null}
 
         <div className="space-y-3 max-h-[400px] overflow-y-auto">
           {!tokensLoading &&
             tokens.map((token) => {
               const isOn = token.symbol in selected
+              const supportStatus = getTokenRoutingSupportStatus(token.symbol)
               return (
                 <div
                   key={token.symbol}
@@ -159,9 +221,16 @@ export function CreateBasket() {
                     className="w-4 h-4 accent-portx-green"
                     disabled={tokensLoading}
                   />
-                  <div className="flex-1">
-                    <div className="font-medium">{token.symbol}</div>
-                    <div className="text-xs text-portx-muted">{token.name}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{token.symbol}</span>
+                      <StatusBadge
+                        variant={tokenSupportBadgeVariant(supportStatus)}
+                        label={getTokenRoutingSupportLabel(supportStatus)}
+                        size="sm"
+                      />
+                    </div>
+                    <div className="text-xs text-portx-muted truncate">{token.name}</div>
                   </div>
                   {isOn && (
                     <input
@@ -179,11 +248,39 @@ export function CreateBasket() {
         </div>
       </div>
 
+      <div className="card mb-6 space-y-4">
+        <h2 className="font-bold">Basket summary</h2>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <dt className="text-portx-muted text-xs mb-1">Asset count</dt>
+            <dd className="font-mono font-semibold">{selectedSymbols.length}</dd>
+          </div>
+          <div>
+            <dt className="text-portx-muted text-xs mb-1">Network</dt>
+            <dd>{CREATE_BASKET_NETWORK_LABEL}</dd>
+          </div>
+          <div>
+            <dt className="text-portx-muted text-xs mb-1">Total allocation</dt>
+            <dd className={`font-mono font-semibold ${totalWeight === 100 ? 'text-portx-green' : 'text-portx-danger'}`}>
+              {totalWeight.toFixed(1)}%
+            </dd>
+          </div>
+          <div>
+            <dt className="text-portx-muted text-xs mb-1">Estimated support</dt>
+            <dd>{routingSummary.label}</dd>
+          </div>
+        </dl>
+        <div className={`rounded-xl border p-3 text-sm ${basketSupportTone(routingSummary.status)}`}>
+          <p className="font-semibold">{routingSummary.label}</p>
+          <p className="text-xs mt-1 opacity-90">{routingSummary.detail}</p>
+        </div>
+      </div>
+
       <button
         type="button"
         onClick={handleSave}
-        disabled={!valid || tokensLoading}
-        className="btn-primary w-full py-4 disabled:opacity-40"
+        disabled={!validation.isValid || tokensLoading}
+        className="btn-primary w-full py-4 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         Save Basket
       </button>
