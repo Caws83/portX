@@ -13,6 +13,10 @@ import type {
 import { isSupportedExecutionChain } from '@/types/execution'
 import { validateExecutionPlan } from '@/api/quotes'
 import { isZeroAddress } from '@/utils/addresses'
+import {
+  emptyQuoteExecutionMetadata,
+  truncateExecutionAddress,
+} from '@/utils/executionMetadata'
 
 let planCounter = 0
 
@@ -85,27 +89,47 @@ export function getExecutionStatusLabel(status: ExecutionStatus): string {
   return status === 'ready_for_wallet' ? 'Ready for wallet execution' : 'Preview only'
 }
 
-function legExecutionInfoFromQuote(quote: QuoteResponse, index: number, isDemoPlan: boolean): LegExecutionInfo {
+function legExecutionInfoFromQuote(
+  quote: QuoteResponse,
+  index: number,
+  isDemoPlan: boolean,
+  chainId?: number
+): LegExecutionInfo {
   const calldataStatus = getCalldataStatus(quote, isDemoPlan)
+  const execution = quote.execution ?? emptyQuoteExecutionMetadata(chainId)
+  const routerAddress = execution.transactionTo ?? quote.routerAddress
+  const calldata = execution.transactionData ?? quote.calldata
+
   return {
     index,
     provider: quote.provider,
     inputSymbol: quote.inputToken.symbol,
     outputSymbol: quote.outputToken.symbol,
-    routerAddress: quote.routerAddress,
-    routerDisplay: isValidRouterAddress(quote.routerAddress)
-      ? truncateAddress(quote.routerAddress)
+    routerAddress,
+    routerDisplay: isValidRouterAddress(routerAddress)
+      ? truncateAddress(routerAddress)
       : 'Not available',
-    calldata: quote.calldata,
-    calldataDisplay: quote.calldata?.startsWith('0x')
-      ? truncateCalldata(quote.calldata)
+    calldata,
+    calldataDisplay: calldata?.startsWith('0x')
+      ? truncateCalldata(calldata)
       : 'Not available',
     calldataStatus,
+    hasExecutableCalldata: execution.hasExecutableCalldata,
+    hasExactSellAmount: execution.hasExactSellAmount,
+    requiresApproval: execution.requiresApproval,
+    spender: execution.spender,
+    spenderDisplay: truncateExecutionAddress(execution.spender),
+    transactionTo: execution.transactionTo,
+    transactionToDisplay: truncateExecutionAddress(execution.transactionTo ?? routerAddress),
+    transactionValue: execution.transactionValue,
+    sellAmount: execution.sellAmount ?? quote.inputAmount,
   }
 }
 
 export function buildLegExecutionInfo(plan: ExecutionPlan): LegExecutionInfo[] {
-  return plan.legs.map((leg) => legExecutionInfoFromQuote(leg.quote, leg.index, plan.isDemo))
+  return plan.legs.map((leg) =>
+    legExecutionInfoFromQuote(leg.quote, leg.index, plan.isDemo, plan.chainId)
+  )
 }
 
 export function buildLiveExecutionSummaryFromPreview(preview: BasketQuotePreview): LiveExecutionPlanSummary {
@@ -117,7 +141,7 @@ export function buildLiveExecutionSummaryFromPreview(preview: BasketQuotePreview
     hasZeroExRoute: hasZeroExRoute(quotes),
     allCalldataAvailable: allZeroExCalldataAvailable(quotes, preview.isDemo),
     legs: preview.legs.map((leg, index) =>
-      legExecutionInfoFromQuote(leg.bestQuote, index, preview.isDemo)
+      legExecutionInfoFromQuote(leg.bestQuote, index, preview.isDemo, preview.chainId)
     ),
   }
 }
@@ -132,6 +156,11 @@ export function assessExecutionReadiness(
   const builtTransactions = buildTransactions(plan)
   const zeroExRoute = hasZeroExRoute(quotes)
   const calldataReady = allZeroExCalldataAvailable(quotes, plan.isDemo)
+  const zeroExLegs = quotes.filter((q) => q.provider === '0x')
+  const exactAmountReady =
+    !plan.isDemo &&
+    zeroExLegs.length > 0 &&
+    zeroExLegs.every((q) => q.execution?.hasExactSellAmount === true)
   const networkChainId = context.currentChainId ?? plan.chainId
   const networkSupported = isSupportedExecutionChain(networkChainId) && networkChainId === plan.chainId
   const slippageSet = plan.slippageBps > 0
@@ -169,17 +198,39 @@ export function assessExecutionReadiness(
     },
     {
       id: 'calldata',
-      label: 'Calldata available',
+      label: 'Calldata present',
       passed: calldataReady,
       detail: calldataReady
         ? `${legs.filter((l) => l.calldataStatus === 'available').length}/${legs.length} legs ready`
         : '0x calldata missing or preview-only',
     },
     {
+      id: 'exact_amount',
+      label: 'Exact sell amount present',
+      passed: exactAmountReady,
+      detail: exactAmountReady
+        ? 'Using 0x sellAmount (not USD estimate)'
+        : 'Exact sellAmount unavailable — demo or fallback quote',
+    },
+    {
+      id: 'approval',
+      label: 'Approval requirement known',
+      passed:
+        !plan.isDemo &&
+        zeroExLegs.every(
+          (q) =>
+            q.execution?.requiresApproval === false ||
+            (q.execution?.requiresApproval === true && Boolean(q.execution.spender))
+        ),
+      detail: legs.some((l) => l.requiresApproval)
+        ? `ERC-20 approval required — spender ${legs.find((l) => l.spender)?.spenderDisplay ?? 'unknown'}`
+        : 'No ERC-20 approval required (native ETH) or not applicable',
+    },
+    {
       id: 'confirm',
-      label: 'User confirmation required',
+      label: 'Execution disabled in Alpha',
       passed: false,
-      detail: 'Sign transaction in wallet (coming soon)',
+      detail: 'Live wallet signing is not enabled in this build',
     },
   ]
 
@@ -231,16 +282,24 @@ export function buildExecutionPlan(
 
 /** Converts execution plan into wallet-ready transactions (one per swap leg at MVP) */
 export function buildTransactions(plan: ExecutionPlan): BuiltTransaction[] {
-  return plan.legs.map((leg) => ({
-    legIndex: leg.index,
-    to: leg.quote.routerAddress,
-    data: leg.quote.calldata,
-    value: '0',
-    gasEstimate: leg.quote.estimatedGasUnits.toString(),
-    chainId: plan.chainId,
-    description: `${leg.quote.inputToken.symbol} → ${leg.quote.outputToken.symbol} via ${leg.quote.provider}`,
-    provider: leg.quote.provider,
-  }))
+  return plan.legs.map((leg) => {
+    const execution = leg.quote.execution
+    const to = execution?.transactionTo ?? leg.quote.routerAddress
+    const data = execution?.transactionData ?? leg.quote.calldata
+    const value = execution?.transactionValue ?? '0'
+    const gasEstimate = execution?.gas ?? leg.quote.estimatedGasUnits.toString()
+
+    return {
+      legIndex: leg.index,
+      to,
+      data,
+      value,
+      gasEstimate,
+      chainId: plan.chainId,
+      description: `${leg.quote.inputToken.symbol} → ${leg.quote.outputToken.symbol} via ${leg.quote.provider}`,
+      provider: leg.quote.provider,
+    }
+  })
 }
 
 export async function validatePlanWithBackend(plan: ExecutionPlan): Promise<ExecutionPlan> {

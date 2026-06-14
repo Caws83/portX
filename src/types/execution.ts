@@ -40,6 +40,16 @@ export interface LegExecutionInfo {
   calldata: string
   calldataDisplay: string
   calldataStatus: CalldataStatus
+  /** Signable quote metadata (live 0x legs) */
+  hasExecutableCalldata: boolean
+  hasExactSellAmount: boolean
+  requiresApproval: boolean
+  spender: string | null
+  spenderDisplay: string
+  transactionTo: string | null
+  transactionToDisplay: string
+  transactionValue: string | null
+  sellAmount: string | null
 }
 
 export interface ExecutionReadinessCheck {

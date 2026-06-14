@@ -5,20 +5,17 @@ import type { BasketQuotePreview, LegQuote, QuoteResponse } from '@/types/quote'
 import type { QuoteProvider } from '@/types/route'
 import type { Token } from '@/types/token'
 import type { ExecutionPlan } from '@/types/execution'
+import {
+  executionMetadataFromApiLeg,
+  parseGasUnits,
+  usdDerivedInputAmount,
+  type ApiLegExecutionFields,
+} from '@/utils/executionMetadata'
 
 /** Demo wallet when no wallet is connected — backend accepts optional address */
 export const DEMO_QUOTE_WALLET = '0x0000000000000000000000000000000000000000'
 
-export interface BuyBasketPreviewRequest {
-  walletAddress?: string
-  chainId: number
-  inputToken: string
-  inputAmountUsd: number
-  basketId: string
-  slippageBps: number
-}
-
-export interface BuyBasketLegQuote {
+export interface ApiLegQuote extends ApiLegExecutionFields {
   provider: string
   fromToken: string
   toToken: string
@@ -31,6 +28,17 @@ export interface BuyBasketLegQuote {
   routerAddress: string | null
   warnings?: string[]
   allocationPercent: number
+}
+
+export interface BuyBasketLegQuote extends ApiLegQuote {}
+
+export interface BuyBasketPreviewRequest {
+  walletAddress?: string
+  chainId: number
+  inputToken: string
+  inputAmountUsd: number
+  basketId: string
+  slippageBps: number
 }
 
 export interface BuyBasketPreviewResponse {
@@ -89,28 +97,43 @@ function requireToken(symbol: string): Token {
   return token
 }
 
-function legQuoteFromApi(leg: BuyBasketLegQuote, stablecoin: Token): LegQuote {
-  const outputToken = requireToken(leg.toToken)
-  const inputToken = leg.fromToken === stablecoin.symbol ? stablecoin : requireToken(leg.fromToken)
-  const outputAmount = leg.estimatedOutput
-  const outputAmountUsd = parseFloat(outputAmount) * outputToken.priceUsd
+function mapApiLegToQuoteResponse(
+  leg: ApiLegQuote,
+  inputToken: Token,
+  outputToken: Token,
+  chainId: number
+): QuoteResponse {
+  const execution = executionMetadataFromApiLeg(leg, chainId)
+  const inputAmount = execution.hasExactSellAmount && execution.sellAmount
+    ? execution.sellAmount
+    : usdDerivedInputAmount(leg.inputAmountUsd, inputToken.decimals)
 
-  const bestQuote: QuoteResponse = {
+  const calldata = execution.transactionData ?? mapCalldata(leg.calldata)
+  const routerAddress = execution.transactionTo ?? mapRouterAddress(leg.routerAddress)
+
+  return {
     provider: normalizeProvider(leg.provider),
     inputToken,
     outputToken,
-    inputAmount: String(Math.round(leg.inputAmountUsd * Math.pow(10, inputToken.decimals))),
+    inputAmount,
     inputAmountUsd: leg.inputAmountUsd,
-    outputAmount,
-    outputAmountUsd,
+    outputAmount: leg.estimatedOutput,
+    outputAmountUsd: parseFloat(leg.estimatedOutput) * outputToken.priceUsd,
     estimatedGasUsd: leg.estimatedGasUsd,
-    estimatedGasUnits: Math.round(leg.estimatedGasUsd * 1e9),
+    estimatedGasUnits: parseGasUnits(execution.gas, leg.estimatedGasUsd),
     priceImpactPercent: leg.priceImpactPercent,
     routeSummary: leg.routeSummary ? [leg.routeSummary] : [],
-    calldata: mapCalldata(leg.calldata),
-    routerAddress: mapRouterAddress(leg.routerAddress),
+    calldata,
+    routerAddress,
     warnings: leg.warnings ?? [],
+    execution: execution.hasExactSellAmount || execution.hasExecutableCalldata ? execution : undefined,
   }
+}
+
+function legQuoteFromApi(leg: BuyBasketLegQuote, stablecoin: Token, chainId: number): LegQuote {
+  const outputToken = requireToken(leg.toToken)
+  const inputToken = leg.fromToken === stablecoin.symbol ? stablecoin : requireToken(leg.fromToken)
+  const bestQuote = mapApiLegToQuoteResponse(leg, inputToken, outputToken, chainId)
 
   return {
     allocation: {
@@ -132,7 +155,7 @@ export function mapBuyBasketResponseToPreview(
   inputTokenSymbol = 'USDC'
 ): BasketQuotePreview {
   const stablecoin = requireToken(inputTokenSymbol)
-  const legs = response.quotes.map((q) => legQuoteFromApi(q, stablecoin))
+  const legs = response.quotes.map((q) => legQuoteFromApi(q, stablecoin, chainId))
   const totalOutputUsd =
     response.totalOutputUsd ??
     legs.reduce((sum, l) => sum + l.bestQuote.outputAmountUsd, 0)
@@ -160,20 +183,7 @@ export interface SellAllPreviewRequest {
   slippageBps: number
 }
 
-export interface SellAllLegQuote {
-  provider: string
-  fromToken: string
-  toToken: string
-  inputAmountUsd: number
-  estimatedOutput: string
-  estimatedGasUsd: number
-  priceImpactPercent: number
-  routeSummary: string
-  calldata: string | null
-  routerAddress: string | null
-  warnings?: string[]
-  allocationPercent: number
-}
+export interface SellAllLegQuote extends ApiLegQuote {}
 
 export interface SellAllPreviewResponse {
   mode: 'demo' | 'live'
@@ -208,30 +218,14 @@ export async function previewSellAll(
   })
 }
 
-function sellLegQuoteFromApi(leg: SellAllLegQuote, outputToken: Token): LegQuote {
+function sellLegQuoteFromApi(leg: SellAllLegQuote, outputToken: Token, chainId: number): LegQuote {
   const inputToken = requireToken(leg.fromToken)
-  const outputAmount = leg.estimatedOutput
+  const bestQuote = mapApiLegToQuoteResponse(leg, inputToken, outputToken, chainId)
   const outputAmountUsd =
     outputToken.priceUsd > 0
-      ? parseFloat(outputAmount) * outputToken.priceUsd
+      ? parseFloat(bestQuote.outputAmount) * outputToken.priceUsd
       : leg.inputAmountUsd
-
-  const bestQuote: QuoteResponse = {
-    provider: normalizeProvider(leg.provider),
-    inputToken,
-    outputToken,
-    inputAmount: String(Math.round(leg.inputAmountUsd * Math.pow(10, inputToken.decimals))),
-    inputAmountUsd: leg.inputAmountUsd,
-    outputAmount,
-    outputAmountUsd,
-    estimatedGasUsd: leg.estimatedGasUsd,
-    estimatedGasUnits: Math.round(leg.estimatedGasUsd * 1e9),
-    priceImpactPercent: leg.priceImpactPercent,
-    routeSummary: leg.routeSummary ? [leg.routeSummary] : [],
-    calldata: mapCalldata(leg.calldata),
-    routerAddress: mapRouterAddress(leg.routerAddress),
-    warnings: leg.warnings ?? [],
-  }
+  bestQuote.outputAmountUsd = outputAmountUsd
 
   return {
     allocation: {
@@ -254,20 +248,7 @@ export interface SellBasketPreviewRequest {
   positionValueUsd?: number
 }
 
-export interface SellBasketLegQuote {
-  provider: string
-  fromToken: string
-  toToken: string
-  inputAmountUsd: number
-  estimatedOutput: string
-  estimatedGasUsd: number
-  priceImpactPercent: number
-  routeSummary: string
-  calldata: string | null
-  routerAddress: string | null
-  warnings?: string[]
-  allocationPercent: number
-}
+export interface SellBasketLegQuote extends ApiLegQuote {}
 
 export interface SellBasketPreviewResponse {
   mode: 'demo' | 'live'
@@ -311,7 +292,7 @@ export function mapSellBasketResponseToPreview(
   outputTokenSymbol = 'USDC'
 ): BasketQuotePreview {
   const outputToken = requireToken(outputTokenSymbol)
-  const legs = response.quotes.map((q) => sellLegQuoteFromApi(q, outputToken))
+  const legs = response.quotes.map((q) => sellLegQuoteFromApi(q, outputToken, chainId))
   const totalInputUsd =
     response.inputAmountUsd ?? legs.reduce((sum, l) => sum + l.allocation.inputAmountUsd, 0)
   const totalOutputUsd =
@@ -342,7 +323,7 @@ export function mapSellAllResponseToPreview(
   outputTokenSymbol = 'USDC'
 ): BasketQuotePreview {
   const outputToken = requireToken(outputTokenSymbol)
-  const legs = response.quotes.map((q) => sellLegQuoteFromApi(q, outputToken))
+  const legs = response.quotes.map((q) => sellLegQuoteFromApi(q, outputToken, chainId))
   const totalInputUsd =
     response.inputAmountUsd ?? legs.reduce((sum, l) => sum + l.allocation.inputAmountUsd, 0)
   const totalOutputUsd =

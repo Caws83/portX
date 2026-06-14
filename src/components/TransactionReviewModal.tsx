@@ -417,7 +417,7 @@ export function TransactionReviewModal({
 
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-                0x route & calldata
+                Signable quote metadata (0x)
               </p>
               {readiness.legs.map((leg) => (
                 <div
@@ -430,30 +430,62 @@ export function TransactionReviewModal({
                     </span>
                     <RouteProviderBadge provider={leg.provider} />
                   </div>
-                  <div className="grid grid-cols-1 gap-1 font-mono text-portx-muted">
-                    <p>
-                      <span className="text-portx-muted/80">Router: </span>
-                      <span className="text-white">{leg.routerDisplay}</span>
-                    </p>
-                    <p>
-                      <span className="text-portx-muted/80">Calldata: </span>
-                      <span
-                        className={
-                          leg.calldataStatus === 'available' ? 'text-portx-green' : 'text-portx-warning'
-                        }
-                      >
-                        {leg.calldataStatus === 'available'
+                  <ul className="space-y-1 font-mono text-portx-muted">
+                    <ChecklistRow
+                      label="Calldata present"
+                      passed={leg.hasExecutableCalldata}
+                      detail={
+                        leg.hasExecutableCalldata
                           ? `${leg.calldataDisplay} (${leg.calldata.length} chars)`
                           : leg.calldataStatus === 'demo'
                             ? 'Demo placeholder'
                             : leg.calldataStatus === 'unsupported'
                               ? 'Unsupported on Ethereum'
-                              : 'Missing'}
-                      </span>
+                              : 'Missing'
+                      }
+                    />
+                    <ChecklistRow
+                      label="Exact sell amount"
+                      passed={leg.hasExactSellAmount}
+                      detail={
+                        leg.hasExactSellAmount && leg.sellAmount
+                          ? `${leg.sellAmount} base units`
+                          : 'USD estimate only'
+                      }
+                    />
+                    <ChecklistRow
+                      label="Approval required"
+                      passed={!leg.requiresApproval}
+                      detail={
+                        leg.requiresApproval
+                          ? `Yes — approve spender ${leg.spenderDisplay}`
+                          : 'No (native ETH or N/A)'
+                      }
+                    />
+                  </ul>
+                  <div className="grid grid-cols-1 gap-1 font-mono text-portx-muted pt-1 border-t border-portx-border">
+                    <p>
+                      <span className="text-portx-muted/80">transaction.to: </span>
+                      <span className="text-white">{leg.transactionToDisplay}</span>
                     </p>
+                    {leg.spender && (
+                      <p>
+                        <span className="text-portx-muted/80">spender: </span>
+                        <span className="text-white">{leg.spenderDisplay}</span>
+                      </p>
+                    )}
+                    {leg.transactionValue && leg.transactionValue !== '0' && (
+                      <p>
+                        <span className="text-portx-muted/80">transaction.value: </span>
+                        <span className="text-white">{leg.transactionValue} wei</span>
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
+              <p className="text-xs text-portx-warning font-medium">
+                Execution disabled in Alpha — quote data is prepared for review only.
+              </p>
             </div>
           </div>
         )}

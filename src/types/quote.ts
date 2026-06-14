@@ -1,5 +1,6 @@
 import type { Token } from './token'
 import type { QuoteProvider } from './route'
+import type { QuoteExecutionMetadata } from '@/utils/executionMetadata'
 
 export interface QuoteRequest {
   inputToken: Token
@@ -30,6 +31,8 @@ export interface QuoteResponse {
   routerAddress: string
   warnings: string[]
   expiresAt?: number
+  /** Exact execution fields from 0x API — null for demo/fallback quotes */
+  execution?: QuoteExecutionMetadata
 }
 
 export interface AllocationLeg {

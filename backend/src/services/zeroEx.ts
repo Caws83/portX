@@ -7,6 +7,7 @@ import {
   validateQuotePair,
 } from '../config/supportedTokens.js'
 import { getTokenPrices } from './coingecko.js'
+import { buildExecutionMetadata } from '../utils/executionMetadata.js'
 import type { ProviderQuote, QuoteRequest } from '../types/quote.js'
 
 const ZEROX_QUOTE_URL = 'https://api.0x.org/swap/allowance-holder/quote'
@@ -24,11 +25,21 @@ export interface ZeroExSwapQuoteParams {
 interface ZeroExApiQuote {
   buyAmount?: string
   sellAmount?: string
+  buyToken?: string
+  sellToken?: string
+  allowanceTarget?: string
   transaction?: {
     to?: string
     data?: string
+    value?: string
     gas?: string
     gasPrice?: string
+  }
+  issues?: {
+    allowance?: {
+      spender?: string
+      actual?: string
+    }
   }
   totalNetworkFee?: string
   estimatedPriceImpact?: string
@@ -149,6 +160,23 @@ export async function getSwapQuote(params: ZeroExSwapQuoteParams): Promise<Provi
 
   const calldata = data.transaction?.data
   const routerAddress = data.transaction?.to
+  const spender = data.issues?.allowance?.spender ?? data.allowanceTarget ?? null
+  const tokenIn = data.sellToken ?? resolveQuoteTokenAddress(sellSymbol)
+  const tokenOut = data.buyToken ?? resolveQuoteTokenAddress(buySymbol)
+
+  const execution = buildExecutionMetadata({
+    chainId: params.chainId,
+    sellAmount: data.sellAmount ?? sellAmount,
+    buyAmount: data.buyAmount,
+    spender,
+    transactionTo: routerAddress,
+    transactionData: calldata,
+    transactionValue: data.transaction?.value ?? '0',
+    gas: data.transaction?.gas,
+    gasPrice: data.transaction?.gasPrice,
+    tokenIn,
+    tokenOut,
+  })
 
   return {
     provider: '0x',
@@ -159,9 +187,23 @@ export async function getSwapQuote(params: ZeroExSwapQuoteParams): Promise<Provi
     estimatedGasUsd: estimateGasUsd(data.totalNetworkFee),
     priceImpactPercent: Number.isFinite(priceImpact) ? priceImpact : 0.1,
     routeSummary: buildRouteSummary(data, sellSymbol, buySymbol),
-    calldata: calldata && calldata.length > 2 ? calldata : null,
-    routerAddress: routerAddress ?? null,
+    calldata: execution.transactionData,
+    routerAddress: execution.transactionTo,
     warnings: [],
+    sellAmount: execution.sellAmount,
+    buyAmount: execution.buyAmount,
+    spender: execution.spender,
+    transactionTo: execution.transactionTo,
+    transactionData: execution.transactionData,
+    transactionValue: execution.transactionValue,
+    gas: execution.gas,
+    gasPrice: execution.gasPrice,
+    tokenIn: execution.tokenIn,
+    tokenOut: execution.tokenOut,
+    chainId: execution.chainId,
+    hasExecutableCalldata: execution.hasExecutableCalldata,
+    hasExactSellAmount: execution.hasExactSellAmount,
+    requiresApproval: execution.requiresApproval,
   }
 }
 
