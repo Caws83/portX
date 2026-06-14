@@ -1,5 +1,13 @@
 import type { Token } from './token'
+import type { TokenAllocation } from './token'
 import type { BasketPurchase } from './basket'
+
+export interface SellBasketParams {
+  basketId: string
+  allocations: TokenAllocation[]
+  positionValueUsd: number
+  entryValueUsd?: number
+}
 
 export interface HeldToken {
   token: Token

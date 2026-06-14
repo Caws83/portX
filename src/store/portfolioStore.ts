@@ -1,8 +1,14 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { HeldToken, PortfolioTargets } from '@/types/portfolio'
+import type { HeldToken, PortfolioTargets, SellBasketParams } from '@/types/portfolio'
 import type { BasketPurchase } from '@/types/basket'
+import type { TokenAllocation } from '@/types/token'
 import { DEMO_TOKENS } from '@/data/tokens'
+import {
+  applyBasketBuyToHoldings,
+  applyBasketSellToHoldings,
+  sumHeldValueUsd,
+} from '@/utils/portfolioHoldings'
 
 const INITIAL_HELD: HeldToken[] = [
   { token: DEMO_TOKENS[0], balance: 1.2, valueUsd: 4140 },
@@ -16,9 +22,11 @@ interface PortfolioState {
   heldTokens: HeldToken[]
   activeBaskets: BasketPurchase[]
   targets: PortfolioTargets
+  /** When true, UI reads persisted local demo mutations over API portfolio snapshot. */
+  localDemoOverride: boolean
   setTargets: (targets: Partial<PortfolioTargets>) => void
-  buyBasket: (purchase: BasketPurchase) => void
-  sellBasket: (basketId: string) => void
+  buyBasket: (purchase: BasketPurchase, allocations: TokenAllocation[]) => void
+  sellBasket: (params: SellBasketParams) => void
   sellAllPortfolio: () => void
   refreshDemoPrices: () => void
 }
@@ -42,35 +50,53 @@ export const usePortfolioStore = create<PortfolioState>()(
         stopLossPercent: null,
         targetSellPriceUsd: null,
       },
+      localDemoOverride: false,
 
       setTargets: (partial) =>
         set((s) => ({
           targets: { ...s.targets, ...partial },
         })),
 
-      buyBasket: (purchase) => {
-        // SMART CONTRACT: execute multi-token swap via PortX basket contract
-        // DEX ROUTER: aggregate quotes from 0x / 1inch / Uniswap for each leg
-        set((s) => ({
-          activeBaskets: [...s.activeBaskets, purchase],
-          totalValueUsd: s.totalValueUsd + purchase.amountUsd,
-          costBasisUsd: s.costBasisUsd + purchase.amountUsd,
-        }))
+      buyBasket: (purchase, allocations) => {
+        set((s) => {
+          const heldTokens = applyBasketBuyToHoldings(
+            s.heldTokens,
+            allocations,
+            purchase.amountUsd
+          )
+          return {
+            activeBaskets: [...s.activeBaskets, purchase],
+            heldTokens,
+            totalValueUsd: sumHeldValueUsd(heldTokens),
+            costBasisUsd: s.costBasisUsd + purchase.amountUsd,
+            localDemoOverride: true,
+          }
+        })
       },
 
-      sellBasket: (basketId) => {
-        // SMART CONTRACT: redeem basket position, route sells through DEX aggregator
+      sellBasket: ({ basketId, allocations, positionValueUsd, entryValueUsd }) => {
         const basket = get().activeBaskets.find((b) => b.basketId === basketId)
         if (!basket) return
-        set((s) => ({
-          activeBaskets: s.activeBaskets.filter((b) => b.basketId !== basketId),
-          totalValueUsd: Math.max(0, s.totalValueUsd - basket.amountUsd),
-        }))
+
+        set((s) => {
+          const heldTokens = applyBasketSellToHoldings(
+            s.heldTokens,
+            allocations,
+            positionValueUsd
+          )
+          const basisReduction = entryValueUsd ?? basket.entryValueUsd ?? basket.amountUsd
+
+          return {
+            activeBaskets: s.activeBaskets.filter((b) => b.basketId !== basketId),
+            heldTokens,
+            totalValueUsd: sumHeldValueUsd(heldTokens),
+            costBasisUsd: Math.max(0, s.costBasisUsd - basisReduction),
+            localDemoOverride: true,
+          }
+        })
       },
 
       sellAllPortfolio: () => {
-        // SMART CONTRACT: batch sell all held tokens + close basket positions
-        // DEX ROUTER: getBestRoute() for full portfolio unwind
         set({
           heldTokens: [],
           activeBaskets: [],
@@ -81,6 +107,7 @@ export const usePortfolioStore = create<PortfolioState>()(
             stopLossPercent: null,
             targetSellPriceUsd: null,
           },
+          localDemoOverride: true,
         })
       },
 
@@ -91,8 +118,8 @@ export const usePortfolioStore = create<PortfolioState>()(
             ...h,
             valueUsd: h.valueUsd * jitter(),
           }))
-          const totalValueUsd = heldTokens.reduce((a, h) => a + h.valueUsd, 0)
-          return { heldTokens, totalValueUsd }
+          const totalValueUsd = sumHeldValueUsd(heldTokens)
+          return { heldTokens, totalValueUsd, localDemoOverride: true }
         })
       },
     }),

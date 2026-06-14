@@ -90,15 +90,24 @@ export function Baskets() {
     setConfirming(true)
     try {
       const result = await executeDemoPlan(plan)
-      if (plan.type === 'buy' && plan.basketId) {
-        buyBasket({
+      if (plan.type === 'buy' && plan.basketId && selectedBasket) {
+        buyBasket(
+          {
+            basketId: plan.basketId,
+            amountUsd: plan.totalInputUsd,
+            purchasedAt: Date.now(),
+            entryValueUsd: plan.totalInputUsd,
+          },
+          selectedBasket.allocations
+        )
+      } else if (plan.type === 'sell_basket' && plan.basketId && selectedBasket) {
+        const purchase = activeBaskets.find((b) => b.basketId === plan.basketId)
+        sellBasket({
           basketId: plan.basketId,
-          amountUsd: plan.totalInputUsd,
-          purchasedAt: Date.now(),
-          entryValueUsd: plan.totalInputUsd,
+          allocations: selectedBasket.allocations,
+          positionValueUsd: purchase?.amountUsd ?? plan.totalInputUsd,
+          entryValueUsd: purchase?.entryValueUsd,
         })
-      } else if (plan.type === 'sell_basket' && plan.basketId) {
-        sellBasket(plan.basketId)
       }
       setTxMsg(result.message)
       setModalOpen(false)
@@ -119,8 +128,17 @@ export function Baskets() {
   }
 
   const handleSell = async (basketId: string) => {
+    const basket = allBaskets.find((b) => b.id === basketId)
+    const purchase = activeBaskets.find((b) => b.basketId === basketId)
+    if (!basket || !purchase) return
+
     setTxMsg(null)
-    sellBasket(basketId)
+    sellBasket({
+      basketId,
+      allocations: basket.allocations,
+      positionValueUsd: purchase.amountUsd,
+      entryValueUsd: purchase.entryValueUsd,
+    })
     setTxMsg('Demo basket position removed.')
   }
 

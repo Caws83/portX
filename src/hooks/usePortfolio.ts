@@ -89,12 +89,21 @@ export function usePortfolio() {
     setRetryCount((c) => c + 1)
   }, [])
 
-  const displayTotalValueUsd = apiView?.totalValueUsd ?? store.totalValueUsd
-  const displayCostBasisUsd = apiView?.costBasisUsd ?? store.costBasisUsd
-  const displayHeldTokens: HeldToken[] =
-    apiView?.heldTokens?.length ? apiView.heldTokens : store.heldTokens
-  const displayActiveBasketIds =
-    apiView?.activeBasketIds ?? store.activeBaskets.map((b) => b.basketId)
+  const useLocalDemoPortfolio =
+    store.localDemoOverride || source === 'fallback' || !apiView?.heldTokens?.length
+
+  const displayTotalValueUsd = useLocalDemoPortfolio
+    ? store.totalValueUsd
+    : (apiView?.totalValueUsd ?? store.totalValueUsd)
+  const displayCostBasisUsd = useLocalDemoPortfolio
+    ? store.costBasisUsd
+    : (apiView?.costBasisUsd ?? store.costBasisUsd)
+  const displayHeldTokens: HeldToken[] = useLocalDemoPortfolio
+    ? store.heldTokens
+    : (apiView?.heldTokens ?? store.heldTokens)
+  const displayActiveBasketIds = useLocalDemoPortfolio
+    ? store.activeBaskets.map((b) => b.basketId)
+    : (apiView?.activeBasketIds ?? store.activeBaskets.map((b) => b.basketId))
 
   const displayActiveBaskets = useMemo(
     () => mapBasketIdsToPurchases(displayActiveBasketIds, store.activeBaskets),
