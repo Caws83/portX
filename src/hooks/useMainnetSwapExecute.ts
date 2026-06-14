@@ -20,13 +20,23 @@ export type MainnetSwapExecuteStatus = 'idle' | 'approving' | 'pending' | 'succe
 export interface UseMainnetSwapExecuteResult {
   isEligible: boolean
   showPilotUi: boolean
+  showPilotPanel: boolean
   disabledReason: string | null
   checks: ReturnType<typeof assessMainnetPilotEligibility>['checks']
+  passingChecks: ReturnType<typeof assessMainnetPilotEligibility>['passingChecks']
+  failingChecks: ReturnType<typeof assessMainnetPilotEligibility>['failingChecks']
+  quoteSource: MainnetPilotQuoteSource
+  walletConnected: boolean
+  walletChainId: number | undefined
   requiresApproval: boolean
   approvalRequired: boolean
   allowanceSufficient: boolean
   spenderDisplay: string | null
+  spenderAddress: string | null
   tokenSymbol: string | null
+  tokenInAddress: string | null
+  tokenOutAddress: string | null
+  transactionTo: string | null
   status: MainnetSwapExecuteStatus
   txHash?: Hex
   approvalTxHash?: Hex
@@ -103,7 +113,11 @@ export function useMainnetSwapExecute(
     args: address && spender ? [address, spender] : undefined,
     chainId: mainnetChainId,
     query: {
-      enabled: open && assessment.eligible && requiresApproval && Boolean(address && spender && tokenAddress),
+      enabled:
+        open &&
+        requiresApproval &&
+        Boolean(address && spender && tokenAddress) &&
+        chainId === mainnetChainId,
     },
   })
 
@@ -256,6 +270,7 @@ export function useMainnetSwapExecute(
   const isBusy = status === 'pending' || status === 'approving' || isApprovePending || isSendPending
   const canExecuteSwap = assessment.eligible && allowanceSufficient && !isBusy && status !== 'success'
   const showPilotUi = assessment.eligible && plan?.type === 'buy'
+  const showPilotPanel = plan?.type === 'buy'
 
   const spenderDisplay = execution?.spender
     ? `${execution.spender.slice(0, 8)}…${execution.spender.slice(-4)}`
@@ -264,13 +279,23 @@ export function useMainnetSwapExecute(
   return {
     isEligible: assessment.eligible,
     showPilotUi,
+    showPilotPanel,
     disabledReason: assessment.disabledReason,
     checks: assessment.checks,
+    passingChecks: assessment.passingChecks,
+    failingChecks: assessment.failingChecks,
+    quoteSource,
+    walletConnected,
+    walletChainId: chainId,
     requiresApproval,
     approvalRequired,
     allowanceSufficient,
     spenderDisplay,
+    spenderAddress: execution?.spender ?? null,
     tokenSymbol,
+    tokenInAddress: execution?.tokenIn ?? tokenAddress,
+    tokenOutAddress: execution?.tokenOut ?? null,
+    transactionTo: execution?.transactionTo ?? null,
     status: isBusy && status === 'idle' ? 'pending' : status,
     txHash,
     approvalTxHash,

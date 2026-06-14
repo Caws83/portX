@@ -40,6 +40,7 @@ import {
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
 import { QuoteQualityPanel } from './QuoteQualityPanel'
+import { MainnetPilotReadinessPanel } from './MainnetPilotReadinessPanel'
 import { assessQuoteQualityFromPlan, isLegUnsupported } from '@/utils/quoteQuality'
 
 type ReviewQuoteSource = 'api' | 'fallback' | 'testnet' | null
@@ -115,6 +116,7 @@ export function TransactionReviewModal({
   const showTestnetExecute =
     testnetExecute.isTestnetUniswapPlan && ENABLE_TESTNET_MODE && enableLiveExecution
   const showMainnetPilotExecute = mainnetPilot.showPilotUi && !showTestnetExecute
+  const showMainnetPilotPanel = mainnetPilot.showPilotPanel && !showTestnetExecute
   const savedHistoryTxRef = useRef<string | null>(null)
 
   const walletConnected = isConnected && Boolean(address)
@@ -923,7 +925,7 @@ export function TransactionReviewModal({
                 ]
               : testnetExecute.isTestnetUniswapPlan
                 ? plan.warnings
-                : showMainnetPilotExecute
+                : showMainnetPilotPanel
                   ? [
                       'Mainnet pilot — single-leg buy only. Multi-leg and sell execution remain disabled.',
                       ...plan.warnings,
@@ -935,77 +937,8 @@ export function TransactionReviewModal({
           }
         />
 
-        {showMainnetPilotExecute && (
-          <div className="mt-4 p-4 rounded-xl border border-portx-green/30 bg-portx-green/5 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-portx-green">
-              Mainnet buy pilot
-            </p>
-            <ul className="space-y-1">
-              {mainnetPilot.checks.map((check) => (
-                <ChecklistRow
-                  key={check.id}
-                  label={check.label}
-                  passed={check.passed}
-                  detail={check.detail}
-                />
-              ))}
-            </ul>
-            {mainnetPilot.requiresApproval && mainnetPilot.approvalRequired && (
-              <div className="rounded-xl border border-portx-warning/40 bg-portx-warning/10 p-3 space-y-2">
-                <p className="text-sm font-semibold text-portx-warning">Approval required</p>
-                <p className="text-xs text-portx-muted">
-                  Approve {mainnetPilot.tokenSymbol} for AllowanceHolder{' '}
-                  {mainnetPilot.spenderDisplay} before executing the swap. Approval is not sent
-                  automatically.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void mainnetPilot.approve()}
-                  disabled={mainnetPilot.isBusy}
-                  className="btn-secondary w-full py-2.5 text-sm disabled:opacity-50"
-                >
-                  {mainnetPilot.status === 'approving'
-                    ? 'Approving…'
-                    : `Approve ${mainnetPilot.tokenSymbol}`}
-                </button>
-                {mainnetPilot.approvalExplorerUrl && (
-                  <a
-                    href={mainnetPilot.approvalExplorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-portx-green text-xs underline block"
-                  >
-                    View approval on Etherscan
-                  </a>
-                )}
-              </div>
-            )}
-            {mainnetPilot.requiresApproval && mainnetPilot.allowanceSufficient && (
-              <p className="text-xs text-portx-green">Token allowance sufficient for this swap.</p>
-            )}
-            {mainnetPilot.simulationMessage && mainnetPilot.status !== 'idle' && (
-              <p
-                className={`text-xs ${
-                  mainnetPilot.simulationPassed ? 'text-portx-green' : 'text-portx-warning'
-                }`}
-              >
-                {mainnetPilot.simulationMessage}
-              </p>
-            )}
-            {mainnetPilot.errorMessage && (
-              <p className="text-xs text-portx-danger">{mainnetPilot.errorMessage}</p>
-            )}
-            {mainnetPilot.explorerUrl && (
-              <a
-                href={mainnetPilot.explorerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-portx-green text-sm underline"
-              >
-                View swap on Etherscan
-              </a>
-            )}
-          </div>
+        {showMainnetPilotPanel && (
+          <MainnetPilotReadinessPanel pilot={mainnetPilot} legCount={plan.legs.length} />
         )}
 
         <div className="flex gap-3 mt-6">
@@ -1068,7 +1001,7 @@ export function TransactionReviewModal({
                   disabled={!mainnetPilot.canExecuteSwap}
                   title={
                     mainnetPilot.approvalRequired
-                      ? 'Approval required'
+                      ? 'Missing approval'
                       : (mainnetPilot.disabledReason ?? undefined)
                   }
                   className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1076,6 +1009,19 @@ export function TransactionReviewModal({
                   {mainnetPilot.status === 'pending'
                     ? 'Executing Mainnet Pilot…'
                     : 'Execute Mainnet Pilot'}
+                </button>
+              ) : plan.type === 'buy' && !showTestnetExecute ? (
+                <button
+                  type="button"
+                  disabled
+                  title={
+                    mainnetPilot.failingChecks[0]?.detail ??
+                    mainnetPilot.disabledReason ??
+                    getAlphaExecutionDisabledLabel(plan)
+                  }
+                  className="btn-primary flex-1 opacity-50 cursor-not-allowed"
+                >
+                  {getAlphaExecutionDisabledLabel(plan)}
                 </button>
               ) : (
                 <button

@@ -14,6 +14,8 @@ export interface MainnetPilotAssessment {
   eligible: boolean
   disabledReason: string | null
   checks: MainnetPilotCheck[]
+  passingChecks: MainnetPilotCheck[]
+  failingChecks: MainnetPilotCheck[]
 }
 
 export interface MainnetPilotContext {
@@ -38,7 +40,13 @@ export function assessMainnetPilotEligibility(
   }
 
   if (!plan) {
-    return { eligible: false, disabledReason: 'No execution plan', checks }
+    return {
+      eligible: false,
+      disabledReason: 'No execution plan',
+      checks,
+      passingChecks: [],
+      failingChecks: [],
+    }
   }
 
   add(
@@ -119,5 +127,63 @@ export function assessMainnetPilotEligibility(
     eligible,
     disabledReason: eligible ? null : (firstFail?.detail ?? firstFail?.label ?? 'Not eligible'),
     checks,
+    passingChecks: checks.filter((c) => c.passed),
+    failingChecks: checks.filter((c) => !c.passed),
   }
+}
+
+const BLOCKER_MESSAGES: Record<string, string> = {
+  flag: 'Feature flag disabled — set VITE_ENABLE_MAINNET_EXECUTION=true for internal testing.',
+  buy_only: 'Sell plans are not supported by the mainnet pilot.',
+  single_leg: 'Multi-leg basket — the pilot only supports single-leg buys.',
+  live_quote: 'Demo quote — a live PortX API quote is required.',
+  api_source: 'Local fallback quote — connect to the PortX API for live execution data.',
+  mainnet_chain: 'Wrong network — quote plan must be on Ethereum mainnet (chain 1).',
+  wallet_network: 'Wrong network — switch your wallet to Ethereum mainnet (chain 1).',
+  zero_x_provider: 'No live 0x route on this leg.',
+  no_unsupported: 'Unsupported token — one or more legs cannot route on Ethereum.',
+  executable_calldata: 'Missing executable calldata from the 0x quote.',
+  exact_sell_amount: 'Missing exact sellAmount from the 0x quote.',
+  transaction_to: 'Missing transaction.to from the 0x quote.',
+  transaction_data: 'Missing transaction.data from the 0x quote.',
+}
+
+export function getMainnetPilotBlockerMessages(
+  checks: MainnetPilotCheck[],
+  options?: { approvalRequired?: boolean; legCount?: number }
+): string[] {
+  const messages: string[] = []
+  const seen = new Set<string>()
+
+  for (const check of checks.filter((c) => !c.passed)) {
+    let message = BLOCKER_MESSAGES[check.id]
+    if (check.id === 'single_leg' && options?.legCount != null) {
+      message = `Multi-leg basket (${options.legCount} legs) — the pilot only supports single-leg buys.`
+    }
+    if (message && !seen.has(message)) {
+      seen.add(message)
+      messages.push(message)
+    }
+  }
+
+  if (options?.approvalRequired) {
+    const approvalMsg = 'Missing approval — approve the input token for the AllowanceHolder before executing.'
+    if (!seen.has(approvalMsg)) messages.push(approvalMsg)
+  }
+
+  return messages
+}
+
+export function formatQuoteSourceLabel(source: MainnetPilotQuoteSource): string {
+  if (source === 'api') return 'PortX API'
+  if (source === 'fallback') return 'Local fallback'
+  if (source === 'testnet') return 'Sepolia testnet'
+  return 'Unknown'
+}
+
+export function formatWalletChainLabel(chainId: number | undefined, connected: boolean): string {
+  if (!connected) return 'Wallet not connected'
+  if (chainId === mainnet.id) return `Ethereum mainnet (${chainId})`
+  if (chainId == null) return 'Unknown chain'
+  return `Chain ${chainId} — switch to Ethereum mainnet (1)`
 }
