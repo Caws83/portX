@@ -4,10 +4,17 @@ import { AppModeBadge } from './AppModeIndicator'
 import { Logo } from './Logo'
 import { WalletButton } from './WalletButton'
 
-const links = [
+type NavLinkItem = {
+  to: string
+  label: string
+  badge?: string
+}
+
+const links: NavLinkItem[] = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/discover', label: 'Discover' },
   { to: '/baskets', label: 'Baskets' },
+  { to: '/lending', label: 'Lending', badge: 'Coming Soon' },
   { to: '/create-basket', label: 'Create' },
   { to: '/sell-all', label: BUTTON_LABELS.sellAllNav },
   { to: '/agents', label: 'Agents' },
@@ -26,12 +33,12 @@ export function Navbar() {
             </div>
 
             <nav className="hidden lg:flex items-center gap-0.5">
-              {links.map(({ to, label }) => (
+              {links.map(({ to, label, badge }) => (
                 <NavLink
                   key={to}
                   to={to}
                   className={({ isActive }) =>
-                    `px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    `inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                       isActive
                         ? 'text-portx-green bg-portx-green/10'
                         : 'text-white/70 hover:text-white hover:bg-white/10'
@@ -39,6 +46,11 @@ export function Navbar() {
                   }
                 >
                   {label}
+                  {badge && (
+                    <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-portx-blue/15 text-portx-blue border border-portx-blue/25">
+                      {badge}
+                    </span>
+                  )}
                 </NavLink>
               ))}
             </nav>
@@ -53,17 +65,22 @@ export function Navbar() {
           </div>
 
           <nav className="lg:hidden flex gap-1 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
-            {links.map(({ to, label }) => (
+            {links.map(({ to, label, badge }) => (
               <NavLink
                 key={to}
                 to={to}
                 className={({ isActive }) =>
-                  `shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
+                  `shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap ${
                     isActive ? 'text-portx-green bg-portx-green/10' : 'text-white/70'
                   }`
                 }
               >
                 {label}
+                {badge && (
+                  <span className="text-[8px] font-semibold uppercase tracking-wide px-1 py-0.5 rounded-full bg-portx-blue/15 text-portx-blue border border-portx-blue/25">
+                    {badge}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
