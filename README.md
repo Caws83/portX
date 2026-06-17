@@ -1,6 +1,6 @@
 # PortX official
 
-**Trade portfolios like a single asset.**
+**Trade portfolios like a single asset.***
 
 PortX is a DeFi portfolio trading platform that lets users buy, manage, and sell crypto portfolios as one position instead of swapping tokens one by one.
 
