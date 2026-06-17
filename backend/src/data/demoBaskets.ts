@@ -10,6 +10,15 @@ function alloc(symbols: string[], weights: number[]) {
 
 export const DEMO_BASKETS: Basket[] = [
   {
+    id: 'mainnet-pilot-link',
+    name: 'Mainnet Pilot — LINK',
+    description:
+      'Internal single-leg pilot fixture. 100% LINK bought with USDC on Ethereum mainnet. For gated testing only.',
+    tag: 'Pilot',
+    allocations: alloc(['LINK'], [100]),
+    totalValueUsd: 100,
+  },
+  {
     id: 'top-5-crypto',
     name: 'Top 5 Crypto',
     description: 'Weighted exposure to the largest assets by market cap.',

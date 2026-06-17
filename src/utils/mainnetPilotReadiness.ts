@@ -1,5 +1,6 @@
 import type { ExecutionPlan } from '@/types/execution'
 import { mainnet } from 'viem/chains'
+import { PILOT_MIN_AMOUNT_WARNING, PILOT_MIN_BUY_AMOUNT_USD } from '@/config/constants'
 
 export type MainnetPilotQuoteSource = 'api' | 'fallback' | 'testnet' | null
 
@@ -78,6 +79,14 @@ export function assessMainnetPilotEligibility(
       ? `Wallet chain ${context.currentChainId ?? 'unknown'}`
       : 'Connect wallet'
   )
+  add(
+    'pilot_min_notional',
+    'Pilot minimum notional',
+    plan.totalInputUsd >= PILOT_MIN_BUY_AMOUNT_USD,
+    plan.totalInputUsd < PILOT_MIN_BUY_AMOUNT_USD
+      ? PILOT_MIN_AMOUNT_WARNING
+      : `${plan.totalInputUsd} USDC`
+  )
 
   const leg = legFromPlan(plan)
   const quote = leg?.quote
@@ -140,6 +149,7 @@ const BLOCKER_MESSAGES: Record<string, string> = {
   api_source: 'Local fallback quote — connect to the PortX API for live execution data.',
   mainnet_chain: 'Wrong network — quote plan must be on Ethereum mainnet (chain 1).',
   wallet_network: 'Wrong network — switch your wallet to Ethereum mainnet (chain 1).',
+  pilot_min_notional: PILOT_MIN_AMOUNT_WARNING,
   zero_x_provider: 'No live 0x route on this leg.',
   no_unsupported: 'Unsupported token — one or more legs cannot route on Ethereum.',
   executable_calldata: 'Missing executable calldata from the 0x quote.',

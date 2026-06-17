@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_LIVE_EXECUTION?: string
   /** Mainnet single-leg buy pilot — keep false unless explicitly testing */
   readonly VITE_ENABLE_MAINNET_EXECUTION?: string
+  /** Optional Alchemy key for reliable Ethereum mainnet RPC (simulation + reads) */
+  readonly VITE_ALCHEMY_KEY?: string
 }
 
 interface ImportMeta {

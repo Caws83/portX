@@ -2,6 +2,7 @@ import type { ProviderQuote, QuoteRequest } from '../types/quote.js'
 import { validateQuotePair } from '../config/supportedTokens.js'
 import { getSwapQuote, isZeroExConfigured, quoteRequestToZeroEx } from './zeroEx.js'
 import { getBestQuoteLocal } from './routeSelector.js'
+import { emptyExecutionMetadata } from '../utils/executionMetadata.js'
 
 export type QuotesSource = '0x' | 'fallback' | 'unsupported'
 
@@ -30,7 +31,33 @@ export function buildUnsupportedQuote(
     calldata: null,
     routerAddress: null,
     warnings: [reason],
+    ...emptyExecutionMetadata(request.chainId),
   }
+}
+
+function buildZeroXUnavailableQuote(request: QuoteRequest, reason: string): ProviderQuote {
+  return {
+    provider: '0x-demo',
+    fromToken: request.inputToken,
+    toToken: request.outputToken,
+    inputAmountUsd: request.inputAmountUsd,
+    estimatedOutput: '0',
+    estimatedGasUsd: 0,
+    priceImpactPercent: 0,
+    routeSummary: `${request.inputToken} → ${request.outputToken} (0x unavailable)`,
+    calldata: null,
+    routerAddress: null,
+    warnings: [reason],
+    ...emptyExecutionMetadata(request.chainId),
+  }
+}
+
+function isLiveZeroXQuote(quote: ProviderQuote): boolean {
+  return (
+    quote.provider === '0x' &&
+    quote.hasExecutableCalldata === true &&
+    quote.hasExactSellAmount === true
+  )
 }
 
 /**
@@ -54,10 +81,15 @@ export async function getBestQuote(request: QuoteRequest): Promise<ProviderQuote
       lastQuotesSource = '0x'
       return quote
     } catch (err) {
-      console.warn('[PortX] 0x quote unavailable — using local quote fallback.', err)
+      const message = err instanceof Error ? err.message : '0x quote unavailable'
+      console.warn('[PortX] 0x quote unavailable — returning non-executable leg.', err)
+      lastQuotesSource = 'fallback'
+      return buildZeroXUnavailableQuote(request, message)
     }
   }
 
   lastQuotesSource = 'fallback'
   return getBestQuoteLocal(request)
 }
+
+export { isLiveZeroXQuote }

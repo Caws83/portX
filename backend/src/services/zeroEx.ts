@@ -1,5 +1,10 @@
 import { env } from '../config/env.js'
 import {
+  PILOT_MIN_AMOUNT_WARNING,
+  PILOT_MIN_LEG_AMOUNT_USD,
+  PILOT_WALLET_REQUIRED_WARNING,
+} from '../config/pilot.js'
+import {
   ETHEREUM_MAINNET_CHAIN_ID,
   getTokenRouteMetadata,
   normalizeRouteSymbol,
@@ -11,7 +16,6 @@ import { buildExecutionMetadata } from '../utils/executionMetadata.js'
 import type { ProviderQuote, QuoteRequest } from '../types/quote.js'
 
 const ZEROX_QUOTE_URL = 'https://api.0x.org/swap/allowance-holder/quote'
-const DEFAULT_TAKER = '0x0000000000000000000000000000000000000000'
 
 export interface ZeroExSwapQuoteParams {
   chainId: number
@@ -50,6 +54,14 @@ interface ZeroExApiQuote {
 
 export function isZeroExConfigured(): boolean {
   return Boolean(env.zeroXApiKey?.trim())
+}
+
+function isValidTakerAddress(address: string | undefined): boolean {
+  if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return false
+  const lower = address.toLowerCase()
+  if (lower === '0x0000000000000000000000000000000000000000') return false
+  if (lower === '0x0000000000000000000000000000000000000001') return false
+  return true
 }
 
 async function usdToSellAmountBase(sellSymbol: string, sellAmountUsd: number): Promise<string> {
@@ -115,11 +127,19 @@ export async function getSwapQuote(params: ZeroExSwapQuoteParams): Promise<Provi
     throw new Error(`0x quotes only supported on chainId 1 (got ${params.chainId})`)
   }
 
+  if (!isValidTakerAddress(params.walletAddress)) {
+    throw new Error(PILOT_WALLET_REQUIRED_WARNING)
+  }
+
+  if (params.sellAmountUsd < PILOT_MIN_LEG_AMOUNT_USD) {
+    throw new Error(PILOT_MIN_AMOUNT_WARNING)
+  }
+
   const sellSymbol = normalizeRouteSymbol(params.sellTokenSymbol)
   const buySymbol = normalizeRouteSymbol(params.buyTokenSymbol)
 
   const sellAmount = await usdToSellAmountBase(sellSymbol, params.sellAmountUsd)
-  const taker = params.walletAddress ?? DEFAULT_TAKER
+  const taker = params.walletAddress!
 
   const query = new URLSearchParams({
     chainId: String(params.chainId),
@@ -152,6 +172,10 @@ export async function getSwapQuote(params: ZeroExSwapQuoteParams): Promise<Provi
   const data = (await response.json()) as ZeroExApiQuote
   if (!data.buyAmount) {
     throw new Error('0x API returned no buyAmount')
+  }
+
+  if (!data.transaction?.to || !data.transaction?.data) {
+    throw new Error('0x API returned no executable transaction payload')
   }
 
   const priceImpact = data.estimatedPriceImpact

@@ -2,7 +2,8 @@ import type { BasketQuoteResponse, LegQuoteResponse } from '../types/quote.js'
 import { requireBasket } from '../data/demoBaskets.js'
 import { getDemoPortfolio } from '../data/demoPortfolio.js'
 import { calculateBuyLegs, calculateSellLegs, calculateSellAllLegs } from './allocationEngine.js'
-import { getBestQuote } from './quoteProviders.js'
+import { getBestQuote, isLiveZeroXQuote } from './quoteProviders.js'
+import { PILOT_MIN_AMOUNT_WARNING, PILOT_MIN_BUY_AMOUNT_USD } from '../config/pilot.js'
 import { sum } from '../utils/math.js'
 
 const DEMO_WARNINGS = [
@@ -137,15 +138,26 @@ function buildResponse(
     return s + (Number.isNaN(out) ? 0 : out)
   }, 0)
 
-  const liveLegs = quotes.filter((q) => q.provider === '0x').length
+  const liveLegs = quotes.filter((q) => isLiveZeroXQuote(q)).length
   const unsupportedLegs = quotes.filter((q) => q.provider === 'unsupported').length
-  const isLive = liveLegs > 0
+  const failedZeroXLegs = quotes.filter(
+    (q) => q.provider === '0x-demo' && (q.warnings?.length ?? 0) > 0
+  ).length
+  const isLive = quotes.length > 0 && liveLegs === quotes.length
 
   const warnings = isLive ? [...LIVE_WARNINGS] : [...DEMO_WARNINGS]
   if (unsupportedLegs > 0) {
     warnings.push(
       `${unsupportedLegs} leg(s) unsupported on Ethereum mainnet — no 0x calldata for those tokens.`
     )
+  }
+  if (failedZeroXLegs > 0) {
+    warnings.push(
+      `${failedZeroXLegs} leg(s) could not fetch live 0x quotes — connect wallet and use at least ${PILOT_MIN_BUY_AMOUNT_USD} USDC for pilot testing.`
+    )
+  }
+  if (!isLive && inputAmountUsd > 0 && inputAmountUsd < PILOT_MIN_BUY_AMOUNT_USD) {
+    warnings.push(PILOT_MIN_AMOUNT_WARNING)
   }
 
   for (const leg of quotes) {

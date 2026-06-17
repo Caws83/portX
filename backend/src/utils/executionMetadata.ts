@@ -1,5 +1,7 @@
 const NATIVE_ETH_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 
+const DEMO_CALLDATA_MARKERS = ['_DEMO_CALLDATA', '_DEMO_']
+
 export interface LegExecutionMetadata {
   sellAmount: string | null
   buyAmount: string | null
@@ -26,8 +28,9 @@ function isNativeTokenAddress(address: string | null | undefined): boolean {
   return address.toLowerCase() === NATIVE_ETH_ADDRESS
 }
 
-function isValidCalldata(calldata: string | null | undefined): boolean {
+export function isValidCalldata(calldata: string | null | undefined): boolean {
   if (!calldata?.startsWith('0x')) return false
+  if (DEMO_CALLDATA_MARKERS.some((marker) => calldata.includes(marker))) return false
   const body = calldata.slice(2)
   return body.length >= 16 && /^[0-9a-fA-F]+$/.test(body) && !/^0+$/.test(body)
 }
@@ -80,7 +83,7 @@ export function buildExecutionMetadata(params: {
     isValidHexAddress(spender) &&
     !isNativeTokenAddress(tokenIn)
 
-  return {
+  return finalizeExecutionMetadata({
     sellAmount,
     buyAmount,
     spender: isValidHexAddress(spender) ? spender : null,
@@ -95,5 +98,29 @@ export function buildExecutionMetadata(params: {
     hasExecutableCalldata,
     hasExactSellAmount,
     requiresApproval,
+  })
+}
+
+/** Guard: never mark a leg executable without valid transaction.to and transaction.data */
+export function finalizeExecutionMetadata(meta: LegExecutionMetadata): LegExecutionMetadata {
+  const hasExecutableCalldata =
+    meta.hasExecutableCalldata &&
+    isValidCalldata(meta.transactionData) &&
+    isValidHexAddress(meta.transactionTo)
+
+  return {
+    ...meta,
+    transactionData: hasExecutableCalldata ? meta.transactionData : null,
+    transactionTo: hasExecutableCalldata ? meta.transactionTo : isValidHexAddress(meta.transactionTo)
+      ? meta.transactionTo
+      : null,
+    hasExecutableCalldata,
+    hasExactSellAmount: hasExecutableCalldata && meta.hasExactSellAmount,
+    requiresApproval:
+      hasExecutableCalldata &&
+      meta.hasExactSellAmount &&
+      meta.requiresApproval &&
+      isValidHexAddress(meta.spender),
+    spender: isValidHexAddress(meta.spender) ? meta.spender : null,
   }
 }

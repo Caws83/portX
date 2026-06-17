@@ -1,5 +1,7 @@
 const NATIVE_ETH_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 
+const DEMO_CALLDATA_MARKERS = ['_DEMO_CALLDATA', '_DEMO_']
+
 export interface QuoteExecutionMetadata {
   sellAmount: string | null
   buyAmount: string | null
@@ -46,8 +48,9 @@ function isNativeTokenAddress(address: string | null | undefined): boolean {
   return address.toLowerCase() === NATIVE_ETH_ADDRESS
 }
 
-function isValidCalldata(calldata: string | null | undefined): boolean {
+export function isValidCalldata(calldata: string | null | undefined): boolean {
   if (!calldata?.startsWith('0x')) return false
+  if (DEMO_CALLDATA_MARKERS.some((marker) => calldata.includes(marker))) return false
   const body = calldata.slice(2)
   return body.length >= 16 && /^[0-9a-fA-F]+$/.test(body) && !/^0+$/.test(body)
 }
@@ -100,7 +103,7 @@ export function buildQuoteExecutionMetadata(params: {
     isValidHexAddress(spender) &&
     !isNativeTokenAddress(tokenIn)
 
-  return {
+  return finalizeQuoteExecutionMetadata({
     sellAmount,
     buyAmount,
     spender: isValidHexAddress(spender) ? spender : null,
@@ -115,39 +118,44 @@ export function buildQuoteExecutionMetadata(params: {
     hasExecutableCalldata,
     hasExactSellAmount,
     requiresApproval,
+  })
+}
+
+/** Guard: never mark a leg executable without valid transaction.to and transaction.data */
+export function finalizeQuoteExecutionMetadata(
+  meta: QuoteExecutionMetadata
+): QuoteExecutionMetadata {
+  const hasExecutableCalldata =
+    meta.hasExecutableCalldata &&
+    isValidCalldata(meta.transactionData) &&
+    isValidHexAddress(meta.transactionTo)
+
+  return {
+    ...meta,
+    transactionData: hasExecutableCalldata ? meta.transactionData : null,
+    transactionTo: hasExecutableCalldata
+      ? meta.transactionTo
+      : isValidHexAddress(meta.transactionTo)
+        ? meta.transactionTo
+        : null,
+    hasExecutableCalldata,
+    hasExactSellAmount: hasExecutableCalldata && meta.hasExactSellAmount,
+    requiresApproval:
+      hasExecutableCalldata &&
+      meta.hasExactSellAmount &&
+      meta.requiresApproval &&
+      isValidHexAddress(meta.spender),
+    spender: isValidHexAddress(meta.spender) ? meta.spender : null,
   }
 }
 
-/** Map backend leg execution fields; derive metadata when API omits flags */
+/** Map backend leg execution fields; always re-validate from payload fields */
 export function executionMetadataFromApiLeg(
   leg: ApiLegExecutionFields,
   chainId: number
 ): QuoteExecutionMetadata {
   const transactionData = leg.transactionData ?? leg.calldata ?? null
   const transactionTo = leg.transactionTo ?? leg.routerAddress ?? null
-
-  if (
-    leg.hasExecutableCalldata != null &&
-    leg.hasExactSellAmount != null &&
-    leg.requiresApproval != null
-  ) {
-    return {
-      sellAmount: leg.sellAmount ?? null,
-      buyAmount: leg.buyAmount ?? null,
-      spender: leg.spender ?? null,
-      transactionTo,
-      transactionData,
-      transactionValue: leg.transactionValue ?? '0',
-      gas: leg.gas ?? null,
-      gasPrice: leg.gasPrice ?? null,
-      tokenIn: leg.tokenIn ?? null,
-      tokenOut: leg.tokenOut ?? null,
-      chainId: leg.chainId ?? chainId,
-      hasExecutableCalldata: leg.hasExecutableCalldata,
-      hasExactSellAmount: leg.hasExactSellAmount,
-      requiresApproval: leg.requiresApproval,
-    }
-  }
 
   return buildQuoteExecutionMetadata({
     chainId: leg.chainId ?? chainId,
@@ -162,6 +170,10 @@ export function executionMetadataFromApiLeg(
     tokenIn: leg.tokenIn,
     tokenOut: leg.tokenOut,
   })
+}
+
+export function isLiveZeroXExecutionMetadata(meta: QuoteExecutionMetadata): boolean {
+  return meta.hasExecutableCalldata && meta.hasExactSellAmount
 }
 
 /** Fallback USD-derived input amount when API does not provide exact sellAmount */

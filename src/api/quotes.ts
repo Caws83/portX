@@ -7,6 +7,7 @@ import type { Token } from '@/types/token'
 import type { ExecutionPlan } from '@/types/execution'
 import {
   executionMetadataFromApiLeg,
+  isLiveZeroXExecutionMetadata,
   parseGasUnits,
   usdDerivedInputAmount,
   type ApiLegExecutionFields,
@@ -78,7 +79,8 @@ export async function previewBuyBasket(
 function normalizeProvider(provider: string): QuoteProvider {
   if (provider === 'unsupported') return 'unsupported'
   if (provider === 'uniswap-sepolia') return 'uniswap-sepolia'
-  if (provider.startsWith('0x')) return '0x'
+  if (provider === '0x') return '0x'
+  if (provider.startsWith('0x-')) return 'uniswap'
   if (provider.startsWith('1inch')) return '1inch'
   return 'uniswap'
 }
@@ -104,9 +106,11 @@ function mapApiLegToQuoteResponse(
   chainId: number
 ): QuoteResponse {
   const execution = executionMetadataFromApiLeg(leg, chainId)
-  const inputAmount = execution.hasExactSellAmount && execution.sellAmount
-    ? execution.sellAmount
-    : usdDerivedInputAmount(leg.inputAmountUsd, inputToken.decimals)
+  const isLiveLeg = leg.provider === '0x' && isLiveZeroXExecutionMetadata(execution)
+  const inputAmount =
+    execution.hasExactSellAmount && execution.sellAmount
+      ? execution.sellAmount
+      : usdDerivedInputAmount(leg.inputAmountUsd, inputToken.decimals)
 
   const calldata = execution.transactionData ?? mapCalldata(leg.calldata)
   const routerAddress = execution.transactionTo ?? mapRouterAddress(leg.routerAddress)
@@ -126,7 +130,7 @@ function mapApiLegToQuoteResponse(
     calldata,
     routerAddress,
     warnings: leg.warnings ?? [],
-    execution: execution.hasExactSellAmount || execution.hasExecutableCalldata ? execution : undefined,
+    execution: isLiveLeg ? execution : undefined,
   }
 }
 

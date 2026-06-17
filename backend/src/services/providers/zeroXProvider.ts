@@ -1,5 +1,6 @@
 import type { ProviderQuote, QuoteRequest } from '../../types/quote.js'
 import { getToken } from '../../data/tokens.js'
+import { emptyExecutionMetadata } from '../../utils/executionMetadata.js'
 
 const ROUTER = '0xdef1c0ded9bec7b1d5460550f41f0a0e1e2e3e4e'
 
@@ -24,5 +25,7 @@ export async function fetchZeroXQuote(request: QuoteRequest): Promise<ProviderQu
     routeSummary: `${request.inputToken} → ${request.outputToken}`,
     calldata: '0x_DEMO_CALLDATA_0X',
     routerAddress: ROUTER,
+    warnings: ['Demo quote — 0x API key not configured'],
+    ...emptyExecutionMetadata(request.chainId),
   }
 }

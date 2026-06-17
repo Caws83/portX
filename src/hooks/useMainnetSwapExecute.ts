@@ -12,6 +12,7 @@ import {
   assessMainnetPilotEligibility,
   type MainnetPilotQuoteSource,
 } from '@/utils/mainnetPilotReadiness'
+import { formatSimulationError } from '@/utils/rpcErrors'
 
 const NATIVE_ETH_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
 
@@ -168,7 +169,7 @@ export function useMainnetSwapExecute(
       setSimulationMessage('Simulation passed')
       return { ok: true, message: 'Simulation passed' }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Simulation failed'
+      const message = formatSimulationError(error)
       setSimulationPassed(false)
       setSimulationMessage(message)
       return { ok: false, message }

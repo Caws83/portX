@@ -5,6 +5,11 @@ export const DEFAULT_SLIPPAGE_BPS = 50
 export const DEFAULT_STABLECOIN = 'USDC'
 export const DEFAULT_BUY_AMOUNT_USD = 1000
 
+/** Recommended minimum buy amount for internal mainnet pilot 0x quotes */
+export const PILOT_MIN_BUY_AMOUNT_USD = 100
+
+export const PILOT_MIN_AMOUNT_WARNING = `Pilot test amount too small for 0x route. Try ${PILOT_MIN_BUY_AMOUNT_USD} USDC.`
+
 export const SLIPPAGE_OPTIONS = [10, 30, 50, 100, 300]
 
 export const STABLECOIN_OPTIONS = ['USDC', 'USDT', 'DAI'] as const
