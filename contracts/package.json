@@ -13,7 +13,11 @@
     "testnet:mock-erc20": "hardhat run scripts/testnet/executeMockErc20Basket.ts --network sepolia",
     "testnet:uni-eth-usdc": "hardhat run scripts/testnet/executeUniswapEthToUsdcBasket.ts --network sepolia",
     "testnet:multi-token-basket": "hardhat run scripts/testnet/executeMultiTokenBasket.ts --network sepolia",
-    "testnet:configure-executor": "hardhat run scripts/testnet/configureBundleExecutor.ts --network sepolia"
+    "testnet:configure-executor": "hardhat run scripts/testnet/configureBundleExecutor.ts --network sepolia",
+    "testnet:deploy-nft": "hardhat ignition deploy ignition/modules/PortXGenesisNFT.ts --network sepolia --deployment-id portx-sepolia-genesis-nft"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "5.0.2"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^0.15.9",

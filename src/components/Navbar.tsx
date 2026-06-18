@@ -1,5 +1,4 @@
 import { NavLink } from 'react-router-dom'
-import { BUTTON_LABELS } from '@/config/uiCopy'
 import { AppModeBadge } from './AppModeIndicator'
 import { Logo } from './Logo'
 import { WalletButton } from './WalletButton'
