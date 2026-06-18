@@ -14,6 +14,7 @@ import {
   type BundleExecutionValidationError,
   type ExecutionReadinessItem,
 } from '@/services/bundleExecutorWrite'
+import { resolveTestnetBasketToken } from '@/config/testnetBasketTokens'
 import { isZeroAddress, ZERO_ADDRESS } from '@/utils/addresses'
 import { isTestnetSepoliaUniswapPlan } from '@/utils/testnetPreview'
 
@@ -143,6 +144,14 @@ function validateTestnetUniswapQuoteShape(
         code: 'INVALID_AMOUNT',
         message: 'Leg amountIn must be a valid integer string',
         field: `${prefix}.quote.inputAmount`,
+      })
+    }
+
+    if (!resolveTestnetBasketToken(quote.outputToken.symbol)) {
+      errors.push({
+        code: 'OUTPUT_TOKEN_UNSUPPORTED',
+        message: `Output token ${quote.outputToken.symbol} is not supported on Sepolia testnet`,
+        field: `${prefix}.quote.outputToken`,
       })
     }
   })

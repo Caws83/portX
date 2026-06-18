@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { formatEther } from 'viem'
 import { useAccount, useChainId } from 'wagmi'
 import type { ExecutionPlan } from '@/types/execution'
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
@@ -34,6 +33,8 @@ import { saveTestnetPortfolioFromPlan } from '@/services/testnetPortfolio'
 import { saveTestnetSwapFromPlan } from '@/services/testnetSwapHistory'
 import {
   formatTestnetLegOutput,
+  formatTestnetLegRouteLabel,
+  formatTestnetLegInputDisplay,
   formatTestnetPlanTotalInput,
   formatTestnetPlanTotalOutput,
 } from '@/utils/testnetPreview'
@@ -682,13 +683,12 @@ export function TransactionReviewModal({
                       className="rounded-lg border border-portx-border bg-portx-surface px-3 py-2 text-xs space-y-1"
                     >
                       <p className="font-medium">
-                        Leg {index + 1}: {weight}% allocation
+                        Leg {index + 1}: {formatTestnetLegRouteLabel(leg)}
+                        {weight > 0 ? ` (${weight}%)` : ''}
                       </p>
                       <p>
                         <span className="text-portx-muted">amountIn: </span>
-                        <span className="font-mono">
-                          {formatEther(BigInt(leg.quote.inputAmount))} ETH
-                        </span>
+                        <span className="font-mono">{formatTestnetLegInputDisplay(leg)}</span>
                       </p>
                       <p>
                         <span className="text-portx-muted">est. out: </span>
@@ -761,7 +761,7 @@ export function TransactionReviewModal({
                         key={leg.index}
                         className="rounded-lg border border-portx-green/20 bg-black/20 px-3 py-2"
                       >
-                        Leg {index + 1} est. out:{' '}
+                        Leg {index + 1}: {formatTestnetLegRouteLabel(leg)} est. out:{' '}
                         <span className="font-mono text-portx-green">
                           {formatTestnetLegOutput(
                             leg.quote.outputAmount,

@@ -96,7 +96,11 @@ export function TestnetPortfolioSummary({
           <p>
             <span className="text-portx-muted">Received: </span>
             <span className="font-mono text-portx-green">
-              {formatUsdcTotal(parseFloat(latest.outputAmountUsdc))} USDC
+              {latest.acquiredAssets.length > 1
+                ? latest.acquiredAssets
+                    .map((asset) => `${formatUsdcTotal(parseFloat(asset.amount))} ${asset.symbol}`)
+                    .join(' · ')
+                : `${formatUsdcTotal(parseFloat(latest.outputAmountUsdc))} USDC`}
             </span>
             <span className="text-portx-muted"> · </span>
             <span className="font-mono">{formatEthTotal(parseFloat(latest.inputAmountEth))} ETH in</span>
@@ -145,9 +149,9 @@ export function TestnetPortfolioSummary({
       <div className="border-t border-portx-border pt-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="font-bold">On-Chain Testnet Assets</h3>
+            <h3 className="font-bold">Wallet Testnet Assets</h3>
             <p className="text-xs text-portx-muted mt-1">
-              Read-only Sepolia ERC-20 balances held by BundleExecutor.
+              Read-only Sepolia ERC-20 balances in your connected wallet.
             </p>
           </div>
           <button
@@ -161,13 +165,17 @@ export function TestnetPortfolioSummary({
         </div>
 
         <p className="text-xs text-portx-muted">
-          BundleExecutor:{' '}
+          Wallet:{' '}
           <span className="font-mono">
-            {truncateAddress(onChainBalances.bundleExecutorAddress, 6)}
+            {onChainBalances.walletAddress
+              ? truncateAddress(onChainBalances.walletAddress, 6)
+              : 'Connect wallet'}
           </span>
         </p>
 
-        {onChainBalances.isLoading ? (
+        {!onChainBalances.walletAddress ? (
+          <p className="text-sm text-portx-muted">Connect your Sepolia wallet to view on-chain balances.</p>
+        ) : onChainBalances.isLoading ? (
           <p className="text-sm text-portx-muted">Loading on-chain balances…</p>
         ) : onChainBalances.error ? (
           <p className="text-sm text-red-400">

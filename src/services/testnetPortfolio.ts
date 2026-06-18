@@ -4,10 +4,16 @@ import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI } from '@/config/testnetExecution'
 import type { ExecutionPlan } from '@/types/execution'
 import {
   sumTestnetPlanInputWei,
-  sumTestnetPlanOutputAmount,
 } from '@/utils/testnetPreview'
 
 export type TestnetPortfolioStatus = 'success' | 'failed'
+
+export interface TestnetAcquiredAsset {
+  symbol: string
+  tokenAddress: string
+  amount: string
+  decimals: number
+}
 
 export interface TestnetPortfolioPosition {
   portfolioId: string
@@ -17,7 +23,9 @@ export interface TestnetPortfolioPosition {
   explorerUrl: string
   provider: string
   inputAmountEth: string
+  /** @deprecated Legacy single-output field — prefer acquiredAssets */
   outputAmountUsdc: string
+  acquiredAssets: TestnetAcquiredAsset[]
   legsCount: number
   timestamp: number
   status: TestnetPortfolioStatus
@@ -46,6 +54,21 @@ function parseUsdcAmount(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
+function normalizeAcquiredAssets(position: TestnetPortfolioPosition): TestnetAcquiredAsset[] {
+  if (position.acquiredAssets?.length) return position.acquiredAssets
+  if (position.outputAmountUsdc && position.outputAmountUsdc !== '0') {
+    return [
+      {
+        symbol: 'USDC',
+        tokenAddress: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+        amount: position.outputAmountUsdc,
+        decimals: 6,
+      },
+    ]
+  }
+  return []
+}
+
 export function shouldShowTestnetPortfolio(): boolean {
   return ENABLE_TESTNET_MODE
 }
@@ -58,6 +81,10 @@ export function loadTestnetPortfolioPositions(): TestnetPortfolioPosition[] {
     if (!Array.isArray(parsed)) return []
     return parsed
       .filter((position) => typeof position?.txHash === 'string' && position.txHash.length > 0)
+      .map((position) => ({
+        ...position,
+        acquiredAssets: normalizeAcquiredAssets(position),
+      }))
       .sort((a, b) => b.timestamp - a.timestamp)
   } catch {
     return []
@@ -69,10 +96,10 @@ export function getTestnetPortfolioAggregate(): TestnetPortfolioAggregate {
   const successful = positions.filter((position) => position.status === 'success')
 
   return {
-    totalUsdcReceived: successful.reduce(
-      (sum, position) => sum + parseUsdcAmount(position.outputAmountUsdc),
-      0,
-    ),
+    totalUsdcReceived: successful.reduce((sum, position) => {
+      const usdcAsset = position.acquiredAssets.find((asset) => asset.symbol === 'USDC')
+      return sum + parseUsdcAmount(usdcAsset?.amount ?? position.outputAmountUsdc ?? '0')
+    }, 0),
     totalEthSpent: successful.reduce(
       (sum, position) => sum + parseEthAmount(position.inputAmountEth),
       0,
@@ -90,10 +117,18 @@ function getPlanInputEth(plan: ExecutionPlan): string {
   return formatEther(sumTestnetPlanInputWei(plan))
 }
 
-function getPlanOutputUsdc(plan: ExecutionPlan): string {
-  if (plan.legs.length === 0) return '0'
-  const decimals = plan.legs[0].quote.outputToken.decimals
-  return formatUnits(sumTestnetPlanOutputAmount(plan), decimals)
+function buildAcquiredAssetsFromPlan(plan: ExecutionPlan): TestnetAcquiredAsset[] {
+  return plan.legs.map((leg) => ({
+    symbol: leg.quote.outputToken.symbol,
+    tokenAddress: leg.quote.outputToken.address,
+    amount: formatUnits(BigInt(leg.quote.outputAmount), leg.quote.outputToken.decimals),
+    decimals: leg.quote.outputToken.decimals,
+  }))
+}
+
+function getLegacyUsdcOutput(acquiredAssets: TestnetAcquiredAsset[]): string {
+  const usdcAsset = acquiredAssets.find((asset) => asset.symbol === 'USDC')
+  return usdcAsset?.amount ?? '0'
 }
 
 export function buildTestnetPortfolioPositionFromPlan(
@@ -107,6 +142,7 @@ export function buildTestnetPortfolioPositionFromPlan(
 ): TestnetPortfolioPosition {
   const basketLabel = plan.basketName ?? plan.basketId ?? 'Sepolia test basket'
   const basketKey = plan.basketId ?? basketLabel.replace(/\s+/g, '-').toLowerCase()
+  const acquiredAssets = buildAcquiredAssetsFromPlan(plan)
 
   return {
     portfolioId: `${basketKey}-${params.txHash.slice(0, 10)}`,
@@ -116,7 +152,8 @@ export function buildTestnetPortfolioPositionFromPlan(
     explorerUrl: params.explorerUrl,
     provider: plan.legs[0]?.quote.provider ?? 'uniswap-sepolia',
     inputAmountEth: getPlanInputEth(plan),
-    outputAmountUsdc: getPlanOutputUsdc(plan),
+    outputAmountUsdc: getLegacyUsdcOutput(acquiredAssets),
+    acquiredAssets,
     legsCount: plan.legs.length,
     timestamp: Date.now(),
     status: params.status,

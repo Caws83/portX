@@ -1,13 +1,11 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { usePublicClient } from 'wagmi'
+import { useAccount, usePublicClient } from 'wagmi'
 import { createPublicClient, formatUnits, http, type Address, type PublicClient } from 'viem'
 import { sepolia } from 'viem/chains'
+import { TESTNET_BASKET_TOKENS } from '@/config/testnetBasketTokens'
 import {
-  TESTNET_BUNDLE_EXECUTOR_ADDRESS,
   TESTNET_SEPOLIA_CHAIN_ID,
-  TESTNET_USDC_ADDRESS,
-  TESTNET_WETH_ADDRESS,
 } from '@/config/testnetExecution'
 import { getTestnetPortfolioAggregate } from '@/services/testnetPortfolio'
 import {
@@ -25,29 +23,17 @@ const ERC20_BALANCE_ABI = [
   },
 ] as const
 
-const USDC_DECIMALS = 6
-const WETH_DECIMALS = 18
+const ON_CHAIN_WALLET_SOURCE = 'On-chain wallet' as const
 
-const ON_CHAIN_BUNDLE_EXECUTOR_SOURCE = 'On-chain BundleExecutor' as const
-
-const TESTNET_PORTFOLIO_TOKEN_DEFINITIONS = [
-  {
-    symbol: 'USDC',
-    tokenAddress: TESTNET_USDC_ADDRESS,
-    decimals: USDC_DECIMALS,
-    displayFractionDigits: 6,
-  },
-  {
-    symbol: 'WETH',
-    tokenAddress: TESTNET_WETH_ADDRESS,
-    decimals: WETH_DECIMALS,
-    displayFractionDigits: 8,
-  },
-] as const
+const TESTNET_PORTFOLIO_TOKEN_DEFINITIONS = Object.values(TESTNET_BASKET_TOKENS).map((token) => ({
+  symbol: token.symbol,
+  tokenAddress: token.address,
+  decimals: token.decimals,
+  displayFractionDigits: token.symbol === 'USDC' ? 6 : 8,
+}))
 
 export interface TestnetOnChainBalances {
-  usdcBalanceWei: bigint
-  wethBalanceWei: bigint
+  balancesWei: Record<string, bigint>
 }
 
 export interface TestnetPortfolioAsset {
@@ -57,11 +43,11 @@ export interface TestnetPortfolioAsset {
   balanceFormatted: string
   balanceDisplay: string
   decimals: number
-  source: typeof ON_CHAIN_BUNDLE_EXECUTOR_SOURCE
+  source: typeof ON_CHAIN_WALLET_SOURCE
 }
 
 export interface TestnetPortfolioBalancesResult {
-  bundleExecutorAddress: Address
+  walletAddress: Address | null
   usdcBalance: number
   wethBalance: number
   usdcBalanceFormatted: string
@@ -100,19 +86,24 @@ async function readErc20Balance(
   })
 }
 
-async function fetchTestnetOnChainBalances(
+async function fetchTestnetWalletBalances(
   publicClient: PublicClient,
+  holder: Address,
 ): Promise<TestnetOnChainBalances> {
-  const holder = TESTNET_BUNDLE_EXECUTOR_ADDRESS
-  const [usdcBalanceWei, wethBalanceWei] = await Promise.all([
-    readErc20Balance(publicClient, TESTNET_USDC_ADDRESS, holder),
-    readErc20Balance(publicClient, TESTNET_WETH_ADDRESS, holder),
-  ])
+  const entries = await Promise.all(
+    TESTNET_PORTFOLIO_TOKEN_DEFINITIONS.map(async (token) => {
+      const balanceWei = await readErc20Balance(publicClient, token.tokenAddress, holder)
+      return [token.symbol, balanceWei] as const
+    }),
+  )
 
-  return { usdcBalanceWei, wethBalanceWei }
+  return {
+    balancesWei: Object.fromEntries(entries),
+  }
 }
 
 export function useTestnetPortfolioBalances(): TestnetPortfolioBalancesResult {
+  const { address } = useAccount()
   const wagmiPublicClient = usePublicClient({ chainId: TESTNET_SEPOLIA_CHAIN_ID })
 
   const publicClient = useMemo(() => {
@@ -126,49 +117,37 @@ export function useTestnetPortfolioBalances(): TestnetPortfolioBalancesResult {
   const query = useQuery({
     queryKey: [
       'testnetPortfolioBalances',
-      TESTNET_BUNDLE_EXECUTOR_ADDRESS,
-      TESTNET_USDC_ADDRESS,
-      TESTNET_WETH_ADDRESS,
+      address,
+      ...TESTNET_PORTFOLIO_TOKEN_DEFINITIONS.map((token) => token.tokenAddress),
     ],
-    queryFn: () => fetchTestnetOnChainBalances(publicClient),
+    queryFn: () => fetchTestnetWalletBalances(publicClient, address as Address),
+    enabled: Boolean(address),
     staleTime: 15_000,
     retry: 1,
   })
 
-  const usdcBalanceFormatted = query.data
-    ? formatUnits(query.data.usdcBalanceWei, USDC_DECIMALS)
-    : '0'
-  const wethBalanceFormatted = query.data
-    ? formatUnits(query.data.wethBalanceWei, WETH_DECIMALS)
-    : '0'
+  const assets: TestnetPortfolioAsset[] = TESTNET_PORTFOLIO_TOKEN_DEFINITIONS.map((token) => {
+    const balanceWei = query.data?.balancesWei[token.symbol] ?? 0n
+    const balanceFormatted = formatUnits(balanceWei, token.decimals)
+    const balanceNumeric = parseTokenAmount(balanceFormatted)
 
-  const usdcBalance = parseTokenAmount(usdcBalanceFormatted)
-  const wethBalance = parseTokenAmount(wethBalanceFormatted)
+    return {
+      symbol: token.symbol,
+      tokenAddress: token.tokenAddress,
+      balanceWei,
+      balanceFormatted,
+      balanceDisplay: formatTokenAmount(balanceNumeric, token.displayFractionDigits),
+      decimals: token.decimals,
+      source: ON_CHAIN_WALLET_SOURCE,
+    }
+  })
+
+  const usdcAsset = assets.find((asset) => asset.symbol === 'USDC')
+  const wethAsset = assets.find((asset) => asset.symbol === 'WETH')
+  const usdcBalance = parseTokenAmount(usdcAsset?.balanceFormatted ?? '0')
+  const wethBalance = parseTokenAmount(wethAsset?.balanceFormatted ?? '0')
   const localTrackedUsdc = getTestnetPortfolioAggregate().totalUsdcReceived
   const usdcDifference = localTrackedUsdc - usdcBalance
-
-  const balanceWeiBySymbol: Record<string, bigint> = {
-    USDC: query.data?.usdcBalanceWei ?? 0n,
-    WETH: query.data?.wethBalanceWei ?? 0n,
-  }
-
-  const assets: TestnetPortfolioAsset[] = TESTNET_PORTFOLIO_TOKEN_DEFINITIONS.map(
-    (token) => {
-      const balanceWei = balanceWeiBySymbol[token.symbol] ?? 0n
-      const balanceFormatted = formatUnits(balanceWei, token.decimals)
-      const balanceNumeric = parseTokenAmount(balanceFormatted)
-
-      return {
-        symbol: token.symbol,
-        tokenAddress: token.tokenAddress,
-        balanceWei,
-        balanceFormatted,
-        balanceDisplay: formatTokenAmount(balanceNumeric, token.displayFractionDigits),
-        decimals: token.decimals,
-        source: ON_CHAIN_BUNDLE_EXECUTOR_SOURCE,
-      }
-    },
-  )
 
   const valuation = computeTestnetPortfolioValuation(
     assets.map((asset) => ({
@@ -182,7 +161,7 @@ export function useTestnetPortfolioBalances(): TestnetPortfolioBalancesResult {
   )
 
   return {
-    bundleExecutorAddress: TESTNET_BUNDLE_EXECUTOR_ADDRESS,
+    walletAddress: address ?? null,
     usdcBalance,
     wethBalance,
     usdcBalanceFormatted: formatTokenAmount(usdcBalance, 6),
@@ -192,7 +171,7 @@ export function useTestnetPortfolioBalances(): TestnetPortfolioBalancesResult {
     assets,
     assetCount: assets.length,
     valuation,
-    isLoading: query.isLoading,
+    isLoading: Boolean(address) && query.isLoading,
     isFetching: query.isFetching,
     error: query.error ?? null,
     lastRefreshedAt: query.isSuccess ? query.dataUpdatedAt : null,

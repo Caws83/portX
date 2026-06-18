@@ -1,5 +1,6 @@
 import type { Basket } from '@/types/basket'
 
+import { TESTNET_MULTI_TOKEN_BASKET } from '@/data/testnetMultiTokenBasket'
 import { DEMO_TOKENS } from './tokens'
 
 function alloc(symbols: string[], weights: number[]) {
@@ -88,4 +89,5 @@ export const DEMO_BASKETS: Basket[] = [
     allocations: alloc(['ETH', 'USDC', 'LINK', 'UNI'], [30, 30, 20, 20]),
     totalValueUsd: 4000,
   },
+  TESTNET_MULTI_TOKEN_BASKET,
 ]

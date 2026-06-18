@@ -33,6 +33,18 @@ export interface QuoteResponse {
   expiresAt?: number
   /** Exact execution fields from 0x API — null for demo/fallback quotes */
   execution?: QuoteExecutionMetadata
+  /** Sepolia testnet UI label — execution may fund via native ETH */
+  testnetDisplayRoute?: {
+    inputSymbol: string
+    inputAmountDisplay: string
+  }
+  /** Sepolia Uniswap leg metadata for calldata regeneration */
+  testnetSwap?: {
+    tokenIn: string
+    tokenOut: string
+    poolFee: number
+    nativeEth: boolean
+  }
 }
 
 export interface AllocationLeg {

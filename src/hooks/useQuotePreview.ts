@@ -20,6 +20,10 @@ import {
   getSellAllQuotePreview,
 } from '@/services/quoteEngine'
 import { buildTestnetEthToUsdcBasketPreview } from '@/services/testnetUniswapQuote'
+import {
+  buildTestnetMultiTokenBasketPreview,
+  shouldUseMultiTokenTestnetQuote,
+} from '@/services/testnetMultiTokenQuote'
 import { buildExecutionPlan } from '@/services/transactionBuilder'
 import { canPreviewQuoteForBasket } from '@/utils/chainRouting'
 
@@ -85,12 +89,22 @@ export function useQuotePreview() {
             return null
           }
 
-          const result = await buildTestnetEthToUsdcBasketPreview({
+          const previewParams = {
             basketId: basket.id,
             basketName: basket.name,
             slippageBps: params.slippageBps,
             allocations: basket.allocations,
-          })
+          }
+
+          const result = shouldUseMultiTokenTestnetQuote(basket.allocations)
+            ? await buildTestnetMultiTokenBasketPreview(
+                previewParams,
+                address as `0x${string}` | undefined,
+              )
+            : await buildTestnetEthToUsdcBasketPreview(
+                previewParams,
+                address as `0x${string}` | undefined,
+              )
           setPreview(result)
           setQuoteSource('testnet')
           return result

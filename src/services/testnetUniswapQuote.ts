@@ -225,6 +225,12 @@ function buildQuoteResponse(
       'Sepolia testnet Uniswap V3 quote — not for production execution.',
       `Quoted min out after ${details.slippageBps} bps slippage: ${details.minAmountOut.toString()} (6 decimals).`,
     ],
+    testnetSwap: {
+      tokenIn: TESTNET_WETH_ADDRESS,
+      tokenOut: TESTNET_USDC_ADDRESS,
+      poolFee: 500,
+      nativeEth: true,
+    },
   }
 }
 

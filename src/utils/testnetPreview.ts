@@ -34,11 +34,41 @@ export function formatTestnetPlanTotalInput(plan: ExecutionPlan): string {
 
 export function formatTestnetPlanTotalOutput(plan: ExecutionPlan): string {
   if (plan.legs.length === 0) return '—'
+
+  const outputSymbols = new Set(plan.legs.map((leg) => leg.quote.outputToken.symbol))
+  if (outputSymbols.size > 1) {
+    return plan.legs
+      .map((leg) =>
+        formatTestnetLegOutput(
+          leg.quote.outputAmount,
+          leg.quote.outputToken.decimals,
+          leg.quote.outputToken.symbol,
+        ),
+      )
+      .join(' · ')
+  }
+
   const decimals = plan.legs[0].quote.outputToken.decimals
   const symbol = plan.legs[0].quote.outputToken.symbol
   const total = sumTestnetPlanOutputAmount(plan)
   const value = Number.parseFloat(formatUnits(total, decimals))
   return `${value.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${symbol}`
+}
+
+export function formatTestnetLegRouteLabel(leg: ExecutionPlan['legs'][number]): string {
+  const display = leg.quote.testnetDisplayRoute
+  if (display) {
+    return `${display.inputSymbol} → ${leg.quote.outputToken.symbol}`
+  }
+  return `${leg.quote.inputToken.symbol} → ${leg.quote.outputToken.symbol}`
+}
+
+export function formatTestnetLegInputDisplay(leg: ExecutionPlan['legs'][number]): string {
+  const display = leg.quote.testnetDisplayRoute
+  if (display) {
+    return `${display.inputAmountDisplay} ${display.inputSymbol}`
+  }
+  return `${formatEther(BigInt(leg.quote.inputAmount))} ETH`
 }
 
 export function formatTestnetLegOutput(

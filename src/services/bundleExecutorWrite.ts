@@ -10,6 +10,7 @@ import {
   type BundleExecutorSwapCall,
 } from '@/services/bundleExecutorContract'
 import { encodeUniswapExactInputSingleCalldata } from '@/services/testnetUniswapQuote'
+import { encodeTestnetExactInputSingleCalldata } from '@/services/testnetMultiTokenQuote'
 import { isValidCalldata, isValidRouterAddress } from '@/services/transactionBuilder'
 import { isZeroAddress, ZERO_ADDRESS } from '@/utils/addresses'
 
@@ -136,6 +137,17 @@ function resolveSwapCalldata(
         field: 'walletAddress',
       }
     }
+
+    if (quote.testnetSwap) {
+      return encodeTestnetExactInputSingleCalldata({
+        tokenOut: quote.testnetSwap.tokenOut as Address,
+        amountInWei: amountIn,
+        minAmountOut,
+        recipient,
+        poolFee: quote.testnetSwap.poolFee,
+      })
+    }
+
     return encodeUniswapExactInputSingleCalldata(amountIn, minAmountOut, recipient)
   }
 

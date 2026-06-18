@@ -12,6 +12,7 @@
     "testnet:mock-eth": "hardhat run scripts/testnet/executeMockEthBasket.ts --network sepolia",
     "testnet:mock-erc20": "hardhat run scripts/testnet/executeMockErc20Basket.ts --network sepolia",
     "testnet:uni-eth-usdc": "hardhat run scripts/testnet/executeUniswapEthToUsdcBasket.ts --network sepolia",
+    "testnet:multi-token-basket": "hardhat run scripts/testnet/executeMultiTokenBasket.ts --network sepolia",
     "testnet:configure-executor": "hardhat run scripts/testnet/configureBundleExecutor.ts --network sepolia"
   },
   "devDependencies": {
