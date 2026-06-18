@@ -14,11 +14,12 @@ const links: NavLinkItem[] = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/discover', label: 'Discover' },
   { to: '/baskets', label: 'Baskets' },
-  { to: '/lending', label: 'Lending', badge: 'Coming Soon' },
-  { to: '/create-basket', label: 'Create' },
-  { to: '/sell-all', label: BUTTON_LABELS.sellAllNav },
-  { to: '/agents', label: 'Agents' },
-  { to: '/settings', label: 'Settings' },
+  // { to: '/lending', label: 'Lending', badge: '🚧' },
+  // { to: '/create-basket', label: 'Create' },
+  { to: '/mint', label: 'NFT' },
+  // { to: '/sell-all', label: BUTTON_LABELS.sellAllNav },
+  // { to: '/agents', label: 'Agents' },
+  // { to: '/settings', label: 'Settings' },
 ]
 
 export function Navbar() {
@@ -57,9 +58,6 @@ export function Navbar() {
 
             <div className="flex items-center gap-2">
               <AppModeBadge className="hidden sm:inline-flex" />
-              <NavLink to="/dashboard" className="btn-primary text-sm py-1.5 px-3.5 hidden sm:inline-flex">
-                Launch App
-              </NavLink>
               <WalletButton />
             </div>
           </div>

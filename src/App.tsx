@@ -9,6 +9,7 @@ import { Agents } from '@/pages/Agents'
 import { Discover } from '@/pages/Discover'
 import { Settings } from '@/pages/Settings'
 import { Lending } from '@/pages/Lending'
+import { NftMint } from '@/pages/Minting'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/sell-all" element={<SellAll />} />
         <Route path="/agents" element={<Agents />} />
         <Route path="/lending" element={<Lending />} />
+        <Route path="/mint" element={<NftMint />} />
         <Route path="/loans" element={<Navigate to="/lending" replace />} />
         <Route path="/discover" element={<Discover />} />
         <Route path="/settings" element={<Settings />} />
