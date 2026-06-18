@@ -3,6 +3,24 @@ import { Hero } from '@/components/Hero'
 import { TrendingAddresses } from '@/components/TrendingAddresses'
 import { NotablePortfolios } from '@/components/NotablePortfolios'
 
+const ECOSYSTEM_CARDS = [
+  {
+    title: 'Portfolio Trading',
+    description: 'One-click basket investing',
+    to: '/baskets',
+  },
+  {
+    title: 'Portfolio Loans',
+    description: 'Borrow against eligible portfolios',
+    to: '/lending',
+  },
+  {
+    title: 'PortX NFT',
+    description: 'Premium ecosystem access',
+    to: '/lending',
+  },
+] as const
+
 export function Home() {
   return (
     <div>
@@ -51,6 +69,40 @@ export function Home() {
             <Link to="/dashboard" className="btn-primary">
               Open Dashboard
             </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 border-t border-portx-border bg-portx-surface/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="section-title text-center mb-3">Unlock the full PortX ecosystem</h2>
+          <p className="text-portx-muted text-center max-w-2xl mx-auto mb-10 text-sm">
+            Trade baskets, preview portfolio loans, and access premium NFT utility — built for
+            long-term ecosystem members.
+          </p>
+
+          <div className="grid md:grid-cols-3 gap-5 mb-10">
+            {ECOSYSTEM_CARDS.map((card) => (
+              <Link
+                key={card.title}
+                to={card.to}
+                className="card-glow group block text-center p-6 md:p-8 hover:border-portx-green/40 transition-colors"
+              >
+                <h3 className="font-bold text-lg mb-2 group-hover:text-portx-green transition-colors">
+                  {card.title}
+                </h3>
+                <p className="text-sm text-portx-muted">{card.description}</p>
+              </Link>
+            ))}
+          </div>
+
+          <div className="text-center">
+            <Link to="/lending" className="btn-primary px-10 py-4 text-lg">
+              Buy NFT
+            </Link>
+            <p className="text-xs text-portx-muted mt-3">
+              NFT mint coming soon — explore lending utility in preview.
+            </p>
           </div>
         </div>
       </section>

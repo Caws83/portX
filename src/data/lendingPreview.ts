@@ -166,32 +166,28 @@ export const LOAN_TIERS = [
       'Best available fee tier',
       'Extended repayment flexibility',
       'Priority access to future lending pools',
-      'Potential revenue-share eligibility if enabled later',
+      'Eligibility for future protocol reward distributions if enabled later',
     ],
     footnote: 'Illustrative — subject to protocol approval.',
   },
 ] as const
 
-export const NFT_UTILITY_BENEFITS = [
-  {
-    title: 'Lower borrowing fees',
-    description: 'Illustrative fee discounts on eligible loan previews.',
-  },
-  {
-    title: 'More flexible repayment windows',
-    description: 'Extended term options where protocol risk allows.',
-  },
-  {
-    title: 'Priority access before public launch',
-    description: 'Early queue for lending pool access during rollout.',
-  },
-  {
-    title: 'Better loan terms for eligible baskets',
-    description: 'Enhanced LTV headroom on approved collateral baskets.',
-  },
-  {
-    title: 'Potential future rewards utility',
-    description:
-      'Potential future rewards / fee-share eligibility subject to final tokenomics.',
-  },
+export const GENESIS_NFT_BENEFITS = [
+  'Priority access to lending launch',
+  'Lower lending fees',
+  'Extended repayment flexibility',
+  'Enhanced borrowing terms for eligible portfolios',
+  'Early access to future protocol features',
+  'Eligibility for future protocol reward distributions and ecosystem incentives',
+  'Priority beta access',
 ] as const
+
+export const GENESIS_NFT_STATS = [
+  { label: 'Collection Size', value: '10,000 NFTs' },
+  { label: 'Launch Access', value: 'Early' },
+  { label: 'Fee Tier', value: 'Reduced' },
+  { label: 'Lending Access', value: 'Priority' },
+] as const
+
+export const GENESIS_NFT_UTILITY_FOOTNOTE =
+  'Potential future protocol rewards and additional utility may expand over time — subject to protocol approval and final tokenomics.'

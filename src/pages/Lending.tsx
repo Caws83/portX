@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { PORTX_NFT_URL } from '@/config/links'
 import {
   FEE_TIERS_BY_TERM,
+  GENESIS_NFT_BENEFITS,
+  GENESIS_NFT_STATS,
+  GENESIS_NFT_UTILITY_FOOTNOTE,
   LENDING_PORTFOLIO_EXAMPLES,
   LENDING_STEPS,
   LIQUIDATION_LEVELS,
@@ -9,7 +13,6 @@ import {
   LOAN_TIERS,
   LTV_TIER_OPTIONS,
   NFT_HOLDER_LTV_BOOST,
-  NFT_UTILITY_BENEFITS,
   PREVIEW_FOOTNOTE,
   WAITLIST_MAILTO,
   type LoanTermDays,
@@ -317,35 +320,74 @@ export function Lending() {
         </div>
       </section>
 
-      {/* NFT utility */}
-      <section className="mb-14">
-        <div className="card-glow p-6 md:p-8 overflow-hidden relative">
+      {/* PortX Genesis NFT */}
+      <section className="mb-14" id="genesis-nft">
+        <div className="card-glow p-6 md:p-10 overflow-hidden relative">
           <div
-            className="absolute inset-0 opacity-30 pointer-events-none"
+            className="absolute inset-0 opacity-35 pointer-events-none"
             style={{
               background:
-                'radial-gradient(ellipse 60% 80% at 100% 50%, rgba(0,212,255,0.15), transparent 60%)',
+                'radial-gradient(ellipse 55% 70% at 0% 50%, rgba(0,255,136,0.12), transparent 55%), radial-gradient(ellipse 45% 60% at 100% 30%, rgba(0,212,255,0.12), transparent 50%)',
             }}
           />
           <div className="relative z-10">
-            <h2 className="text-xl md:text-2xl font-bold">
-              NFT holders get <span className="gradient-text">stronger lending power</span>
+            <span className="inline-block text-xs font-semibold uppercase tracking-widest text-portx-blue mb-3">
+              NFT Utility
+            </span>
+            <h2 className="text-2xl md:text-3xl font-bold">
+              PortX Genesis NFT Collection
             </h2>
-            <p className="text-portx-muted text-sm mt-2 max-w-2xl">
-              Holder benefits preview — not live until protocol testing and audit complete.
+            <p className="text-portx-muted mt-2 max-w-2xl">
+              Built for early adopters of the PortX ecosystem.
             </p>
 
-            <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {NFT_UTILITY_BENEFITS.map(({ title, description }) => (
-                <div
-                  key={title}
-                  className="rounded-xl border border-portx-border/80 bg-portx-surface/60 p-4 hover:border-portx-blue/30 transition-colors"
-                >
-                  <h3 className="font-semibold text-sm">{title}</h3>
-                  <p className="text-xs text-portx-muted mt-2 leading-relaxed">{description}</p>
-                </div>
-              ))}
+            <div className="mt-8 grid lg:grid-cols-2 gap-8">
+              <ul className="space-y-3">
+                {GENESIS_NFT_BENEFITS.map((benefit) => (
+                  <li key={benefit} className="flex items-start gap-3 text-sm">
+                    <span className="text-portx-green font-bold shrink-0 mt-0.5">✓</span>
+                    <span>{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="grid grid-cols-2 gap-3">
+                {GENESIS_NFT_STATS.map(({ label, value }) => (
+                  <div
+                    key={label}
+                    className="rounded-xl border border-portx-border/80 bg-gradient-to-br from-portx-surface/90 to-portx-card/50 p-4"
+                  >
+                    <p className="text-[10px] uppercase tracking-widest text-portx-muted">
+                      {label}
+                    </p>
+                    <p className="font-semibold mt-1.5 text-portx-green">{value}</p>
+                  </div>
+                ))}
+              </div>
             </div>
+
+            <p className="text-xs text-portx-muted mt-6 leading-relaxed max-w-3xl">
+              {GENESIS_NFT_UTILITY_FOOTNOTE}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Early member CTA */}
+      <section className="mb-14">
+        <div className="rounded-2xl border border-portx-green/25 bg-gradient-to-br from-portx-green/10 via-portx-card to-portx-blue/5 p-8 md:p-10 text-center">
+          <h2 className="text-2xl md:text-3xl font-bold mb-3">Become an Early PortX Member</h2>
+          <p className="text-portx-muted text-sm max-w-lg mx-auto mb-8">
+            Secure priority access to lending launch, reduced fees, and future protocol features.
+            Eligibility for ecosystem incentives may expand over time.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <a href={PORTX_NFT_URL} className="btn-primary w-full sm:w-auto">
+              Buy NFT
+            </a>
+            <Link to="/lending" className="btn-secondary w-full sm:w-auto">
+              Learn About Lending
+            </Link>
           </div>
         </div>
       </section>
