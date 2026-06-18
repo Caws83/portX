@@ -1,6 +1,6 @@
 import { SEPOLIA_TESTNET } from '@/config/networks'
 
-/** Sepolia BundleExecutor — read-only registry; not wired for live execution */
+/** Sepolia BundleExecutor — T-2 hardened; update address after redeploy */
 export const BUNDLE_EXECUTOR_SEPOLIA = {
   name: 'BundleExecutor',
   address: '0xbfa84769F94A896DB43f308fe6E4543ACeDcF49B' as const,

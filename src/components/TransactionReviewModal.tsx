@@ -183,8 +183,8 @@ export function TransactionReviewModal({
 
   const bundleBuildResult = useMemo(() => {
     if (!bundleQuotePreview) return null
-    return buildSwapCalls(bundleQuotePreview)
-  }, [bundleQuotePreview])
+    return buildSwapCalls(bundleQuotePreview, address)
+  }, [bundleQuotePreview, address])
 
   const sepoliaChainId = getBundleExecutorChainId()
   const walletOnSepolia = chainId === sepoliaChainId

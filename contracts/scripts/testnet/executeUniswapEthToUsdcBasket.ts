@@ -6,12 +6,15 @@
  *
  * Requires contracts/.env with SEPOLIA_RPC_URL + DEPLOYER_PRIVATE_KEY.
  * Not wired to PortX frontend/backend. Does not enable app live execution.
+ *
+ * T-2: recipient = user wallet; outputs verified on deployer USDC balance.
  */
 import { ethers } from 'hardhat'
 import type { BundleExecutor } from '../../typechain-types'
 
 const SEPOLIA_CHAIN_ID = 11155111
 
+/** Update after redeploying BundleExecutor with T-2 hardening */
 const BUNDLE_EXECUTOR_ADDRESS = '0xbfa84769F94A896DB43f308fe6E4543ACeDcF49B'
 const SWAP_ROUTER02_ADDRESS = '0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E'
 const QUOTER_V2_ADDRESS = '0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3'
@@ -53,14 +56,14 @@ async function quoteEthToUsdc(): Promise<bigint> {
   return quote[0] as bigint
 }
 
-function encodeExactInputSingle(minAmountOut: bigint): string {
+function encodeExactInputSingle(recipient: string, minAmountOut: bigint): string {
   const routerInterface = new ethers.Interface(SWAP_ROUTER02_ABI)
   return routerInterface.encodeFunctionData('exactInputSingle', [
     {
       tokenIn: WETH_ADDRESS,
       tokenOut: USDC_ADDRESS,
       fee: POOL_FEE,
-      recipient: BUNDLE_EXECUTOR_ADDRESS,
+      recipient,
       amountIn: AMOUNT_IN,
       amountOutMinimum: minAmountOut,
       sqrtPriceLimitX96: 0,
@@ -71,6 +74,19 @@ function encodeExactInputSingle(minAmountOut: bigint): string {
 async function readUsdcBalance(holder: string): Promise<bigint> {
   const usdc = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, ethers.provider)
   return usdc.balanceOf(holder) as Promise<bigint>
+}
+
+async function ensureRouterAllowlisted(executor: BundleExecutor, router: string): Promise<void> {
+  const allowed = await executor.allowedRouters(router)
+  if (allowed) {
+    console.log('SwapRouter02 already allowlisted')
+    return
+  }
+
+  console.log('Allowlisting SwapRouter02 on BundleExecutor...')
+  const tx = await executor.setRouterAllowed(router, true)
+  await tx.wait()
+  console.log('SwapRouter02 allowlisted')
 }
 
 async function main() {
@@ -93,10 +109,11 @@ async function main() {
 
   const quotedOut = await quoteEthToUsdc()
   const minAmountOut = applySlippage(quotedOut, SLIPPAGE_BPS)
-  const swapData = encodeExactInputSingle(minAmountOut)
+  const swapData = encodeExactInputSingle(deployer.address, minAmountOut)
 
   console.log('Quote output (USDC):', formatUsdc(quotedOut))
   console.log('Min output after slippage (USDC):', formatUsdc(minAmountOut))
+  console.log('Recipient (user wallet):', deployer.address)
   console.log('Calldata size (bytes):', (swapData.length - 2) / 2)
 
   const swaps = [
@@ -115,8 +132,12 @@ async function main() {
     BUNDLE_EXECUTOR_ADDRESS,
   )) as BundleExecutor
 
-  const usdcBefore = await readUsdcBalance(BUNDLE_EXECUTOR_ADDRESS)
-  console.log('BundleExecutor USDC balance (before):', formatUsdc(usdcBefore))
+  await ensureRouterAllowlisted(executor, SWAP_ROUTER02_ADDRESS)
+
+  const userUsdcBefore = await readUsdcBalance(deployer.address)
+  const executorUsdcBefore = await readUsdcBalance(BUNDLE_EXECUTOR_ADDRESS)
+  console.log('User USDC balance (before):', formatUsdc(userUsdcBefore))
+  console.log('BundleExecutor USDC balance (before):', formatUsdc(executorUsdcBefore))
 
   console.log('Simulating executeBasket (staticCall)...')
   await executor.executeBasket.staticCall(BASKET_ID, swaps, { value: AMOUNT_IN })
@@ -131,9 +152,19 @@ async function main() {
   const receipt = await tx.wait()
   if (!receipt) throw new Error('Missing transaction receipt')
 
-  const usdcAfter = await readUsdcBalance(BUNDLE_EXECUTOR_ADDRESS)
-  console.log('BundleExecutor USDC balance (after):', formatUsdc(usdcAfter))
-  console.log('USDC received:', formatUsdc(usdcAfter - usdcBefore))
+  const userUsdcAfter = await readUsdcBalance(deployer.address)
+  const executorUsdcAfter = await readUsdcBalance(BUNDLE_EXECUTOR_ADDRESS)
+  console.log('User USDC balance (after):', formatUsdc(userUsdcAfter))
+  console.log('BundleExecutor USDC balance (after):', formatUsdc(executorUsdcAfter))
+  console.log('USDC received by user:', formatUsdc(userUsdcAfter - userUsdcBefore))
+  console.log('USDC stranded in executor:', formatUsdc(executorUsdcAfter - executorUsdcBefore))
+
+  if (userUsdcAfter <= userUsdcBefore) {
+    throw new Error('Expected user USDC balance to increase after swap')
+  }
+  if (executorUsdcAfter > executorUsdcBefore) {
+    throw new Error('Expected no USDC stranded in BundleExecutor')
+  }
 
   console.log('Status:', receipt.status === 1 ? 'SUCCESS' : 'FAILED')
   console.log('Gas used:', receipt.gasUsed.toString())

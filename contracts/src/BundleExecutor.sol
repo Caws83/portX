@@ -5,30 +5,22 @@ import {IERC20} from "./interfaces/IERC20.sol";
 
 /**
  * @title BundleExecutor
- * @author PortX (architecture draft)
+ * @author PortX
  *
- * @notice FIRST DRAFT — NOT AUDITED — NOT DEPLOYED — NOT FOR PRODUCTION
+ * @notice Sepolia testnet basket executor — NOT AUDITED — NOT FOR MAINNET
  *
- * Planning contract for future one-transaction basket execution on Ethereum.
- * PortX Alpha today uses 0x quote calldata preview + dry-run simulation only;
- * this contract is NOT wired to the frontend or backend.
- *
- * Intended future flow:
- *   1. User approves ERC-20 inputs to BundleExecutor (or sends ETH)
- *   2. Off-chain quote service builds SwapCall[] with router calldata + minOut
- *   3. User signs one tx → executeBasket() loops external router calls
- *   4. Events index legs for portfolio / analytics
- *
- * Security: requires professional audit before any mainnet deployment.
+ * Executes ordered swap legs through owner-allowlisted routers. Outputs are
+ * settled to msg.sender via router recipient calldata and/or post-leg sweep.
+ * Slippage is enforced per leg using balance-delta accounting on msg.sender.
  */
 contract BundleExecutor {
     // -------------------------------------------------------------------------
     // Types
     // -------------------------------------------------------------------------
 
-    /// @notice One leg routed through an external aggregator (0x, 1inch, etc.)
+    /// @notice One leg routed through an external aggregator (0x, 1inch, Uniswap, etc.)
     struct SwapCall {
-        /// @dev Router contract to call (e.g. 0x allowance-holder target)
+        /// @dev Router contract to call (must be allowlisted)
         address router;
         /// @dev Encoded swap calldata from quote API — executor does not decode
         bytes data;
@@ -36,9 +28,9 @@ contract BundleExecutor {
         address tokenIn;
         /// @dev Amount of tokenIn (wei for ETH)
         uint256 amountIn;
-        /// @dev Slippage placeholder — minimum acceptable output (enforced off-chain today)
+        /// @dev Minimum acceptable output for this leg (enforced on-chain)
         uint256 minAmountOut;
-        /// @dev Expected output token for indexing (not verified on-chain in v0 draft)
+        /// @dev Output token for balance-delta accounting (address(0) = native ETH)
         address tokenOut;
     }
 
@@ -64,6 +56,8 @@ contract BundleExecutor {
         uint256 timestamp
     );
 
+    event RouterAllowlistUpdated(address indexed router, bool allowed);
+
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
@@ -74,12 +68,16 @@ contract BundleExecutor {
     error RouterCallFailed(uint256 legIndex);
     error EthTransferFailed();
     error InvalidRecipient();
+    error SlippageExceeded();
+    error RouterNotAllowed(address router);
 
     // -------------------------------------------------------------------------
     // Storage
     // -------------------------------------------------------------------------
 
     address public owner;
+
+    mapping(address => bool) public allowedRouters;
 
     uint256 private _reentrancyStatus;
     uint256 private constant _NOT_ENTERED = 1;
@@ -111,16 +109,26 @@ contract BundleExecutor {
     }
 
     // -------------------------------------------------------------------------
-    // External — basket execution (NOT ENABLED IN PORTX ALPHA)
+    // Owner — router allowlist
+    // -------------------------------------------------------------------------
+
+    function setRouterAllowed(address router, bool allowed) external onlyOwner {
+        if (router == address(0)) revert InvalidRecipient();
+        allowedRouters[router] = allowed;
+        emit RouterAllowlistUpdated(router, allowed);
+    }
+
+    // -------------------------------------------------------------------------
+    // External — basket execution
     // -------------------------------------------------------------------------
 
     /**
      * @notice Execute a basket of swaps in a single transaction.
      * @param basketId Off-chain basket / plan identifier for indexing
-     * @param swaps Ordered legs — each calls `router` with `data`
+     * @param swaps Ordered legs — each calls an allowlisted `router` with `data`
      *
-     * @dev minAmountOut is a placeholder in this draft; production must enforce
-     *      return values or use router-specific settlement checks post-audit.
+     * @dev Output settlement: routers should set recipient = msg.sender in calldata.
+     *      Any output token or ETH left on this contract after a leg is swept to msg.sender.
      * @dev Caller must have approved ERC-20 inputs or attach ETH for native legs.
      */
     function executeBasket(
@@ -133,22 +141,29 @@ contract BundleExecutor {
 
         for (uint256 i = 0; i < swaps.length; ) {
             SwapCall calldata swap = swaps[i];
-            uint256 amountOut;
+
+            if (!allowedRouters[swap.router]) revert RouterNotAllowed(swap.router);
+
+            uint256 balanceBefore = _balanceOf(swap.tokenOut, msg.sender);
 
             if (swap.tokenIn == address(0)) {
                 if (swap.amountIn > ethRemaining) revert RouterCallFailed(i);
                 ethRemaining -= swap.amountIn;
-                amountOut = _callRouter(swap.router, swap.data, swap.amountIn);
+                _callRouter(swap.router, swap.data, swap.amountIn);
             } else {
                 IERC20 token = IERC20(swap.tokenIn);
                 token.transferFrom(msg.sender, address(this), swap.amountIn);
                 token.approve(swap.router, swap.amountIn);
-                amountOut = _callRouter(swap.router, swap.data, 0);
+                _callRouter(swap.router, swap.data, 0);
                 token.approve(swap.router, 0);
             }
 
-            // Placeholder: minAmountOut should be enforced after audit
-            // if (amountOut < swap.minAmountOut) revert SlippageExceeded(i);
+            _sweepTokenTo(msg.sender, swap.tokenOut);
+
+            uint256 balanceAfter = _balanceOf(swap.tokenOut, msg.sender);
+            uint256 amountOut = balanceAfter - balanceBefore;
+
+            if (amountOut < swap.minAmountOut) revert SlippageExceeded();
 
             emit SwapExecuted(
                 basketId,
@@ -167,7 +182,6 @@ contract BundleExecutor {
 
         emit BasketExecuted(basketId, address(this), msg.sender, swaps.length, block.timestamp);
 
-        // Refund unused ETH to caller (draft behavior)
         if (address(this).balance > 0) {
             _transferEth(msg.sender, address(this).balance);
         }
@@ -196,15 +210,31 @@ contract BundleExecutor {
     // Internal
     // -------------------------------------------------------------------------
 
-    function _callRouter(address router, bytes calldata data, uint256 ethValue) internal returns (uint256) {
-        (bool ok, bytes memory returndata) = router.call{value: ethValue}(data);
+    function _callRouter(address router, bytes calldata data, uint256 ethValue) internal {
+        (bool ok, ) = router.call{value: ethValue}(data);
         if (!ok) revert RouterCallFailed(type(uint256).max);
+    }
 
-        // Draft: routers return varying shapes; production must decode per provider
-        if (returndata.length >= 32) {
-            return abi.decode(returndata, (uint256));
+    function _balanceOf(address token, address account) internal view returns (uint256) {
+        if (token == address(0)) {
+            return account.balance;
         }
-        return 0;
+        return IERC20(token).balanceOf(account);
+    }
+
+    function _sweepTokenTo(address to, address token) internal {
+        if (token == address(0)) {
+            uint256 ethBalance = address(this).balance;
+            if (ethBalance > 0) {
+                _transferEth(to, ethBalance);
+            }
+            return;
+        }
+
+        uint256 tokenBalance = IERC20(token).balanceOf(address(this));
+        if (tokenBalance > 0) {
+            IERC20(token).transfer(to, tokenBalance);
+        }
     }
 
     function _transferEth(address to, uint256 amount) internal {

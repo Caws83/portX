@@ -1,7 +1,14 @@
-import { createPublicClient, encodeFunctionData, formatEther, formatUnits, http, parseAbi } from 'viem'
+import {
+  createPublicClient,
+  encodeFunctionData,
+  formatEther,
+  formatUnits,
+  http,
+  parseAbi,
+  type Address,
+} from 'viem'
 import { sepolia } from 'viem/chains'
 import {
-  TESTNET_BUNDLE_EXECUTOR_ADDRESS,
   TESTNET_DEFAULT_SLIPPAGE_BPS,
   TESTNET_DEFAULT_SWAP_AMOUNT_WEI,
   TESTNET_MAX_SWAP_AMOUNT_WEI,
@@ -105,9 +112,11 @@ export async function quoteEthToUsdcOnSepolia(amountInWei: bigint): Promise<bigi
   return result[0]
 }
 
+/** Encode Uniswap V3 exactInputSingle — recipient must be the user wallet for non-custodial settlement */
 export function encodeUniswapExactInputSingleCalldata(
   amountInWei: bigint,
   minAmountOut: bigint,
+  recipient: Address,
 ): `0x${string}` {
   return encodeFunctionData({
     abi: SWAP_ROUTER02_ABI,
@@ -117,7 +126,7 @@ export function encodeUniswapExactInputSingleCalldata(
         tokenIn: TESTNET_WETH_ADDRESS,
         tokenOut: TESTNET_USDC_ADDRESS,
         fee: TESTNET_UNISWAP_POOL_FEE,
-        recipient: TESTNET_BUNDLE_EXECUTOR_ADDRESS,
+        recipient,
         amountIn: amountInWei,
         amountOutMinimum: minAmountOut,
         sqrtPriceLimitX96: 0n,
@@ -129,13 +138,15 @@ export function encodeUniswapExactInputSingleCalldata(
 /** Read-only quote + calldata assembly — no wallet or executeBasket calls */
 export async function buildTestnetUniswapQuoteDetails(
   params: TestnetUniswapQuoteParams = {},
+  recipient?: Address,
 ): Promise<TestnetUniswapQuoteDetails> {
   const amountInWei = params.amountInWei ?? TESTNET_DEFAULT_SWAP_AMOUNT_WEI
   const slippageBps = params.slippageBps ?? TESTNET_DEFAULT_SLIPPAGE_BPS
 
   const quotedAmountOut = await quoteEthToUsdcOnSepolia(amountInWei)
   const minAmountOut = applyTestnetSlippage(quotedAmountOut, slippageBps)
-  const calldata = encodeUniswapExactInputSingleCalldata(amountInWei, minAmountOut)
+  const calldataRecipient = recipient ?? ('0x0000000000000000000000000000000000000001' as Address)
+  const calldata = encodeUniswapExactInputSingleCalldata(amountInWei, minAmountOut, calldataRecipient)
 
   return {
     chainId: TESTNET_SEPOLIA_CHAIN_ID,
@@ -220,14 +231,16 @@ function buildQuoteResponse(
 async function buildTestnetLegQuote(
   amountInWei: bigint,
   slippageBps: number,
+  recipient?: Address,
 ): Promise<{ details: TestnetUniswapQuoteDetails; quote: QuoteResponse }> {
-  const details = await buildTestnetUniswapQuoteDetails({ amountInWei, slippageBps })
+  const details = await buildTestnetUniswapQuoteDetails({ amountInWei, slippageBps }, recipient)
   return { details, quote: buildQuoteResponse(details) }
 }
 
 /** Build BasketQuotePreview for testnet ETH → USDC — single or multi-leg by allocation */
 export async function buildTestnetEthToUsdcBasketPreview(
   params: TestnetUniswapQuoteParams = {},
+  recipient?: Address,
 ): Promise<BasketQuotePreview> {
   const totalAmountWei = params.amountInWei ?? TESTNET_DEFAULT_SWAP_AMOUNT_WEI
   const slippageBps = params.slippageBps ?? TESTNET_DEFAULT_SLIPPAGE_BPS
@@ -237,7 +250,7 @@ export async function buildTestnetEthToUsdcBasketPreview(
   const useMultiLeg = selectedAllocations.length > 1
 
   if (!useMultiLeg) {
-    const { details, quote } = await buildTestnetLegQuote(totalAmountWei, slippageBps)
+    const { details, quote } = await buildTestnetLegQuote(totalAmountWei, slippageBps, recipient)
     return {
       type: 'buy',
       basketId: params.basketId,
@@ -274,7 +287,7 @@ export async function buildTestnetEthToUsdcBasketPreview(
   )
 
   const legResults = await Promise.all(
-    legAmounts.map((amountInWei) => buildTestnetLegQuote(amountInWei, slippageBps)),
+    legAmounts.map((amountInWei) => buildTestnetLegQuote(amountInWei, slippageBps, recipient)),
   )
 
   const legs = legResults.map(({ quote }, index) => ({

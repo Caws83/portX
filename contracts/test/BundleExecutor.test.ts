@@ -27,6 +27,8 @@ describe('BundleExecutor', () => {
     const token = (await MockERC20.deploy('Mock USDC', 'mUSDC', 6)) as MockERC20
     await token.mint(user.address, 1_000_000n)
 
+    const outputToken = (await MockERC20.deploy('Mock OUT', 'mOUT', 6)) as MockERC20
+
     const ReentrancyRouter = await ethers.getContractFactory('ReentrancyRouter')
     const reentrancyRouter = (await ReentrancyRouter.deploy()) as ReentrancyRouter
     await reentrancyRouter.configure(await executor.getAddress(), BASKET_ID)
@@ -34,13 +36,44 @@ describe('BundleExecutor', () => {
     const InvalidDataRouter = await ethers.getContractFactory('InvalidDataRouter')
     const invalidRouter = (await InvalidDataRouter.deploy()) as InvalidDataRouter
 
-    return { executor, router, token, reentrancyRouter, invalidRouter, owner, user, other }
+    const routerAddr = await router.getAddress()
+    const reentrancyAddr = await reentrancyRouter.getAddress()
+    const invalidAddr = await invalidRouter.getAddress()
+
+    await executor.connect(owner).setRouterAllowed(routerAddr, true)
+    await executor.connect(owner).setRouterAllowed(reentrancyAddr, true)
+    await executor.connect(owner).setRouterAllowed(invalidAddr, true)
+
+    return {
+      executor,
+      router,
+      token,
+      outputToken,
+      reentrancyRouter,
+      invalidRouter,
+      owner,
+      user,
+      other,
+    }
+  }
+
+  async function configureRouterOutput(
+    router: MockRouter,
+    outputToken: MockERC20,
+    returnAmount: bigint,
+  ) {
+    const routerAddr = await router.getAddress()
+    await router.setReturnAmount(returnAmount)
+    await router.setOutputToken(await outputToken.getAddress())
+    await router.setTransferOutputToOrigin(true)
+    await outputToken.mint(routerAddr, returnAmount * 10n)
   }
 
   function buildEthSwap(
     router: string,
     amountIn: bigint,
-    tokenOut = ethers.ZeroAddress,
+    tokenOut: string,
+    minAmountOut = 0n,
     data = '0x'
   ) {
     return {
@@ -48,7 +81,7 @@ describe('BundleExecutor', () => {
       data,
       tokenIn: ethers.ZeroAddress,
       amountIn,
-      minAmountOut: 0n,
+      minAmountOut,
       tokenOut,
     }
   }
@@ -58,6 +91,7 @@ describe('BundleExecutor', () => {
     tokenIn: string,
     amountIn: bigint,
     tokenOut: string,
+    minAmountOut = 0n,
     data = '0x'
   ) {
     return {
@@ -65,7 +99,7 @@ describe('BundleExecutor', () => {
       data,
       tokenIn,
       amountIn,
-      minAmountOut: 0n,
+      minAmountOut,
       tokenOut,
     }
   }
@@ -95,6 +129,32 @@ describe('BundleExecutor', () => {
       await expect(
         executor.connect(owner).transferOwnership(ethers.ZeroAddress)
       ).to.be.revertedWithCustomError(executor, 'InvalidRecipient')
+    })
+  })
+
+  describe('router allowlist', () => {
+    it('allows owner to set router allowlist', async () => {
+      const { executor, owner, other } = await loadFixture(deployFixture)
+      await expect(executor.connect(owner).setRouterAllowed(other.address, true))
+        .to.emit(executor, 'RouterAllowlistUpdated')
+        .withArgs(other.address, true)
+      expect(await executor.allowedRouters(other.address)).to.equal(true)
+    })
+
+    it('reverts when router is not allowlisted', async () => {
+      const { executor, user, other } = await loadFixture(deployFixture)
+      const swaps = [buildEthSwap(other.address, 1n, ethers.Wallet.createRandom().address)]
+      await expect(
+        executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 1n })
+      ).to.be.revertedWithCustomError(executor, 'RouterNotAllowed')
+        .withArgs(other.address)
+    })
+
+    it('reverts allowlist update from non-owner', async () => {
+      const { executor, user, other } = await loadFixture(deployFixture)
+      await expect(
+        executor.connect(user).setRouterAllowed(other.address, true)
+      ).to.be.revertedWithCustomError(executor, 'NotOwner')
     })
   })
 
@@ -133,10 +193,10 @@ describe('BundleExecutor', () => {
     it('blocks executeBasket when reentrancy guard is active', async () => {
       const { executor, user } = await loadFixture(deployFixture)
       const executorAddr = await executor.getAddress()
-      // storage slot 1 = _reentrancyStatus (slot 0 = owner); 2 = _ENTERED
+      // storage slot 2 = _reentrancyStatus (slot 0 = owner, slot 1 = allowedRouters); 2 = _ENTERED
       await ethers.provider.send('hardhat_setStorageAt', [
         executorAddr,
-        '0x0000000000000000000000000000000000000000000000000000000000000001',
+        '0x0000000000000000000000000000000000000000000000000000000000000002',
         ethers.zeroPadValue(ethers.toBeHex(2), 32),
       ])
       await expect(
@@ -146,7 +206,7 @@ describe('BundleExecutor', () => {
 
     it('fails closed when router attempts nested executeBasket', async () => {
       const { executor, reentrancyRouter, user } = await loadFixture(deployFixture)
-      const swaps = [buildEthSwap(await reentrancyRouter.getAddress(), 1n)]
+      const swaps = [buildEthSwap(await reentrancyRouter.getAddress(), 1n, ethers.ZeroAddress)]
       await expect(
         executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 1n })
       ).to.be.revertedWithCustomError(executor, 'RouterCallFailed')
@@ -165,7 +225,7 @@ describe('BundleExecutor', () => {
     it('reverts when router call fails', async () => {
       const { executor, router, user } = await loadFixture(deployFixture)
       await router.setShouldFail(true)
-      const swaps = [buildEthSwap(await router.getAddress(), ethers.parseEther('0.01'))]
+      const swaps = [buildEthSwap(await router.getAddress(), ethers.parseEther('0.01'), ethers.ZeroAddress)]
       await expect(
         executor.connect(user).executeBasket(BASKET_ID, swaps, {
           value: ethers.parseEther('0.01'),
@@ -177,7 +237,13 @@ describe('BundleExecutor', () => {
     it('reverts on invalid swap data', async () => {
       const { executor, invalidRouter, user } = await loadFixture(deployFixture)
       const swaps = [
-        buildEthSwap(await invalidRouter.getAddress(), 1n, ethers.ZeroAddress, '0xdeadbeef'),
+        buildEthSwap(
+          await invalidRouter.getAddress(),
+          1n,
+          ethers.ZeroAddress,
+          0n,
+          '0xdeadbeef'
+        ),
       ]
       await expect(
         executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 1n })
@@ -185,14 +251,27 @@ describe('BundleExecutor', () => {
         .withArgs(ROUTER_FAIL_INDEX)
     })
 
+    it('reverts when slippage exceeded', async () => {
+      const { executor, router, outputToken, user } = await loadFixture(deployFixture)
+      const returnAmount = 100n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      const routerAddr = await router.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const swaps = [buildEthSwap(routerAddr, 10n, tokenOut, returnAmount + 1n)]
+
+      await expect(
+        executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 10n })
+      ).to.be.revertedWithCustomError(executor, 'SlippageExceeded')
+    })
+
     it('emits SwapExecuted and BasketExecuted for single ETH leg', async () => {
-      const { executor, router, user } = await loadFixture(deployFixture)
+      const { executor, router, outputToken, user } = await loadFixture(deployFixture)
       const returnAmount = 2_500n
-      await router.setReturnAmount(returnAmount)
+      await configureRouterOutput(router, outputToken, returnAmount)
       const routerAddr = await router.getAddress()
       const amountIn = ethers.parseEther('0.1')
-      const tokenOut = ethers.Wallet.createRandom().address
-      const swaps = [buildEthSwap(routerAddr, amountIn, tokenOut)]
+      const tokenOut = await outputToken.getAddress()
+      const swaps = [buildEthSwap(routerAddr, amountIn, tokenOut, returnAmount)]
 
       const tx = await executor.connect(user).executeBasket(BASKET_ID, swaps, { value: amountIn })
       await expect(tx)
@@ -215,36 +294,61 @@ describe('BundleExecutor', () => {
       expect(basketLog?.args.legCount).to.equal(1n)
     })
 
-    it('executes multiple swap legs (ETH + ERC20)', async () => {
-      const { executor, router, token, user } = await loadFixture(deployFixture)
-      await router.setReturnAmount(100n)
+    it('delivers outputs to user wallet (not executor)', async () => {
+      const { executor, router, outputToken, user } = await loadFixture(deployFixture)
+      const returnAmount = 5_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      const routerAddr = await router.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const executorAddr = await executor.getAddress()
+      const swaps = [buildEthSwap(routerAddr, 10n, tokenOut, returnAmount)]
+
+      const userBefore = await outputToken.balanceOf(user.address)
+      const executorBefore = await outputToken.balanceOf(executorAddr)
+
+      await executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 10n })
+
+      expect(await outputToken.balanceOf(user.address)).to.equal(userBefore + returnAmount)
+      expect(await outputToken.balanceOf(executorAddr)).to.equal(executorBefore)
+    })
+
+    it('executes multiple swap legs (ETH + ERC20) with outputs to user', async () => {
+      const { executor, router, token, outputToken, user } = await loadFixture(deployFixture)
+      const returnAmount = 100n
+      await configureRouterOutput(router, outputToken, returnAmount)
       const routerAddr = await router.getAddress()
       const tokenAddr = await token.getAddress()
+      const tokenOut = await outputToken.getAddress()
       const erc20Amount = 1_000n
       const ethAmount = ethers.parseEther('0.05')
 
       await token.connect(user).approve(await executor.getAddress(), erc20Amount)
 
       const swaps = [
-        buildEthSwap(routerAddr, ethAmount, tokenAddr),
-        buildErc20Swap(routerAddr, tokenAddr, erc20Amount, tokenAddr),
+        buildEthSwap(routerAddr, ethAmount, tokenOut, returnAmount),
+        buildErc20Swap(routerAddr, tokenAddr, erc20Amount, tokenOut, returnAmount),
       ]
+
+      const userOutBefore = await outputToken.balanceOf(user.address)
+      const executorOutBefore = await outputToken.balanceOf(await executor.getAddress())
 
       await expect(executor.connect(user).executeBasket(BASKET_ID, swaps, { value: ethAmount }))
         .to.emit(executor, 'SwapExecuted')
-        .withArgs(BASKET_ID, 0n, routerAddr, ethers.ZeroAddress, tokenAddr, ethAmount, 100n)
+        .withArgs(BASKET_ID, 0n, routerAddr, ethers.ZeroAddress, tokenOut, ethAmount, returnAmount)
         .and.to.emit(executor, 'SwapExecuted')
-        .withArgs(BASKET_ID, 1n, routerAddr, tokenAddr, tokenAddr, erc20Amount, 100n)
+        .withArgs(BASKET_ID, 1n, routerAddr, tokenAddr, tokenOut, erc20Amount, returnAmount)
         .and.to.emit(executor, 'BasketExecuted')
 
-      expect(await token.balanceOf(await executor.getAddress())).to.equal(erc20Amount)
+      expect(await outputToken.balanceOf(user.address)).to.equal(userOutBefore + returnAmount * 2n)
+      expect(await outputToken.balanceOf(await executor.getAddress())).to.equal(executorOutBefore)
     })
 
-    it('simulates router success with decoded return amount', async () => {
-      const { executor, router, user } = await loadFixture(deployFixture)
+    it('reports accurate balance delta in SwapExecuted event', async () => {
+      const { executor, router, outputToken, user } = await loadFixture(deployFixture)
       const expectedOut = 42_000n
-      await router.setReturnAmount(expectedOut)
-      const swaps = [buildEthSwap(await router.getAddress(), 10n)]
+      await configureRouterOutput(router, outputToken, expectedOut)
+      const tokenOut = await outputToken.getAddress()
+      const swaps = [buildEthSwap(await router.getAddress(), 10n, tokenOut, expectedOut)]
 
       const tx = await executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 10n })
       const receipt = await tx.wait()
@@ -253,6 +357,29 @@ describe('BundleExecutor', () => {
       )
       const parsed = executor.interface.parseLog(swapLog as { topics: string[]; data: string })
       expect(parsed?.args[6]).to.equal(expectedOut)
+      expect(await outputToken.balanceOf(user.address)).to.equal(expectedOut)
+    })
+
+    it('sweeps stranded ERC20 output from executor to user', async () => {
+      const { executor, router, outputToken, user, owner } = await loadFixture(deployFixture)
+      const returnAmount = 3_000n
+      await router.setReturnAmount(returnAmount)
+      await router.setOutputToken(await outputToken.getAddress())
+      await router.setTransferOutputToOrigin(false)
+      const routerAddr = await router.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const executorAddr = await executor.getAddress()
+
+      await outputToken.mint(routerAddr, returnAmount)
+      await outputToken.mint(executorAddr, returnAmount)
+
+      const swaps = [buildEthSwap(routerAddr, 10n, tokenOut, returnAmount)]
+
+      const userBefore = await outputToken.balanceOf(user.address)
+      await executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 10n })
+
+      expect(await outputToken.balanceOf(user.address)).to.equal(userBefore + returnAmount)
+      expect(await outputToken.balanceOf(executorAddr)).to.equal(0n)
     })
   })
 })

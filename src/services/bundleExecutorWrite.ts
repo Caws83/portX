@@ -1,6 +1,7 @@
 import type { ExecutionPlan } from '@/types/execution'
 import type { BasketQuotePreview } from '@/types/quote'
 import type { QuoteResponse } from '@/types/quote'
+import type { Address } from 'viem'
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
 import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
 import {
@@ -8,6 +9,7 @@ import {
   getBundleExecutorChainId,
   type BundleExecutorSwapCall,
 } from '@/services/bundleExecutorContract'
+import { encodeUniswapExactInputSingleCalldata } from '@/services/testnetUniswapQuote'
 import { isValidCalldata, isValidRouterAddress } from '@/services/transactionBuilder'
 import { isZeroAddress, ZERO_ADDRESS } from '@/utils/addresses'
 
@@ -118,6 +120,34 @@ function computeMinAmountOut(outputAmount: string, slippageBps: number): bigint 
   if (typeof parsed !== 'bigint') return parsed
   const numerator = parsed * BigInt(10_000 - slippageBps)
   return numerator / 10_000n
+}
+
+function resolveSwapCalldata(
+  quote: QuoteResponse,
+  amountIn: bigint,
+  minAmountOut: bigint,
+  recipient?: Address,
+): `0x${string}` | BundleExecutionValidationError {
+  if (quote.provider === 'uniswap-sepolia') {
+    if (!recipient) {
+      return {
+        code: 'RECIPIENT_REQUIRED',
+        message: 'Wallet address is required to build non-custodial Uniswap calldata',
+        field: 'walletAddress',
+      }
+    }
+    return encodeUniswapExactInputSingleCalldata(amountIn, minAmountOut, recipient)
+  }
+
+  if (!isValidCalldata(quote.calldata)) {
+    return {
+      code: 'INVALID_QUOTE',
+      message: 'calldata is missing or invalid',
+      field: 'calldata',
+    }
+  }
+
+  return quote.calldata as `0x${string}`
 }
 
 function validateSwapCallShape(swapCall: BundleSwapCall, legIndex: number): BundleExecutionValidationError[] {
@@ -294,7 +324,10 @@ function validateQuotePreviewStructure(preview: BasketQuotePreview): BundleExecu
 }
 
 /** Build in-memory SwapCall[] from quote preview — validates quote structure and SwapCall shape only */
-export function buildSwapCalls(preview: BasketQuotePreview): BundleExecutionPrepareResult {
+export function buildSwapCalls(
+  preview: BasketQuotePreview,
+  recipient?: Address,
+): BundleExecutionPrepareResult {
   const quoteErrors = validateQuotePreviewStructure(preview)
   if (quoteErrors.length > 0) {
     return { status: 'validation_errors', errors: quoteErrors }
@@ -317,9 +350,15 @@ export function buildSwapCalls(preview: BasketQuotePreview): BundleExecutionPrep
       continue
     }
 
+    const calldata = resolveSwapCalldata(quote, amountIn, minAmountOut, recipient)
+    if (typeof calldata !== 'string') {
+      shapeErrors.push(calldata)
+      continue
+    }
+
     const swapCall: BundleSwapCall = {
       router: quote.routerAddress as `0x${string}`,
-      data: quote.calldata as `0x${string}`,
+      data: calldata,
       tokenIn: resolveTokenAddress(quote.inputToken),
       amountIn,
       minAmountOut,
@@ -358,7 +397,7 @@ export function prepareBundleExecution(context: BundleExecutionContext): BundleE
     return { status: 'validation_errors', errors }
   }
 
-  return buildSwapCalls(context.quotePreview!)
+  return buildSwapCalls(context.quotePreview!, context.walletAddress as Address | undefined)
 }
 
 function isSwapCallBuilderAvailable(): boolean {
