@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useMemo, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { PortfolioSummary, PortfolioCard } from '@/components/PortfolioCard'
 import { TokenRow } from '@/components/TokenRow'
@@ -6,8 +7,11 @@ import { BasketCard } from '@/components/BasketCard'
 import { WhalePortfolioCard } from '@/components/WhalePortfolioCard'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBanner } from '@/components/ui/StatusBanner'
+import { PortfolioHealthCard } from '@/components/PortfolioHealthCard'
+import { PortfolioRebalancePreviewModal } from '@/components/PortfolioRebalancePreviewModal'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useBasket } from '@/hooks/useBasket'
+import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
 import { NOTABLE_PORTFOLIOS } from '@/data/notablePortfolios'
 import {
   BUTTON_LABELS,
@@ -19,10 +23,29 @@ import {
 import { TestnetPortfolioSummary } from '@/components/TestnetPortfolioSummary'
 import { formatUsd, formatPercent } from '@/utils/format'
 
+import type { Basket } from '@/types/basket'
+
 export function Dashboard() {
   const { isConnected } = useAccount()
   const portfolio = usePortfolio()
   const { getBasketById, basketsLoading } = useBasket()
+  const [rebalanceBasket, setRebalanceBasket] = useState<Basket | null>(null)
+
+  const ownedBasketInputs = useMemo(
+    () =>
+      portfolio.activeBaskets
+        .map((purchase) => {
+          const basket = getBasketById(purchase.basketId)
+          return basket ? { basket, basketId: purchase.basketId } : null
+        })
+        .filter((entry): entry is { basket: Basket; basketId: string } => entry !== null),
+    [portfolio.activeBaskets, getBasketById]
+  )
+
+  const { primaryDrift, getDriftForBasket } = usePortfolioDrift(
+    portfolio.heldTokens,
+    ownedBasketInputs
+  )
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -96,6 +119,14 @@ export function Dashboard() {
             }
           />
         </div>
+      )}
+
+      {!portfolio.portfolioLoading && (
+        <PortfolioHealthCard
+          className="mt-6"
+          drift={primaryDrift?.drift ?? null}
+          basketName={primaryDrift?.basketName}
+        />
       )}
 
       {(portfolio.targetStatus.takeProfitHit || portfolio.targetStatus.stopLossHit) && (
@@ -203,9 +234,15 @@ export function Dashboard() {
             {portfolio.activeBaskets.map((purchase) => {
               const basket = getBasketById(purchase.basketId)
               if (!basket) return null
+              const drift = getDriftForBasket(purchase.basketId)
               return (
                 <div key={purchase.basketId} className="card-glow min-w-0">
-                  <BasketCard basket={basket} isOwned />
+                  <BasketCard
+                    basket={basket}
+                    isOwned
+                    driftStatus={drift?.status}
+                    onPreviewRebalance={() => setRebalanceBasket(basket)}
+                  />
                   <p className="text-xs text-portx-muted mt-3 font-mono">
                     Position: {formatUsd(purchase.amountUsd)} · Entry {formatUsd(purchase.entryValueUsd)}
                   </p>
@@ -215,6 +252,13 @@ export function Dashboard() {
           </div>
         )}
       </section>
+
+      <PortfolioRebalancePreviewModal
+        open={rebalanceBasket !== null}
+        basket={rebalanceBasket}
+        drift={rebalanceBasket ? getDriftForBasket(rebalanceBasket.id) : null}
+        onClose={() => setRebalanceBasket(null)}
+      />
     </div>
   )
 }

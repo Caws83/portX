@@ -1,16 +1,20 @@
 import type { Basket } from '@/types/basket'
 import { BasketChainBadge } from '@/components/BasketChainBadge'
+import { PortfolioDriftBadge } from '@/components/PortfolioDriftBadge'
 import { formatUsd } from '@/utils/format'
 import { BUTTON_LABELS } from '@/config/uiCopy'
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
+import type { DriftStatusLevel } from '@/utils/portfolioDrift'
 
 interface BasketCardProps {
   basket: Basket
   onPreviewBuy?: (basket: Basket) => void
   onPreviewSell?: (basket: Basket) => void
+  onPreviewRebalance?: (basket: Basket) => void
   onBuy?: (basket: Basket) => void
   onPlannedChainSelect?: (basket: Basket) => void
   isOwned?: boolean
+  driftStatus?: DriftStatusLevel
   loading?: boolean
   isSelected?: boolean
 }
@@ -19,9 +23,11 @@ export function BasketCard({
   basket,
   onPreviewBuy,
   onPreviewSell,
+  onPreviewRebalance,
   onBuy,
   onPlannedChainSelect,
   isOwned,
+  driftStatus,
   loading,
   isSelected,
 }: BasketCardProps) {
@@ -41,6 +47,7 @@ export function BasketCard({
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
             <span className="badge">{basket.tag}</span>
             <BasketChainBadge chainLabel={basket.chainLabel} chainStatus={basket.chainStatus} />
+            {isOwned && driftStatus && <PortfolioDriftBadge status={driftStatus} />}
           </div>
         </div>
         {basket.isCustom && <span className="badge-blue text-[10px] shrink-0">Custom</span>}
@@ -109,6 +116,15 @@ export function BasketCard({
               : quotesAvailable
                 ? BUTTON_LABELS.previewSellQuote
                 : BUTTON_LABELS.quotesUnavailable}
+          </button>
+        )}
+        {isOwned && onPreviewRebalance && (
+          <button
+            type="button"
+            onClick={() => onPreviewRebalance(basket)}
+            className="btn-secondary w-full text-sm py-2.5 border-portx-blue/40 text-portx-blue hover:border-portx-blue/60"
+          >
+            Preview Rebalance
           </button>
         )}
         {onBuy && (

@@ -3,11 +3,14 @@ import { usePortfolioStore } from '@/store/portfolioStore'
 import { BasketCard } from '@/components/BasketCard'
 import { QuotePreviewCard } from '@/components/QuotePreviewCard'
 import { TransactionReviewModal } from '@/components/TransactionReviewModal'
+import { PortfolioRebalancePreviewModal } from '@/components/PortfolioRebalancePreviewModal'
 import { ExecutionWarning } from '@/components/ExecutionWarning'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBanner } from '@/components/ui/StatusBanner'
 import { useBasket } from '@/hooks/useBasket'
 import { useQuotePreview } from '@/hooks/useQuotePreview'
+import { usePortfolio } from '@/hooks/usePortfolio'
+import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
 import { executeDemoPlan } from '@/services/transactionBuilder'
 import { DEFAULT_BUY_AMOUNT_USD } from '@/config/constants'
 import { assessQuoteQuality } from '@/utils/quoteQuality'
@@ -45,6 +48,7 @@ export function Baskets() {
   } = useQuotePreview()
 
   const [selectedBasket, setSelectedBasket] = useState<Basket | null>(null)
+  const [rebalanceBasket, setRebalanceBasket] = useState<Basket | null>(null)
   const [buyAmount, setBuyAmount] = useState(DEFAULT_BUY_AMOUNT_USD)
   const [modalOpen, setModalOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -56,6 +60,21 @@ export function Baskets() {
   )
 
   const ownedIds = new Set(activeBaskets.map((b) => b.basketId))
+
+  const portfolio = usePortfolio()
+
+  const ownedBasketInputs = useMemo(
+    () =>
+      activeBaskets
+        .map((purchase) => {
+          const basket = allBaskets.find((b) => b.id === purchase.basketId)
+          return basket ? { basket, basketId: purchase.basketId } : null
+        })
+        .filter((entry): entry is { basket: Basket; basketId: string } => entry !== null),
+    [activeBaskets, allBaskets]
+  )
+
+  const { getDriftForBasket } = usePortfolioDrift(portfolio.heldTokens, ownedBasketInputs)
 
   const selectPlannedBasket = (basket: Basket) => {
     clear()
@@ -263,9 +282,15 @@ export function Baskets() {
                 basket={basket}
                 onPreviewBuy={handlePreviewBuy}
                 onPreviewSell={handlePreviewSell}
+                onPreviewRebalance={
+                  ownedIds.has(basket.id) ? () => setRebalanceBasket(basket) : undefined
+                }
                 onBuy={handleQuickBuy}
                 onPlannedChainSelect={selectPlannedBasket}
                 isOwned={ownedIds.has(basket.id)}
+                driftStatus={
+                  ownedIds.has(basket.id) ? getDriftForBasket(basket.id)?.status : undefined
+                }
                 loading={loading && selectedBasket?.id === basket.id}
                 isSelected={
                   selectedBasket?.id === basket.id && (showQuotePreview || showPlannedPanel)
@@ -338,6 +363,13 @@ export function Baskets() {
         onClose={() => setModalOpen(false)}
         onConfirm={handleConfirm}
         confirming={confirming}
+      />
+
+      <PortfolioRebalancePreviewModal
+        open={rebalanceBasket !== null}
+        basket={rebalanceBasket}
+        drift={rebalanceBasket ? getDriftForBasket(rebalanceBasket.id) : null}
+        onClose={() => setRebalanceBasket(null)}
       />
     </div>
   )
