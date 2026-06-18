@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PORTX_NFT_URL } from '@/config/links'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
 import {
   FEE_TIERS_BY_TERM,
   GENESIS_NFT_BENEFITS,
@@ -382,9 +383,15 @@ export function Lending() {
             Eligibility for ecosystem incentives may expand over time.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <a href={PORTX_NFT_URL} className="btn-primary w-full sm:w-auto">
-              Buy NFT
-            </a>
+            {ENABLE_TESTNET_MODE ? (
+              <Link to="/mint" className="btn-primary w-full sm:w-auto">
+                Buy NFT
+              </Link>
+            ) : (
+              <a href={PORTX_NFT_URL} className="btn-primary w-full sm:w-auto">
+                Buy NFT
+              </a>
+            )}
             <Link to="/lending" className="btn-secondary w-full sm:w-auto">
               Learn About Lending
             </Link>

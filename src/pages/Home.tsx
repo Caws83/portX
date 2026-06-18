@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Hero } from '@/components/Hero'
 import { TrendingAddresses } from '@/components/TrendingAddresses'
 import { NotablePortfolios } from '@/components/NotablePortfolios'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
 
 const ECOSYSTEM_CARDS = [
   {
@@ -17,7 +18,7 @@ const ECOSYSTEM_CARDS = [
   {
     title: 'PortX NFT',
     description: 'Premium ecosystem access',
-    to: '/lending',
+    to: ENABLE_TESTNET_MODE ? '/mint' : '/lending',
   },
 ] as const
 
@@ -97,11 +98,16 @@ export function Home() {
           </div>
 
           <div className="text-center">
-            <Link to="/lending" className="btn-primary px-10 py-4 text-lg">
+            <Link
+              to={ENABLE_TESTNET_MODE ? '/mint' : '/lending'}
+              className="btn-primary px-10 py-4 text-lg"
+            >
               Buy NFT
             </Link>
             <p className="text-xs text-portx-muted mt-3">
-              NFT mint coming soon — explore lending utility in preview.
+              {ENABLE_TESTNET_MODE
+                ? 'Sepolia Genesis NFT mint — demo mode until contract address is configured.'
+                : 'NFT mint coming soon — explore lending utility in preview.'}
             </p>
           </div>
         </div>
