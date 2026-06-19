@@ -178,3 +178,16 @@
   --rk-accent-color: #00ff88;
   --rk-accent-color-foreground: #050508;
 }
+
+.navbar-wallet button {
+  white-space: nowrap;
+}
+
+@media (max-width: 639px) {
+  .navbar-wallet button {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    padding: 0.375rem 0.75rem !important;
+    min-height: 2rem;
+  }
+}
