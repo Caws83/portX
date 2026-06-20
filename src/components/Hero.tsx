@@ -1,23 +1,30 @@
 import { Link } from 'react-router-dom'
 import { Prism } from '@/components/Prism'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 export function Hero() {
+  const showPrismAnimation = useMediaQuery('(min-width: 1024px)')
+
   return (
     <section className="relative -mt-[7.25rem] lg:-mt-[5.25rem] overflow-hidden pb-20 lg:min-h-screen lg:pb-0">
       <div className="absolute inset-0 pointer-events-none">
-        <Prism
-          color1="#00ff88"
-          color2="#00d4ff"
-          animationType="rotate"
-          timeScale={0.5}
-          scale={3.5}
-          height={2.6}
-          baseWidth={3.6}
-          noise={0}
-          glow={0.8}
-          hueShift={-0.1}
-          colorFrequency={1}
-        />
+        {showPrismAnimation ? (
+          <Prism
+            color1="#00ff88"
+            color2="#00d4ff"
+            animationType="rotate"
+            timeScale={0.5}
+            scale={3.5}
+            height={2.6}
+            baseWidth={3.6}
+            noise={0}
+            glow={0.8}
+            hueShift={-0.1}
+            colorFrequency={1}
+          />
+        ) : (
+          <div className="prism-container prism-fallback-active w-full h-full" />
+        )}
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-[7.25rem] lg:min-h-screen lg:flex lg:flex-col lg:justify-center lg:pt-[5.75rem] lg:pb-12 text-center">
@@ -39,6 +46,15 @@ export function Hero() {
           </Link>
           <Link to="/create-basket" className="btn-secondary text-lg px-8 py-4 w-full sm:w-auto">
             Create Basket
+          </Link>
+        </div>
+
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Link to="/mint" className="btn-secondary text-base px-6 py-3 w-full sm:w-auto">
+            Buy NFT
+          </Link>
+          <Link to="/lending" className="btn-secondary text-base px-6 py-3 w-full sm:w-auto">
+            Lending Preview
           </Link>
         </div>
 

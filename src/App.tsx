@@ -19,6 +19,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/baskets" element={<Baskets />} />
         <Route path="/create-basket" element={<CreateBasket />} />
+        <Route path="/create" element={<CreateBasket />} />
         <Route path="/sell-all" element={<SellAll />} />
         <Route path="/agents" element={<Agents />} />
         <Route path="/lending" element={<Lending />} />
