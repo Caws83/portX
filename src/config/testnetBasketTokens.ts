@@ -14,7 +14,10 @@ export interface TestnetBasketToken {
   name: string
   address: Address
   decimals: number
+  /** Uniswap V3 fee for WETH → token (buy leg) */
   poolFee: TestnetPoolFee
+  /** Uniswap V3 fee for token → USDC (sell leg); null when unsupported */
+  sellUsdcPoolFee: TestnetPoolFee | null
   /** Rough USD price for preview valuation only */
   priceUsd: number
 }
@@ -26,6 +29,7 @@ export const TESTNET_BASKET_TOKENS = {
     address: TESTNET_WETH_ADDRESS,
     decimals: 18,
     poolFee: 3000,
+    sellUsdcPoolFee: 500,
     priceUsd: 2500,
   },
   USDC: {
@@ -34,6 +38,7 @@ export const TESTNET_BASKET_TOKENS = {
     address: TESTNET_USDC_ADDRESS,
     decimals: 6,
     poolFee: 500,
+    sellUsdcPoolFee: null,
     priceUsd: 1,
   },
   LINK: {
@@ -42,6 +47,7 @@ export const TESTNET_BASKET_TOKENS = {
     address: '0x779877A7B0D9E8603169DdbD7836e478b4624789',
     decimals: 18,
     poolFee: 500,
+    sellUsdcPoolFee: 3000,
     priceUsd: 18.5,
   },
   UNI: {
@@ -50,6 +56,7 @@ export const TESTNET_BASKET_TOKENS = {
     address: '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984',
     decimals: 18,
     poolFee: 3000,
+    sellUsdcPoolFee: 500,
     priceUsd: 12.2,
   },
   AAVE: {
@@ -58,6 +65,7 @@ export const TESTNET_BASKET_TOKENS = {
     address: '0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9',
     decimals: 18,
     poolFee: 3000,
+    sellUsdcPoolFee: 500,
     priceUsd: 285,
   },
 } as const satisfies Record<string, TestnetBasketToken>
@@ -78,6 +86,18 @@ export function resolveTestnetBasketToken(symbol: string): TestnetBasketToken | 
 
 export function isTestnetBasketTokenSupported(symbol: string): boolean {
   return TOKEN_BY_SYMBOL.has(symbol.toUpperCase())
+}
+
+export function getTestnetSellUsdcPoolFee(token: TestnetBasketToken): TestnetPoolFee {
+  if (token.sellUsdcPoolFee == null) {
+    throw new Error(`Sepolia ${token.symbol} → USDC route is not supported`)
+  }
+  return token.sellUsdcPoolFee
+}
+
+export function isTestnetSellToUsdcSupported(symbol: string): boolean {
+  const token = resolveTestnetBasketToken(symbol)
+  return token != null && token.sellUsdcPoolFee != null
 }
 
 export function toQuoteToken(token: TestnetBasketToken) {
