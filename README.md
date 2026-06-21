@@ -8,7 +8,7 @@ PortX is a DeFi portfolio trading platform that lets users buy, manage, and sell
 
 ## Project overview
 
-PortX composes ***crypto baskets*** (weighted token portfolios), lets you **enter in a single transaction flow**, track unified **P&L**, and **exit** the full book — or individual baskets — with portfolio-level **take-profit** and **stop-loss** targets.
+PortX composes **crypto baskets** (weighted token portfolios), lets you **enter in a single transaction flow**, track unified **P&L**, and **exit** the full book — or individual baskets — with portfolio-level **take-profit** and **stop-loss** targets.
 
 This repository includes the **MVP frontend** (Vite/React) and **Backend v1** (`/backend` — Fastify API for Railway). Wallet connect, baskets, demo quotes, Discover, and agent placeholders. **No real on-chain trading** yet.
 
