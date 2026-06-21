@@ -46,6 +46,8 @@ const SWAP_ROUTER02_ABI = parseAbi([
   'function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96) params) external payable returns (uint256 amountOut)',
 ])
 
+const WETH_DEPOSIT_ABI = parseAbi(['function deposit() payable'])
+
 const ETH_TOKEN = {
   symbol: 'ETH',
   name: 'Ether',
@@ -81,7 +83,7 @@ export interface TestnetSwapLegQuote {
     minAmountOut: bigint
     calldata: `0x${string}`
     calldataByteLength: number
-    routerAddress: typeof TESTNET_SWAP_ROUTER02_ADDRESS
+    routerAddress: Address
     tokenOut: TestnetBasketToken
   }
   quote: QuoteResponse
@@ -108,6 +110,20 @@ export function splitTestnetUsdcAcrossLegs(totalUsdc: bigint, weights: number[])
   }
 
   return amounts
+}
+
+export function isTestnetWethOutputToken(token: TestnetBasketToken): boolean {
+  return (
+    token.symbol.toUpperCase() === 'WETH' ||
+    token.address.toLowerCase() === TESTNET_WETH_ADDRESS.toLowerCase()
+  )
+}
+
+export function encodeTestnetWethDepositCalldata(): `0x${string}` {
+  return encodeFunctionData({
+    abi: WETH_DEPOSIT_ABI,
+    functionName: 'deposit',
+  })
 }
 
 export async function quoteWethToTokenOnSepolia(
@@ -168,9 +184,75 @@ function estimateOutputUsd(amountOut: bigint, token: TestnetBasketToken): number
   return units * token.priceUsd
 }
 
+function buildTestnetWethWrapLegQuote(params: TestnetSwapLegParams): TestnetSwapLegQuote {
+  assertTestnetSwapAmount(params.amountInWei)
+
+  const quotedAmountOut = params.amountInWei
+  const minAmountOut = applyTestnetSlippage(quotedAmountOut, params.slippageBps)
+  const calldata = encodeTestnetWethDepositCalldata()
+  const outputToken = toQuoteToken(params.outputToken)
+
+  const quote: QuoteResponse = {
+    provider: 'uniswap-sepolia',
+    inputToken: { ...ETH_TOKEN },
+    outputToken,
+    inputAmount: params.amountInWei.toString(),
+    inputAmountUsd: 0,
+    outputAmount: quotedAmountOut.toString(),
+    outputAmountUsd: estimateOutputUsd(quotedAmountOut, params.outputToken),
+    estimatedGasUsd: 0,
+    estimatedGasUnits: 50_000,
+    priceImpactPercent: 0,
+    routeSummary: [
+      params.usdcNotionalDisplay
+        ? `${params.usdcNotionalDisplay} USDC`
+        : formatEther(params.amountInWei),
+      'WETH',
+      'deposit',
+    ],
+    calldata,
+    routerAddress: TESTNET_WETH_ADDRESS,
+    warnings: [
+      'Sepolia testnet WETH wrap — native ETH deposited 1:1 via WETH9.deposit().',
+      `Min out after ${params.slippageBps} bps slippage: ${minAmountOut.toString()} wei.`,
+    ],
+    testnetDisplayRoute: params.usdcNotionalDisplay
+      ? {
+          inputSymbol: 'USDC',
+          inputAmountDisplay: params.usdcNotionalDisplay,
+        }
+      : undefined,
+    testnetSwap: {
+      tokenIn: ZERO_ADDRESS,
+      tokenOut: TESTNET_WETH_ADDRESS,
+      nativeEth: true,
+      wethWrap: true,
+    },
+  }
+
+  return {
+    details: {
+      chainId: TESTNET_SEPOLIA_CHAIN_ID,
+      amountInWei: params.amountInWei,
+      slippageBps: params.slippageBps,
+      quotedAmountOut,
+      minAmountOut,
+      calldata,
+      calldataByteLength: (calldata.length - 2) / 2,
+      routerAddress: TESTNET_WETH_ADDRESS,
+      tokenOut: params.outputToken,
+    },
+    quote,
+  }
+}
+
 export async function buildTestnetSwapLegQuote(
   params: TestnetSwapLegParams,
 ): Promise<TestnetSwapLegQuote> {
+  if (isTestnetWethOutputToken(params.outputToken)) {
+    return buildTestnetWethWrapLegQuote(params)
+  }
+
   assertTestnetSwapAmount(params.amountInWei)
 
   const quotedAmountOut = await quoteWethToTokenOnSepolia(
@@ -328,7 +410,7 @@ export async function buildTestnetMultiTokenBasketPreview(
     legs,
     warnings: [
       'Sepolia multi-token basket — each leg acquires a distinct output token.',
-      `Funding model: ${formatEther(totalAmountWei)} ETH split across ${legs.length} Uniswap legs.`,
+      `Funding model: ${formatEther(totalAmountWei)} ETH split across ${legs.length} swap/wrap legs.`,
       `USDC notional reference: ${formatUnits(totalUsdcQuoted, USDC_TOKEN.decimals)} USDC total.`,
       `Multi-leg executeBasket: ${legs.length} SwapCall(s) in one transaction.`,
       ...(truncatedNote ? [truncatedNote] : []),
