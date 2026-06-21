@@ -238,12 +238,12 @@ useEffect(() => {
               <div className="aspect-square rounded-2xl overflow-hidden border border-white/10 bg-black/30 flex items-center justify-center">
                 {isVideoPlaying ? (
                   <video
-                    src="/portx-nft.mp4"
+                    src="/portx-nft-looping.mp4"
                     className="w-full h-full object-cover"
                     autoPlay
                     playsInline
                     controls
-                    onEnded={() => setIsVideoPlaying(false)}
+                    loop
                   />
                 ) : (
                   <button
