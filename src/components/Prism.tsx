@@ -340,6 +340,7 @@ export function Prism({
 
     const NOISE_IS_ZERO = NOISE < 1e-6
     let raf = 0
+    let visible = true
     const t0 = performance.now()
 
     const startRAF = () => {
@@ -390,7 +391,7 @@ export function Prism({
     if (animationType === 'hover') {
       onPointerMove = (e: MouseEvent) => {
         onMove(e)
-        startRAF()
+        if (visible) startRAF()
       }
       window.addEventListener('pointermove', onPointerMove, { passive: true })
       window.addEventListener('mouseleave', onLeave)
@@ -454,18 +455,15 @@ export function Prism({
       }
     }
 
-    let io: IntersectionObserver | null = null
-    if (suspendWhenOffscreen) {
-      io = new IntersectionObserver((entries) => {
-        const vis = entries.some((e) => e.isIntersecting)
-        if (vis) startRAF()
+    const io = new IntersectionObserver((entries) => {
+      visible = entries.some((e) => e.isIntersecting)
+      if (suspendWhenOffscreen) {
+        if (visible) startRAF()
         else stopRAF()
-      })
-      io.observe(container)
-      startRAF()
-    } else {
-      startRAF()
-    }
+      }
+    })
+    io.observe(container)
+    startRAF()
 
     dispose = () => {
       stopRAF()
