@@ -57,15 +57,25 @@ export function buildTestnetSwapRecordFromPlan(
 ): TestnetSwapHistoryRecord {
   const basketLabel = plan.basketName ?? plan.basketId ?? 'Sepolia test basket'
   const legCount = plan.legs.length
-  const routeLabel =
-    legCount > 1
+  const isSell = plan.type === 'sell_basket'
+  const routeLabel = isSell
+    ? legCount > 1
+      ? `${legCount}-leg Sepolia basket sell → USDC`
+      : plan.legs[0]?.quote.routeSummary?.length > 0
+        ? `${plan.legs[0].quote.routeSummary.join(' → ')} sell`
+        : 'Sepolia token → USDC sell'
+    : legCount > 1
       ? `${legCount}-leg Uniswap V3 Sepolia ETH → USDC basket`
       : plan.legs[0]?.quote.routeSummary?.length > 0
         ? plan.legs[0].quote.routeSummary.join(' → ')
         : 'Uniswap V3 Sepolia ETH → USDC'
 
   const inputAmount =
-    legCount > 0 ? formatTestnetPlanTotalInput(plan) : `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} ETH`
+    legCount > 0
+      ? isSell
+        ? plan.legs.map((leg) => `${leg.quote.inputToken.symbol} ${leg.quote.inputAmount}`).join(' · ')
+        : formatTestnetPlanTotalInput(plan)
+      : `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} ETH`
 
   const outputAmount = legCount > 0 ? formatTestnetPlanTotalOutput(plan) : '—'
 

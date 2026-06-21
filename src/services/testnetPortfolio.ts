@@ -22,10 +22,12 @@ export interface TestnetPortfolioPosition {
   txHash: string
   explorerUrl: string
   provider: string
+  planType?: 'buy' | 'sell_basket'
   inputAmountEth: string
   /** @deprecated Legacy single-output field — prefer acquiredAssets */
   outputAmountUsdc: string
   acquiredAssets: TestnetAcquiredAsset[]
+  soldAssets?: TestnetAcquiredAsset[]
   legsCount: number
   timestamp: number
   status: TestnetPortfolioStatus
@@ -100,10 +102,9 @@ export function getTestnetPortfolioAggregate(): TestnetPortfolioAggregate {
       const usdcAsset = position.acquiredAssets.find((asset) => asset.symbol === 'USDC')
       return sum + parseUsdcAmount(usdcAsset?.amount ?? position.outputAmountUsdc ?? '0')
     }, 0),
-    totalEthSpent: successful.reduce(
-      (sum, position) => sum + parseEthAmount(position.inputAmountEth),
-      0,
-    ),
+    totalEthSpent: successful
+      .filter((position) => position.planType !== 'sell_basket')
+      .reduce((sum, position) => sum + parseEthAmount(position.inputAmountEth), 0),
     executedBaskets: successful.length,
     latestPosition: positions[0] ?? null,
     positions,
@@ -111,19 +112,51 @@ export function getTestnetPortfolioAggregate(): TestnetPortfolioAggregate {
 }
 
 function getPlanInputEth(plan: ExecutionPlan): string {
-  if (plan.legs.length === 0) {
-    return formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)
-  }
-  return formatEther(sumTestnetPlanInputWei(plan))
+  return getPlanInputLabel(plan)
+}
+
+function buildSoldAssetsFromPlan(plan: ExecutionPlan): TestnetAcquiredAsset[] {
+  return plan.legs.map((leg) => ({
+    symbol: leg.quote.inputToken.symbol,
+    tokenAddress: leg.quote.inputToken.address,
+    amount: formatUnits(BigInt(leg.quote.inputAmount), leg.quote.inputToken.decimals),
+    decimals: leg.quote.inputToken.decimals,
+  }))
 }
 
 function buildAcquiredAssetsFromPlan(plan: ExecutionPlan): TestnetAcquiredAsset[] {
+  if (plan.type === 'sell_basket') {
+    const totalUsdc = plan.legs.reduce((sum, leg) => sum + BigInt(leg.quote.outputAmount), 0n)
+    const usdcLeg = plan.legs[0]?.quote.outputToken
+    if (!usdcLeg) return []
+    return [
+      {
+        symbol: usdcLeg.symbol,
+        tokenAddress: usdcLeg.address,
+        amount: formatUnits(totalUsdc, usdcLeg.decimals),
+        decimals: usdcLeg.decimals,
+      },
+    ]
+  }
+
   return plan.legs.map((leg) => ({
     symbol: leg.quote.outputToken.symbol,
     tokenAddress: leg.quote.outputToken.address,
     amount: formatUnits(BigInt(leg.quote.outputAmount), leg.quote.outputToken.decimals),
     decimals: leg.quote.outputToken.decimals,
   }))
+}
+
+function getPlanInputLabel(plan: ExecutionPlan): string {
+  if (plan.type === 'sell_basket') {
+    return plan.legs
+      .map((leg) => `${formatUnits(BigInt(leg.quote.inputAmount), leg.quote.inputToken.decimals)} ${leg.quote.inputToken.symbol}`)
+      .join(' · ')
+  }
+  if (plan.legs.length === 0) {
+    return formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)
+  }
+  return formatEther(sumTestnetPlanInputWei(plan))
 }
 
 function getLegacyUsdcOutput(acquiredAssets: TestnetAcquiredAsset[]): string {
@@ -143,6 +176,7 @@ export function buildTestnetPortfolioPositionFromPlan(
   const basketLabel = plan.basketName ?? plan.basketId ?? 'Sepolia test basket'
   const basketKey = plan.basketId ?? basketLabel.replace(/\s+/g, '-').toLowerCase()
   const acquiredAssets = buildAcquiredAssetsFromPlan(plan)
+  const soldAssets = plan.type === 'sell_basket' ? buildSoldAssetsFromPlan(plan) : undefined
 
   return {
     portfolioId: `${basketKey}-${params.txHash.slice(0, 10)}`,
@@ -151,9 +185,11 @@ export function buildTestnetPortfolioPositionFromPlan(
     txHash: params.txHash,
     explorerUrl: params.explorerUrl,
     provider: plan.legs[0]?.quote.provider ?? 'uniswap-sepolia',
+    planType: plan.type === 'sell_basket' ? 'sell_basket' : 'buy',
     inputAmountEth: getPlanInputEth(plan),
     outputAmountUsdc: getLegacyUsdcOutput(acquiredAssets),
     acquiredAssets,
+    soldAssets,
     legsCount: plan.legs.length,
     timestamp: Date.now(),
     status: params.status,

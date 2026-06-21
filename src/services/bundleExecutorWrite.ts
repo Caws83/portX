@@ -11,6 +11,7 @@ import {
 } from '@/services/bundleExecutorContract'
 import { encodeUniswapExactInputSingleCalldata } from '@/services/testnetUniswapQuote'
 import { encodeTestnetExactInputSingleCalldata, encodeTestnetWethDepositCalldata } from '@/services/testnetMultiTokenQuote'
+import { encodeTestnetTokenToUsdcCalldata } from '@/services/testnetMultiTokenSellQuote'
 import { isValidCalldata, isValidRouterAddress } from '@/services/transactionBuilder'
 import { isZeroAddress, ZERO_ADDRESS } from '@/utils/addresses'
 
@@ -140,6 +141,16 @@ function resolveSwapCalldata(
 
     if (quote.testnetSwap?.wethWrap) {
       return encodeTestnetWethDepositCalldata()
+    }
+
+    if (quote.testnetSwap?.nativeEth === false) {
+      return encodeTestnetTokenToUsdcCalldata({
+        tokenIn: quote.testnetSwap.tokenIn as Address,
+        amountIn,
+        minAmountOut,
+        recipient,
+        poolFee: quote.testnetSwap.poolFee ?? 3000,
+      })
     }
 
     if (quote.testnetSwap) {

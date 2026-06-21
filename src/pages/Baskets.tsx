@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useChainId } from 'wagmi'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { BasketCard } from '@/components/BasketCard'
 import { QuotePreviewCard } from '@/components/QuotePreviewCard'
@@ -13,6 +14,10 @@ import { usePortfolio } from '@/hooks/usePortfolio'
 import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
 import { executeDemoPlan } from '@/services/transactionBuilder'
 import { DEFAULT_BUY_AMOUNT_USD } from '@/config/constants'
+import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
+import { TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
+import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
+import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
 import { assessQuoteQuality } from '@/utils/quoteQuality'
 import {
   BUTTON_LABELS,
@@ -28,6 +33,8 @@ import { RecentTestSwaps } from '@/components/RecentTestSwaps'
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 
 export function Baskets() {
+  const chainId = useChainId()
+  const testnetBalances = useTestnetPortfolioBalances()
   const { allBaskets, basketsLoading, basketsError, basketsSource } = useBasket()
   const buyBasket = usePortfolioStore((s) => s.buyBasket)
   const sellBasket = usePortfolioStore((s) => s.sellBasket)
@@ -101,7 +108,14 @@ export function Baskets() {
     setSelectedBasket(basket)
     setTxMsg(null)
     const purchase = activeBaskets.find((b) => b.basketId === basket.id)
-    await previewSellBasket(basket, purchase?.amountUsd ?? 1000)
+    const balancesWei =
+      ENABLE_TESTNET_MODE &&
+      ENABLE_LIVE_EXECUTION &&
+      chainId === TESTNET_SEPOLIA_CHAIN_ID &&
+      isTestnetMultiTokenBasket(basket.id)
+        ? Object.fromEntries(testnetBalances.assets.map((asset) => [asset.symbol, asset.balanceWei]))
+        : undefined
+    await previewSellBasket(basket, purchase?.amountUsd ?? 1000, balancesWei)
   }
 
   const handleReview = () => {
@@ -249,7 +263,9 @@ export function Baskets() {
 
       {quoteSource === 'testnet' && preview && !loading && (
         <StatusBanner variant="warning" className="mb-6" compact>
-          Sepolia testnet quote — frontend Uniswap V3 only (no backend /quotes).
+          {preview.type === 'sell_basket'
+            ? 'Sepolia testnet sell quote — wallet balances quoted to USDC via Uniswap V3 (no backend /quotes).'
+            : 'Sepolia testnet quote — frontend Uniswap V3 only (no backend /quotes).'}
         </StatusBanner>
       )}
 
