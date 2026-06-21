@@ -35,7 +35,10 @@ export function NftMint() {
   const [isMinting, setIsMinting] = useState(false)
   const [feedback, setFeedback] = useState('Connect your wallet to mint.')
   const [previewImage, setPreviewImage] = useState('')
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false)
   const [mintedIds, setMintedIds] = useState<number[]>([])
+
+  const nftImage = previewImage || '/portx-nft-v1.png'
 
   const properChain = chainId === NFT_CHAIN.id
   const account = address ?? zeroAddress
@@ -233,13 +236,29 @@ useEffect(() => {
 
             <div className="card bg-portx-surface/70 border-portx-border p-4">
               <div className="aspect-square rounded-2xl overflow-hidden border border-white/10 bg-black/30 flex items-center justify-center">
-                {previewImage ? (
-                  <img src={previewImage} alt="PortX Genesis NFT" className="w-full h-full object-cover" />
+                {isVideoPlaying ? (
+                  <video
+                    src="/portx-nft-looping.mp4"
+                    className="w-full h-full object-cover"
+                    autoPlay
+                    playsInline
+                    controls
+                    loop
+                  />
                 ) : (
-                  <div className="text-center px-6">
-                    <p className="text-5xl mb-3">🟢</p>
-                    <p className="text-portx-muted text-sm">NFT preview image</p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsVideoPlaying(true)}
+                    className="group relative block w-full h-full"
+                    aria-label="Play PortX Genesis NFT video"
+                  >
+                    <img src={nftImage} alt="PortX Genesis NFT" className="w-full h-full object-cover" />
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30">
+                      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/50 text-white text-2xl backdrop-blur-sm transition-transform group-hover:scale-110">
+                        ▶
+                      </span>
+                    </span>
+                  </button>
                 )}
               </div>
             </div>

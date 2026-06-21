@@ -12,7 +12,8 @@ export function Hero() {
           <Prism
             color1="#00ff88"
             color2="#00d4ff"
-            animationType="rotate"
+            animationType="hover"
+            suspendWhenOffscreen
             timeScale={0.5}
             scale={3.5}
             height={2.6}

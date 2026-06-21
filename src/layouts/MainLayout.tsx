@@ -8,9 +8,7 @@ export function MainLayout() {
     <div className="min-h-screen flex flex-col">
       <Navbar />
       <main className="flex-1 pt-[7.25rem] lg:pt-[5.25rem]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-2">
-          <AppModeBanner />
-        </div>
+        <AppModeBanner />
         <Outlet />
       </main>
       <footer className="border-t border-portx-border py-8 mt-auto">

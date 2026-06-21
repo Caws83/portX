@@ -237,12 +237,16 @@ export function TestnetPortfolioSummary({
 
         {!onChainBalances.isLoading && !onChainBalances.error ? (
           <>
-            <div className="rounded-2xl border border-portx-green/30 bg-gradient-to-br from-portx-green/10 to-portx-blue/5 p-4 sm:p-6">
-              <p className="text-sm font-bold">Estimated Portfolio Value</p>
-              <p className="text-3xl sm:text-4xl font-bold font-mono text-portx-green mt-2">
+            <div className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-gradient-to-b from-zinc-800/40 via-zinc-900/50 to-zinc-950/60 p-4 sm:p-6 shadow-[0_0_50px_-12px_rgba(16,185,129,0.18)]">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -right-10 -top-14 h-36 w-36 rounded-full bg-emerald-400/10 blur-3xl"
+              />
+              <p className="relative text-xs font-medium text-zinc-400">Estimated Portfolio Value</p>
+              <p className="relative text-3xl sm:text-4xl font-semibold tracking-tight tabular-nums text-portx-green mt-2">
                 {onChainBalances.valuation.totalEstimatedValueDisplay}
               </p>
-              <p className="text-xs text-portx-muted mt-2">
+              <p className="relative text-xs text-zinc-500 mt-2">
                 {TESTNET_PORTFOLIO_PRICING_LABEL} · Testnet estimate only
               </p>
             </div>
@@ -304,11 +308,11 @@ function Stat({
   highlight?: boolean
 }) {
   return (
-    <div className="rounded-xl border border-portx-border bg-portx-surface p-3">
-      <p className="text-xs text-portx-muted mb-1">{label}</p>
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+      <p className="text-xs text-zinc-400 mb-1">{label}</p>
       <p
-        className={`font-mono font-semibold text-sm ${
-          highlight ? 'text-portx-green' : ''
+        className={`font-semibold text-sm tracking-tight tabular-nums ${
+          highlight ? 'text-portx-green' : 'text-white'
         }`}
       >
         {value}
