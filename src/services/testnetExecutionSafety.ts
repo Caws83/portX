@@ -1,11 +1,12 @@
 import type { ExecutionPlan } from '@/types/execution'
-import type { BasketQuotePreview } from '@/types/quote'
+import type { BasketQuotePreview, QuoteResponse } from '@/types/quote'
 import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
 import {
   TESTNET_MAX_BASKET_LEGS,
   TESTNET_MAX_SWAP_AMOUNT_WEI,
   TESTNET_SEPOLIA_CHAIN_ID,
   TESTNET_SWAP_ROUTER02_ADDRESS,
+  TESTNET_WETH_ADDRESS,
 } from '@/config/testnetExecution'
 import {
   buildSwapCalls,
@@ -51,6 +52,51 @@ function sumLegAmountsWei(plan: ExecutionPlan): bigint | null {
     return plan.legs.reduce((sum, leg) => sum + BigInt(leg.quote.inputAmount), 0n)
   } catch {
     return null
+  }
+}
+
+/** SwapRouter02 for Uniswap legs; WETH9 only when quote marks a native ETH wrap leg. */
+export function isAllowedTestnetLegRouter(quote: QuoteResponse): boolean {
+  const router = quote.routerAddress.toLowerCase()
+  const swapRouter = TESTNET_SWAP_ROUTER02_ADDRESS.toLowerCase()
+  const wethRouter = TESTNET_WETH_ADDRESS.toLowerCase()
+
+  if (quote.testnetSwap?.wethWrap === true) {
+    return router === wethRouter
+  }
+
+  if (router === wethRouter) {
+    return false
+  }
+
+  return router === swapRouter
+}
+
+function routerValidationError(quote: QuoteResponse, prefix: string): BundleExecutionValidationError | null {
+  if (isAllowedTestnetLegRouter(quote)) {
+    return null
+  }
+
+  if (quote.testnetSwap?.wethWrap === true) {
+    return {
+      code: 'ROUTER_NOT_ALLOWED',
+      message: `WETH wrap leg must use Sepolia WETH9 (${TESTNET_WETH_ADDRESS})`,
+      field: `${prefix}.quote.routerAddress`,
+    }
+  }
+
+  if (quote.routerAddress.toLowerCase() === TESTNET_WETH_ADDRESS.toLowerCase()) {
+    return {
+      code: 'ROUTER_NOT_ALLOWED',
+      message: 'WETH9 router is only allowed for marked WETH wrap legs',
+      field: `${prefix}.quote.routerAddress`,
+    }
+  }
+
+  return {
+    code: 'ROUTER_NOT_ALLOWED',
+    message: `Router must be Sepolia SwapRouter02 (${TESTNET_SWAP_ROUTER02_ADDRESS})`,
+    field: `${prefix}.quote.routerAddress`,
   }
 }
 
@@ -122,12 +168,9 @@ function validateTestnetUniswapQuoteShape(
       })
     }
 
-    if (quote.routerAddress.toLowerCase() !== TESTNET_SWAP_ROUTER02_ADDRESS.toLowerCase()) {
-      errors.push({
-        code: 'ROUTER_NOT_ALLOWED',
-        message: `Router must be Sepolia SwapRouter02 (${TESTNET_SWAP_ROUTER02_ADDRESS})`,
-        field: `${prefix}.quote.routerAddress`,
-      })
+    const routerError = routerValidationError(quote, prefix)
+    if (routerError) {
+      errors.push(routerError)
     }
 
     try {
@@ -247,9 +290,9 @@ export function assessTestnetUniswapBasketExecution(
     ),
     gate(
       'swap-router',
-      'All legs use SwapRouter02',
+      'Leg routers allowed (SwapRouter02 or WETH wrap)',
       shapeErrors.every((error) => error.code !== 'ROUTER_NOT_ALLOWED'),
-      TESTNET_SWAP_ROUTER02_ADDRESS,
+      `SwapRouter02 ${TESTNET_SWAP_ROUTER02_ADDRESS} · WETH9 wrap ${TESTNET_WETH_ADDRESS}`,
     ),
     gate(
       'amount-cap',

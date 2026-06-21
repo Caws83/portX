@@ -649,7 +649,7 @@ export function TransactionReviewModal({
             <ExecutionWarning
               variant="warning"
               warnings={[
-                `Testnet only: sends ${getTestnetUniswapExecuteAmountLabel()} through BundleExecutor to Uniswap V3. Not for production.`,
+                `Testnet only: sends ${getTestnetUniswapExecuteAmountLabel()} through BundleExecutor via Uniswap V3 + WETH wrap testnet basket. Not for production.`,
               ]}
             />
 

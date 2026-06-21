@@ -6,7 +6,7 @@ export const BUNDLE_EXECUTOR_SEPOLIA = {
   address: '0x62cf7897E37155404658f885743BAfE4CDd58890' as const,
   chainId: SEPOLIA_TESTNET.chainId,
   networkLabel: SEPOLIA_TESTNET.label,
-  verified: false,
+  verified: true,
   explorerUrl: `${SEPOLIA_TESTNET.explorerBaseUrl}/address/0x62cf7897E37155404658f885743BAfE4CDd58890#code`,
   deploymentTxUrl: `${SEPOLIA_TESTNET.explorerBaseUrl}/tx/0x6d310244583cdc9a2a10e0d4afadae6ac6790508c58b2f76f949d7edebbc8e51`,
 } as const

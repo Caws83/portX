@@ -23,7 +23,7 @@ import { useFeatureFlags } from '@/hooks/useFeatureFlags'
 import { isTestnetSepoliaUniswapPlan } from '@/utils/testnetPreview'
 
 export const TESTNET_UNISWAP_CONFIRMATION_MESSAGE =
-  'Testnet only: sends 0.0001 Sepolia ETH through BundleExecutor to Uniswap V3. ' +
+  'Testnet only: sends 0.0001 Sepolia ETH through BundleExecutor via Uniswap V3 + WETH wrap testnet basket. ' +
   'This is a real on-chain transaction using test ETH. Continue?'
 
 export type TestnetUniswapBasketExecuteStatus = 'idle' | 'pending' | 'success' | 'error'
