@@ -141,7 +141,7 @@ export function Dashboard() {
 
       <div className="grid lg:grid-cols-2 gap-6 mt-8">
         <div className="card min-w-0">
-          <h2 className="text-lg font-bold mb-4">Tokens Held</h2>
+          <h2 className="text-lg font-bold tracking-tight mb-4">Tokens Held</h2>
           {portfolio.portfolioLoading ? (
             <p className="text-portx-muted text-sm" role="status">
               {LOADING_MESSAGES.holdings}
@@ -158,11 +158,11 @@ export function Dashboard() {
         </div>
 
         <div className="card min-w-0">
-          <h2 className="text-lg font-bold mb-4">Target Sell Status</h2>
+          <h2 className="text-lg font-bold tracking-tight mb-4">Target Sell Status</h2>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-portx-muted">Take-profit</dt>
-              <dd className="font-mono text-right">
+              <dt className="text-zinc-400">Take-profit</dt>
+              <dd className="text-right tabular-nums tracking-tight">
                 {portfolio.targets.takeProfitMultiplier
                   ? `${portfolio.targets.takeProfitMultiplier}x`
                   : portfolio.targets.targetSellPriceUsd
@@ -171,20 +171,20 @@ export function Dashboard() {
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-portx-muted">Stop-loss</dt>
-              <dd className="font-mono text-right">
+              <dt className="text-zinc-400">Stop-loss</dt>
+              <dd className="text-right tabular-nums tracking-tight">
                 {portfolio.targets.stopLossPercent != null
                   ? `-${portfolio.targets.stopLossPercent}%`
                   : 'Not set'}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-portx-muted">Portfolio P/L</dt>
-              <dd className="font-mono text-portx-green">{formatPercent(portfolio.pnlPercent)}</dd>
+              <dt className="text-zinc-400">Portfolio P/L</dt>
+              <dd className="tabular-nums tracking-tight text-portx-green">{formatPercent(portfolio.pnlPercent)}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-portx-muted">Current value</dt>
-              <dd className="font-mono text-portx-green">{formatUsd(portfolio.totalValueUsd)}</dd>
+              <dt className="text-zinc-400">Current value</dt>
+              <dd className="tabular-nums tracking-tight text-portx-green">{formatUsd(portfolio.totalValueUsd)}</dd>
             </div>
           </dl>
           <Link to="/sell-all" className="btn-secondary w-full mt-6 text-center text-sm">
@@ -243,7 +243,7 @@ export function Dashboard() {
                     driftStatus={drift?.status}
                     onPreviewRebalance={() => setRebalanceBasket(basket)}
                   />
-                  <p className="text-xs text-portx-muted mt-3 font-mono">
+                  <p className="text-xs text-zinc-400 mt-3 tabular-nums tracking-tight">
                     Position: {formatUsd(purchase.amountUsd)} · Entry {formatUsd(purchase.entryValueUsd)}
                   </p>
                 </div>

@@ -1,7 +1,8 @@
+import { useNavigate } from 'react-router-dom'
 import { APP_MODE_BADGE_LABEL, APP_MODE_BANNER_MESSAGE, IS_TESTNET_MODE } from '@/config/appMode'
 import { SHOW_ALPHA_WARNINGS } from '@/config/features'
 import { getActiveNetworkConfig } from '@/config/networks'
-import { StatusBanner } from '@/components/ui/StatusBanner'
+import { FloatingToast } from '@/components/ui/FloatingToast'
 
 /** Small badge for navbar / settings — Production Preview or Testnet Mode */
 export function AppModeBadge({ className = '' }: { className?: string }) {
@@ -19,17 +20,18 @@ export function AppModeBadge({ className = '' }: { className?: string }) {
   )
 }
 
-/** Global mode banner below navbar */
+/** Global mode notice — floating toast in the top-right corner */
 export function AppModeBanner() {
+  const navigate = useNavigate()
+
   if (!SHOW_ALPHA_WARNINGS) return null
 
   return (
-    <StatusBanner
-      variant={IS_TESTNET_MODE ? 'warning' : 'info'}
-      compact
-      className="max-w-7xl mx-auto rounded-none sm:rounded-xl border-x-0 sm:border-x"
-    >
-      {APP_MODE_BANNER_MESSAGE}
-    </StatusBanner>
+    <FloatingToast
+      tone={IS_TESTNET_MODE ? 'warning' : 'info'}
+      title={IS_TESTNET_MODE ? 'Testnet Mode' : 'Live Execution Disabled'}
+      message={APP_MODE_BANNER_MESSAGE}
+      onSettings={() => navigate('/settings')}
+    />
   )
 }

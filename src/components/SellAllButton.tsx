@@ -41,9 +41,9 @@ export function SellAllButton({ onConfirm, portfolioValueUsd, disabled }: SellAl
         type="button"
         onClick={handleSell}
         disabled={disabled || loading}
-        className={`w-full py-4 text-lg font-bold rounded-xl transition-all ${
+        className={`w-full py-4 text-lg font-bold rounded-xl tracking-tight transition-all ${
           confirming
-            ? 'bg-portx-danger text-white animate-pulse'
+            ? 'text-white animate-pulse border border-rose-400/60 bg-gradient-to-b from-rose-600 to-rose-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_30px_-10px_rgba(244,63,94,0.55)]'
             : 'btn-danger'
         } disabled:opacity-50`}
       >
