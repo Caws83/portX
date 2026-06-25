@@ -1,0 +1,24 @@
+
+{
+  "name": "PortX Genesis NFT",
+  "description": "The PortX Genesis NFT represents the founding members of the PortX ecosystem. Reserved for OG community members, early investors, strategic partners, and early supporters, this collection commemorates the beginning of the PortX journey. Every Genesis NFT is identical, emphasizing membership in the founding community over rarity while serving as the digital badge of the PortX Genesis Membership.",
+  "image": "https://www.portxofficial.com/portx-nft-v1.png",
+  "animation_url": "https://www.portxofficial.com/portx-nft.mp4",
+  "external_url": "https://www.portxofficial.com",
+  "attributes": [
+    {
+      "trait_type": "Collection",
+      "value": "Genesis"
+    },
+    {
+      "trait_type": "Membership",
+      "value": "Genesis Membership"
+    },
+    {
+      "trait_type": "Edition",
+      "value": "Founding Investor"
+    },
+    { "trait_type": "Generation", "value": "1" }
+  ]
+}
+
