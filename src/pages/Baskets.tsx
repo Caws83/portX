@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useChainId } from 'wagmi'
+import { useAccount, useChainId } from 'wagmi'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { BasketCard } from '@/components/BasketCard'
 import { QuotePreviewCard } from '@/components/QuotePreviewCard'
@@ -29,15 +29,20 @@ import {
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
 import type { Basket } from '@/types/basket'
+import type { ExecutionPlan } from '@/types/execution'
 import { RecentTestSwaps } from '@/components/RecentTestSwaps'
+import { canShowTestnetMultiTokenBasketSell } from '@/utils/testnetBasketHoldings'
+
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 
 export function Baskets() {
   const chainId = useChainId()
+  const { isConnected } = useAccount()
   const testnetBalances = useTestnetPortfolioBalances()
   const { allBaskets, basketsLoading, basketsError, basketsSource } = useBasket()
   const buyBasket = usePortfolioStore((s) => s.buyBasket)
   const sellBasket = usePortfolioStore((s) => s.sellBasket)
+  const removeActiveBasket = usePortfolioStore((s) => s.removeActiveBasket)
   const activeBaskets = usePortfolioStore((s) => s.activeBaskets)
 
   const {
@@ -67,6 +72,38 @@ export function Baskets() {
   )
 
   const ownedIds = new Set(activeBaskets.map((b) => b.basketId))
+
+  const testnetSellEligibleIds = useMemo(() => {
+    if (!ENABLE_TESTNET_MODE || !ENABLE_LIVE_EXECUTION || !isConnected) {
+      return new Set<string>()
+    }
+    const balancesWei = testnetBalances.assets.reduce<Record<string, bigint>>((acc, asset) => {
+      acc[asset.symbol] = asset.balanceWei
+      return acc
+    }, {})
+    return new Set(
+      allBaskets
+        .filter((basket) =>
+          canShowTestnetMultiTokenBasketSell({
+            enableTestnetMode: ENABLE_TESTNET_MODE,
+            enableLiveExecution: ENABLE_LIVE_EXECUTION,
+            walletConnected: isConnected,
+            chainId,
+            basketId: basket.id,
+            balancesWei,
+          }),
+        )
+        .map((basket) => basket.id),
+    )
+  }, [allBaskets, chainId, isConnected, testnetBalances.assets])
+
+  const handleTestnetExecutionSuccess = (executedPlan: ExecutionPlan) => {
+    if (!executedPlan.basketId) return
+    if (executedPlan.type === 'sell_basket') {
+      removeActiveBasket(executedPlan.basketId)
+      testnetBalances.refresh()
+    }
+  }
 
   const portfolio = usePortfolio()
 
@@ -304,6 +341,7 @@ export function Baskets() {
                 onBuy={handleQuickBuy}
                 onPlannedChainSelect={selectPlannedBasket}
                 isOwned={ownedIds.has(basket.id)}
+                canPreviewSell={testnetSellEligibleIds.has(basket.id)}
                 driftStatus={
                   ownedIds.has(basket.id) ? getDriftForBasket(basket.id)?.status : undefined
                 }
@@ -379,6 +417,7 @@ export function Baskets() {
         onClose={() => setModalOpen(false)}
         onConfirm={handleConfirm}
         confirming={confirming}
+        onTestnetExecutionSuccess={handleTestnetExecutionSuccess}
       />
 
       <PortfolioRebalancePreviewModal

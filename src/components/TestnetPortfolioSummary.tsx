@@ -9,6 +9,7 @@ import {
   shouldShowTestnetPortfolio,
   TESTNET_PORTFOLIO_UPDATED_EVENT,
   type TestnetPortfolioAggregate,
+  type TestnetPortfolioPosition,
 } from '@/services/testnetPortfolio'
 import { TESTNET_PORTFOLIO_PRICING_LABEL } from '@/services/testnetPortfolioPricing'
 
@@ -28,6 +29,28 @@ function formatUsdcTotal(value: number): string {
 function formatUsdcDifference(value: number): string {
   const prefix = value > 0 ? '+' : ''
   return `${prefix}${value.toLocaleString('en-US', { maximumFractionDigits: 6 })}`
+}
+
+function formatPositionDirection(position: TestnetPortfolioPosition): 'Buy' | 'Sell' {
+  return position.planType === 'sell_basket' ? 'Sell' : 'Buy'
+}
+
+function formatPositionSummary(position: TestnetPortfolioPosition): string {
+  if (position.planType === 'sell_basket') {
+    const sold =
+      position.soldAssets?.map((asset) => `${formatUsdcTotal(parseFloat(asset.amount))} ${asset.symbol}`).join(' · ') ??
+      position.inputAmountEth
+    const usdc = formatUsdcTotal(parseFloat(position.outputAmountUsdc))
+    return `Sold ${sold} → ${usdc} USDC`
+  }
+
+  if (position.acquiredAssets.length > 1) {
+    return position.acquiredAssets
+      .map((asset) => `${formatUsdcTotal(parseFloat(asset.amount))} ${asset.symbol}`)
+      .join(' · ')
+  }
+
+  return `${formatUsdcTotal(parseFloat(position.outputAmountUsdc))} USDC`
 }
 
 export function TestnetPortfolioSummary({
@@ -90,20 +113,42 @@ export function TestnetPortfolioSummary({
             Latest execution
           </p>
           <p>
+            <span className="text-portx-muted">Direction: </span>
+            <span
+              className={`font-semibold ${
+                latest.planType === 'sell_basket' ? 'text-portx-warning' : 'text-portx-green'
+              }`}
+            >
+              {formatPositionDirection(latest)}
+            </span>
+          </p>
+          <p>
             <span className="text-portx-muted">Basket: </span>
             <span className="font-medium">{latest.basketLabel}</span>
           </p>
+          {latest.planType === 'sell_basket' && latest.soldAssets?.length ? (
+            <p>
+              <span className="text-portx-muted">Sold: </span>
+              <span className="font-mono">
+                {latest.soldAssets
+                  .map((asset) => `${formatUsdcTotal(parseFloat(asset.amount))} ${asset.symbol}`)
+                  .join(' · ')}
+              </span>
+            </p>
+          ) : null}
           <p>
-            <span className="text-portx-muted">Received: </span>
-            <span className="font-mono text-portx-green">
-              {latest.acquiredAssets.length > 1
-                ? latest.acquiredAssets
-                    .map((asset) => `${formatUsdcTotal(parseFloat(asset.amount))} ${asset.symbol}`)
-                    .join(' · ')
-                : `${formatUsdcTotal(parseFloat(latest.outputAmountUsdc))} USDC`}
+            <span className="text-portx-muted">
+              {latest.planType === 'sell_basket' ? 'USDC received: ' : 'Received: '}
             </span>
-            <span className="text-portx-muted"> · </span>
-            <span className="font-mono">{formatEthTotal(parseFloat(latest.inputAmountEth))} ETH in</span>
+            <span className="font-mono text-portx-green">
+              {formatUsdcTotal(parseFloat(latest.outputAmountUsdc))} USDC
+            </span>
+            {latest.planType !== 'sell_basket' ? (
+              <>
+                <span className="text-portx-muted"> · </span>
+                <span className="font-mono">{formatEthTotal(parseFloat(latest.inputAmountEth))} ETH in</span>
+              </>
+            ) : null}
           </p>
           <p className="text-xs text-portx-muted">
             {latest.legsCount} leg(s) · {latest.provider} ·{' '}
@@ -125,21 +170,40 @@ export function TestnetPortfolioSummary({
         </p>
       )}
 
-      {!compact && aggregate.positions.length > 1 ? (
+      {!compact && aggregate.positions.length > 0 ? (
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-            Recent positions ({Math.min(aggregate.positions.length, 5)})
+            Execution history ({Math.min(aggregate.positions.length, 5)})
           </p>
           <ul className="space-y-2">
             {aggregate.positions.slice(0, 5).map((position) => (
               <li
                 key={position.portfolioId}
-                className="rounded-lg border border-portx-border bg-black/20 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2"
+                className="rounded-lg border border-portx-border bg-black/20 px-3 py-2 text-xs space-y-1"
               >
-                <span className="font-medium truncate">{position.basketLabel}</span>
-                <span className="font-mono text-portx-green">
-                  {formatUsdcTotal(parseFloat(position.outputAmountUsdc))} USDC
-                </span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium truncate">{position.basketLabel}</span>
+                  <span
+                    className={`text-[10px] font-semibold uppercase tracking-wide ${
+                      position.planType === 'sell_basket' ? 'text-portx-warning' : 'text-portx-green'
+                    }`}
+                  >
+                    {formatPositionDirection(position)}
+                  </span>
+                </div>
+                <p className="font-mono text-portx-green">{formatPositionSummary(position)}</p>
+                <p className="text-portx-muted">
+                  {new Date(position.timestamp).toLocaleString()} ·{' '}
+                  {truncateAddress(position.txHash, 6)}
+                </p>
+                <a
+                  href={position.explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-portx-green underline"
+                >
+                  View tx
+                </a>
               </li>
             ))}
           </ul>

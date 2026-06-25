@@ -56,6 +56,7 @@ interface TransactionReviewModalProps {
   onClose: () => void
   onConfirm: () => void
   confirming?: boolean
+  onTestnetExecutionSuccess?: (plan: ExecutionPlan) => void
 }
 
 function getPlanTypeLabel(plan: ExecutionPlan): string {
@@ -108,6 +109,7 @@ export function TransactionReviewModal({
   onClose,
   onConfirm,
   confirming,
+  onTestnetExecutionSuccess,
 }: TransactionReviewModalProps) {
   const { isConnected, address } = useAccount()
   const chainId = useChainId()
@@ -158,6 +160,7 @@ export function TransactionReviewModal({
     saveTestnetSwapFromPlan(plan, saveParams)
     saveTestnetPortfolioFromPlan(plan, saveParams)
     testnetBalances.refresh()
+    onTestnetExecutionSuccess?.(plan)
   }, [
     open,
     plan,
@@ -165,6 +168,7 @@ export function TransactionReviewModal({
     testnetExecute.status,
     testnetExecute.txHash,
     testnetExecute.explorerUrl,
+    onTestnetExecutionSuccess,
   ])
 
   const prepared = useMemo(

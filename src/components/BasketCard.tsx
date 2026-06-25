@@ -14,6 +14,8 @@ interface BasketCardProps {
   onBuy?: (basket: Basket) => void
   onPlannedChainSelect?: (basket: Basket) => void
   isOwned?: boolean
+  /** Sepolia testnet: show sell when wallet holds basket tokens on-chain */
+  canPreviewSell?: boolean
   driftStatus?: DriftStatusLevel
   loading?: boolean
   isSelected?: boolean
@@ -27,6 +29,7 @@ export function BasketCard({
   onBuy,
   onPlannedChainSelect,
   isOwned,
+  canPreviewSell,
   driftStatus,
   loading,
   isSelected,
@@ -34,6 +37,8 @@ export function BasketCard({
   const tokenCount = basket.allocations.length
   const quotesAvailable = canPreviewQuoteForBasket(basket)
   const plannedMessage = getPlannedChainMessage(basket)
+
+  const showSellButton = Boolean(onPreviewSell && (isOwned || canPreviewSell))
 
   return (
     <div
@@ -100,11 +105,11 @@ export function BasketCard({
                 : BUTTON_LABELS.quotesUnavailable}
           </button>
         )}
-        {isOwned && onPreviewSell && (
+        {showSellButton && (
           <button
             type="button"
             onClick={() =>
-              quotesAvailable ? onPreviewSell(basket) : onPlannedChainSelect?.(basket)
+              quotesAvailable ? onPreviewSell!(basket) : onPlannedChainSelect?.(basket)
             }
             disabled={quotesAvailable && loading}
             aria-busy={quotesAvailable && loading}
@@ -114,7 +119,9 @@ export function BasketCard({
             {loading && quotesAvailable
               ? BUTTON_LABELS.fetchingQuotes
               : quotesAvailable
-                ? BUTTON_LABELS.previewSellQuote
+                ? canPreviewSell && !isOwned
+                  ? 'Preview Sell (Wallet Holdings)'
+                  : BUTTON_LABELS.previewSellQuote
                 : BUTTON_LABELS.quotesUnavailable}
           </button>
         )}
