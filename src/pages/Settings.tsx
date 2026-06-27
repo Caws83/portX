@@ -21,6 +21,10 @@ import {
   getExpectedBundleExecutorNetworkLabel,
   useBundleExecutorHealth,
 } from '@/hooks/useBundleExecutorHealth'
+import {
+  formatFeeBps,
+  useBundleExecutorFeeConfig,
+} from '@/hooks/useBundleExecutorFeeConfig'
 import { useBundleExecutorExecutionReadiness } from '@/hooks/useBundleExecutorExecutionReadiness'
 import {
   MOCK_ETH_TEST_AMOUNT,
@@ -68,6 +72,7 @@ export function Settings() {
 
   const targetNetwork = getActiveNetworkConfig()
   const contractHealth = useBundleExecutorHealth()
+  const feeConfig = useBundleExecutorFeeConfig()
   const executionReadiness = useBundleExecutorExecutionReadiness()
   const mockExecute = useMockExecuteBasket()
 
@@ -328,6 +333,63 @@ export function Settings() {
                 </dd>
               </div>
             </dl>
+          </div>
+
+          <div className="card mb-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-bold">Protocol Fee Config</h2>
+              <span className="text-xs font-mono text-portx-muted">Read-only</span>
+            </div>
+            <p className="text-xs text-portx-muted">
+              On-chain fee settings from BundleExecutor. No fees are collected yet — display only.
+            </p>
+            {feeConfig.isLoading ? (
+              <p className="text-sm text-portx-muted">Loading fee config…</p>
+            ) : !feeConfig.isAvailable ? (
+              <StatusBanner variant="info" compact>
+                Fee config unavailable on the deployed contract — redeploy BundleExecutor with C-2
+                changes to read settings here.
+              </StatusBanner>
+            ) : (
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-portx-muted">Fee recipient</dt>
+                  <dd className="font-mono text-xs text-right break-all">
+                    {feeConfig.config?.feeRecipient && feeConfig.config.feeRecipient !== '0x0000000000000000000000000000000000000000'
+                      ? truncateAddress(feeConfig.config.feeRecipient, 6)
+                      : '—'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-portx-muted">Buy fee</dt>
+                  <dd className="text-right">
+                    {feeConfig.config ? formatFeeBps(feeConfig.config.buyFeeBps) : '—'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-portx-muted">Sell fee</dt>
+                  <dd className="text-right">
+                    {feeConfig.config ? formatFeeBps(feeConfig.config.sellFeeBps) : '—'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-portx-muted">Max fee cap</dt>
+                  <dd className="text-right">
+                    {feeConfig.config ? formatFeeBps(feeConfig.config.maxFeeBps) : '—'}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-portx-muted">Fees enabled</dt>
+                  <dd
+                    className={`text-right ${
+                      feeConfig.config?.feesEnabled ? 'text-portx-warning' : 'text-portx-muted'
+                    }`}
+                  >
+                    {feeConfig.config?.feesEnabled ? 'Yes' : 'No'}
+                  </dd>
+                </div>
+              </dl>
+            )}
           </div>
 
           {mockExecute.isSectionVisible ? (

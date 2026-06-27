@@ -58,11 +58,17 @@ contract BundleExecutor {
 
     event RouterAllowlistUpdated(address indexed router, bool allowed);
 
+    event FeeRecipientUpdated(address indexed feeRecipient);
+    event BuyFeeUpdated(uint16 buyFeeBps);
+    event SellFeeUpdated(uint16 sellFeeBps);
+    event FeesEnabledUpdated(bool feesEnabled);
+
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
 
     error NotOwner();
+    error FeeExceedsMax(uint16 requested, uint16 max);
     error ReentrancyGuardActive();
     error EmptyBasket();
     error RouterCallFailed(uint256 legIndex);
@@ -72,12 +78,30 @@ contract BundleExecutor {
     error RouterNotAllowed(address router);
 
     // -------------------------------------------------------------------------
+    // Types — protocol fee config (storage only; no collection in C-2)
+    // -------------------------------------------------------------------------
+
+    struct FeeConfig {
+        address feeRecipient;
+        uint16 buyFeeBps;
+        uint16 sellFeeBps;
+        uint16 maxFeeBps;
+        bool feesEnabled;
+    }
+
+    // -------------------------------------------------------------------------
     // Storage
     // -------------------------------------------------------------------------
 
     address public owner;
 
     mapping(address => bool) public allowedRouters;
+
+    address public feeRecipient;
+    uint16 public buyFeeBps;
+    uint16 public sellFeeBps;
+    uint16 public constant maxFeeBps = 100;
+    bool public feesEnabled;
 
     uint256 private _reentrancyStatus;
     uint256 private constant _NOT_ENTERED = 1;
@@ -116,6 +140,37 @@ contract BundleExecutor {
         if (router == address(0)) revert InvalidRecipient();
         allowedRouters[router] = allowed;
         emit RouterAllowlistUpdated(router, allowed);
+    }
+
+    // -------------------------------------------------------------------------
+    // Owner — protocol fee config (no fee deduction until a future phase)
+    // -------------------------------------------------------------------------
+
+    function setFeeRecipient(address recipient) external onlyOwner {
+        if (recipient == address(0)) revert InvalidRecipient();
+        feeRecipient = recipient;
+        emit FeeRecipientUpdated(recipient);
+    }
+
+    function setBuyFeeBps(uint16 feeBps) external onlyOwner {
+        if (feeBps > maxFeeBps) revert FeeExceedsMax(feeBps, maxFeeBps);
+        buyFeeBps = feeBps;
+        emit BuyFeeUpdated(feeBps);
+    }
+
+    function setSellFeeBps(uint16 feeBps) external onlyOwner {
+        if (feeBps > maxFeeBps) revert FeeExceedsMax(feeBps, maxFeeBps);
+        sellFeeBps = feeBps;
+        emit SellFeeUpdated(feeBps);
+    }
+
+    function setFeesEnabled(bool enabled) external onlyOwner {
+        feesEnabled = enabled;
+        emit FeesEnabledUpdated(enabled);
+    }
+
+    function getFeeConfig() external view returns (FeeConfig memory) {
+        return FeeConfig(feeRecipient, buyFeeBps, sellFeeBps, maxFeeBps, feesEnabled);
     }
 
     // -------------------------------------------------------------------------

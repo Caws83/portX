@@ -193,10 +193,10 @@ describe('BundleExecutor', () => {
     it('blocks executeBasket when reentrancy guard is active', async () => {
       const { executor, user } = await loadFixture(deployFixture)
       const executorAddr = await executor.getAddress()
-      // storage slot 2 = _reentrancyStatus (slot 0 = owner, slot 1 = allowedRouters); 2 = _ENTERED
+      // storage slot 3 = _reentrancyStatus (0=owner, 1=allowedRouters, 2=feeRecipient+fee pack); 2 = _ENTERED
       await ethers.provider.send('hardhat_setStorageAt', [
         executorAddr,
-        '0x0000000000000000000000000000000000000000000000000000000000000002',
+        '0x0000000000000000000000000000000000000000000000000000000000000003',
         ethers.zeroPadValue(ethers.toBeHex(2), 32),
       ])
       await expect(
@@ -380,6 +380,122 @@ describe('BundleExecutor', () => {
 
       expect(await outputToken.balanceOf(user.address)).to.equal(userBefore + returnAmount)
       expect(await outputToken.balanceOf(executorAddr)).to.equal(0n)
+    })
+  })
+
+  describe('protocol fee config', () => {
+    it('defaults to zero fees and disabled collection', async () => {
+      const { executor } = await loadFixture(deployFixture)
+
+      expect(await executor.feeRecipient()).to.equal(ethers.ZeroAddress)
+      expect(await executor.buyFeeBps()).to.equal(0)
+      expect(await executor.sellFeeBps()).to.equal(0)
+      expect(await executor.maxFeeBps()).to.equal(100)
+      expect(await executor.feesEnabled()).to.equal(false)
+
+      const config = await executor.getFeeConfig()
+      expect(config.feeRecipient).to.equal(ethers.ZeroAddress)
+      expect(config.buyFeeBps).to.equal(0)
+      expect(config.sellFeeBps).to.equal(0)
+      expect(config.maxFeeBps).to.equal(100)
+      expect(config.feesEnabled).to.equal(false)
+    })
+
+    it('allows owner to set fee recipient and fee bps', async () => {
+      const { executor, owner, other } = await loadFixture(deployFixture)
+
+      await expect(executor.connect(owner).setFeeRecipient(other.address))
+        .to.emit(executor, 'FeeRecipientUpdated')
+        .withArgs(other.address)
+      expect(await executor.feeRecipient()).to.equal(other.address)
+
+      await expect(executor.connect(owner).setBuyFeeBps(25))
+        .to.emit(executor, 'BuyFeeUpdated')
+        .withArgs(25)
+      expect(await executor.buyFeeBps()).to.equal(25)
+
+      await expect(executor.connect(owner).setSellFeeBps(50))
+        .to.emit(executor, 'SellFeeUpdated')
+        .withArgs(50)
+      expect(await executor.sellFeeBps()).to.equal(50)
+
+      await expect(executor.connect(owner).setFeesEnabled(true))
+        .to.emit(executor, 'FeesEnabledUpdated')
+        .withArgs(true)
+      expect(await executor.feesEnabled()).to.equal(true)
+
+      const config = await executor.getFeeConfig()
+      expect(config.feeRecipient).to.equal(other.address)
+      expect(config.buyFeeBps).to.equal(25)
+      expect(config.sellFeeBps).to.equal(50)
+      expect(config.feesEnabled).to.equal(true)
+    })
+
+    it('rejects fee recipient zero address', async () => {
+      const { executor, owner } = await loadFixture(deployFixture)
+      await expect(
+        executor.connect(owner).setFeeRecipient(ethers.ZeroAddress)
+      ).to.be.revertedWithCustomError(executor, 'InvalidRecipient')
+    })
+
+    it('rejects buy and sell fee bps above maxFeeBps', async () => {
+      const { executor, owner } = await loadFixture(deployFixture)
+
+      await expect(executor.connect(owner).setBuyFeeBps(101))
+        .to.be.revertedWithCustomError(executor, 'FeeExceedsMax')
+        .withArgs(101, 100)
+      await expect(executor.connect(owner).setSellFeeBps(101))
+        .to.be.revertedWithCustomError(executor, 'FeeExceedsMax')
+        .withArgs(101, 100)
+
+      await executor.connect(owner).setBuyFeeBps(100)
+      await executor.connect(owner).setSellFeeBps(100)
+      expect(await executor.buyFeeBps()).to.equal(100)
+      expect(await executor.sellFeeBps()).to.equal(100)
+    })
+
+    it('reverts fee setters from non-owner', async () => {
+      const { executor, user, other } = await loadFixture(deployFixture)
+
+      await expect(executor.connect(user).setFeeRecipient(other.address)).to.be.revertedWithCustomError(
+        executor,
+        'NotOwner'
+      )
+      await expect(executor.connect(user).setBuyFeeBps(1)).to.be.revertedWithCustomError(
+        executor,
+        'NotOwner'
+      )
+      await expect(executor.connect(user).setSellFeeBps(1)).to.be.revertedWithCustomError(
+        executor,
+        'NotOwner'
+      )
+      await expect(executor.connect(user).setFeesEnabled(true)).to.be.revertedWithCustomError(
+        executor,
+        'NotOwner'
+      )
+    })
+
+    it('does not change executeBasket behavior when fees are configured', async () => {
+      const { executor, router, outputToken, owner, user, other } = await loadFixture(deployFixture)
+      const returnAmount = 5_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+
+      await executor.connect(owner).setFeeRecipient(other.address)
+      await executor.connect(owner).setBuyFeeBps(100)
+      await executor.connect(owner).setSellFeeBps(100)
+      await executor.connect(owner).setFeesEnabled(true)
+
+      const routerAddr = await router.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const swaps = [buildEthSwap(routerAddr, 10n, tokenOut, returnAmount)]
+
+      const userBefore = await outputToken.balanceOf(user.address)
+      const recipientBefore = await outputToken.balanceOf(other.address)
+
+      await executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 10n })
+
+      expect(await outputToken.balanceOf(user.address)).to.equal(userBefore + returnAmount)
+      expect(await outputToken.balanceOf(other.address)).to.equal(recipientBefore)
     })
   })
 })
