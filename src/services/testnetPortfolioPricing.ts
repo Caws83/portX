@@ -1,17 +1,15 @@
+import { TESTNET_BASKET_TOKENS } from '@/config/testnetBasketTokens'
 import { formatUsd } from '@/utils/format'
 
 /** Fixed testnet placeholder prices — no external APIs */
-export const TESTNET_USDC_PRICE_USD = 1
-export const TESTNET_WETH_PRICE_USD = 2500
+export const TESTNET_USDC_PRICE_USD = TESTNET_BASKET_TOKENS.USDC.priceUsd
+export const TESTNET_WETH_PRICE_USD = TESTNET_BASKET_TOKENS.WETH.priceUsd
 
 export const TESTNET_PORTFOLIO_PRICING_LABEL = 'Estimated Testnet Value' as const
 
-export type TestnetPricedSymbol = 'USDC' | 'WETH'
-
-const TESTNET_TOKEN_PRICES_USD: Record<TestnetPricedSymbol, number> = {
-  USDC: TESTNET_USDC_PRICE_USD,
-  WETH: TESTNET_WETH_PRICE_USD,
-}
+const TESTNET_TOKEN_PRICES_USD: Record<string, number> = Object.fromEntries(
+  Object.values(TESTNET_BASKET_TOKENS).map((token) => [token.symbol.toUpperCase(), token.priceUsd]),
+)
 
 export interface TestnetPortfolioAssetPricingInput {
   symbol: string
@@ -40,13 +38,12 @@ export interface TestnetPortfolioValuation {
   valuedAssets: TestnetValuedPortfolioAsset[]
 }
 
-function isPricedSymbol(symbol: string): symbol is TestnetPricedSymbol {
-  return symbol === 'USDC' || symbol === 'WETH'
-}
-
 export function getTestnetTokenPriceUsd(symbol: string): number {
-  if (!isPricedSymbol(symbol)) return 0
-  return TESTNET_TOKEN_PRICES_USD[symbol]
+  const normalized = symbol.toUpperCase()
+  if (normalized === 'ETH') {
+    return TESTNET_BASKET_TOKENS.WETH.priceUsd
+  }
+  return TESTNET_TOKEN_PRICES_USD[normalized] ?? 0
 }
 
 export function formatTestnetEstimatedPrice(usd: number): string {
@@ -85,12 +82,14 @@ export function computeTestnetPortfolioValuation(
   assets: TestnetPortfolioAssetPricingInput[],
 ): TestnetPortfolioValuation {
   const valuedAssets = assets.map(valueTestnetPortfolioAsset)
+  const nonZeroAssets = valuedAssets.filter((asset) => asset.balanceNumeric > 0)
+
   const totalEstimatedValueUsd = valuedAssets.reduce(
     (sum, asset) => sum + asset.estimatedValueUsd,
     0,
   )
 
-  const largest = valuedAssets.reduce<TestnetValuedPortfolioAsset | null>((current, asset) => {
+  const largest = nonZeroAssets.reduce<TestnetValuedPortfolioAsset | null>((current, asset) => {
     if (!current || asset.estimatedValueUsd > current.estimatedValueUsd) {
       return asset
     }
@@ -104,7 +103,7 @@ export function computeTestnetPortfolioValuation(
     largestAssetSymbol: largest?.symbol ?? null,
     largestAssetValueUsd: largest?.estimatedValueUsd ?? 0,
     largestAssetValueDisplay: largest ? largest.estimatedValueDisplay : null,
-    assetCount: valuedAssets.length,
+    assetCount: nonZeroAssets.length,
     valuedAssets,
   }
 }

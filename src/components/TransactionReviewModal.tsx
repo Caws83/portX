@@ -32,6 +32,7 @@ import {
   useTestnetUniswapBasketExecute,
 } from '@/hooks/useTestnetUniswapBasketExecute'
 import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
+import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPortfolio'
 import { useMainnetSwapExecute } from '@/hooks/useMainnetSwapExecute'
 import { saveTestnetPortfolioFromPlan } from '@/services/testnetPortfolio'
 import { saveTestnetSwapFromPlan } from '@/services/testnetSwapHistory'
@@ -206,6 +207,7 @@ export function TransactionReviewModal({
     saveTestnetSwapFromPlan(plan, saveParams)
     saveTestnetPortfolioFromPlan(plan, saveParams)
     testnetBalances.refresh()
+    window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
     onTestnetExecutionSuccess?.(plan)
   }, [
     open,

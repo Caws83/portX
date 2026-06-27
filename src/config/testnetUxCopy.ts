@@ -14,6 +14,22 @@ export const TESTNET_BANNER_MESSAGE =
 export const TESTNET_TRADE_NOTE =
   'This is a Sepolia testnet trade. No real funds are used.'
 
+export const TESTNET_DASHBOARD = {
+  title: 'Portfolio Dashboard',
+  subtitleConnected: 'Wallet connected · Sepolia testnet wallet',
+  subtitleDisconnected: 'Connect wallet · Sepolia testnet',
+  portfolioSectionTitle: 'Sepolia wallet portfolio',
+  portfolioSectionDescription:
+    'On-chain wallet assets on Sepolia with testnet estimate pricing.',
+  totalValueLabel: 'Total Portfolio Value',
+  largestPositionLabel: 'Largest Position',
+  positionsLabel: 'On-chain Positions',
+  activeBasketsLabel: 'Active Baskets',
+  testnetEstimateNote: 'Testnet estimate — not mainnet portfolio data',
+  advancedDemoTitle: 'Demo / API preview',
+  tradeBasketsCta: 'Trade baskets',
+} as const
+
 export const SEPOLIA_TESTNET_TRADE_TITLE = 'Sepolia Testnet Trade'
 
 export const TESTNET_BUTTONS = {

@@ -18,6 +18,7 @@ import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
 import { TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
 import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
 import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
+import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPortfolio'
 import { assessQuoteQuality } from '@/utils/quoteQuality'
 import {
   BUTTON_LABELS,
@@ -103,10 +104,11 @@ export function Baskets() {
   }, [allBaskets, chainId, isConnected, testnetBalances.assets])
 
   const handleTestnetExecutionSuccess = (executedPlan: ExecutionPlan) => {
-    if (!executedPlan.basketId) return
+    testnetBalances.refresh()
+    window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
+    if (!executedPlan.basketId || ENABLE_TESTNET_MODE) return
     if (executedPlan.type === 'sell_basket') {
       removeActiveBasket(executedPlan.basketId)
-      testnetBalances.refresh()
     }
   }
 

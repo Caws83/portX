@@ -1,5 +1,11 @@
 import type { Basket } from '@/types/basket'
 import type { TokenAllocation } from '@/types/token'
+import {
+  isTestnetMultiTokenBasket,
+  isTestnetMultiTokenBasketAllocations,
+  TESTNET_MULTI_TOKEN_BASKET,
+  TESTNET_MULTI_TOKEN_BASKET_ID,
+} from '@/data/testnetMultiTokenBasket'
 import type { TestnetValuedPortfolioAsset } from '@/services/testnetPortfolioPricing'
 import type { TestnetPortfolioPosition } from '@/services/testnetPortfolio'
 
@@ -8,12 +14,12 @@ export const TESTNET_REBALANCE_PREVIEW_NOTE =
 
 export const TESTNET_REBALANCE_BALANCE_THRESHOLD_PERCENT = 0.5
 
-export const TESTNET_DEFAULT_REBALANCE_TARGETS: Record<TestnetRebalanceSymbol, number> = {
+export const TESTNET_DEFAULT_REBALANCE_TARGETS: Record<string, number> = {
   USDC: 50,
   WETH: 50,
 }
 
-export type TestnetRebalanceSymbol = 'USDC' | 'WETH'
+export type TestnetRebalanceSymbol = string
 
 export type TestnetRebalanceAction = 'increase' | 'decrease' | 'balanced'
 
@@ -40,8 +46,6 @@ export interface TestnetRebalancePreviewResult {
   } | null
 }
 
-const TESTNET_REBALANCE_SYMBOLS: TestnetRebalanceSymbol[] = ['USDC', 'WETH']
-
 const STABLECOIN_SYMBOLS = new Set(['USDC', 'USDT', 'DAI'])
 const WETH_BUCKET_SYMBOLS = new Set(['ETH', 'WETH'])
 
@@ -53,34 +57,87 @@ function formatPercent(value: number): string {
   return `${roundPercent(value)}%`
 }
 
-function mapTokenSymbolToRebalanceBucket(symbol: string): TestnetRebalanceSymbol | null {
-  if (symbol === 'USDC' || STABLECOIN_SYMBOLS.has(symbol)) return 'USDC'
-  if (WETH_BUCKET_SYMBOLS.has(symbol)) return 'WETH'
+export function isMultiTokenRebalanceBasket(basket: Basket): boolean {
+  return (
+    isTestnetMultiTokenBasket(basket.id) ||
+    isTestnetMultiTokenBasketAllocations(basket.allocations)
+  )
+}
+
+function mapTokenSymbolToStableBucket(symbol: string): 'USDC' | 'WETH' | null {
+  const normalized = symbol.toUpperCase()
+  if (normalized === 'USDC' || STABLECOIN_SYMBOLS.has(normalized)) return 'USDC'
+  if (WETH_BUCKET_SYMBOLS.has(normalized)) return 'WETH'
   return null
 }
 
-export function mapBasketAllocationsToTestnetTargets(
+/** Per-token target weights from basket allocations (multi-token) or USDC/WETH buckets (legacy) */
+export function mapBasketAllocationsToRebalanceTargets(
   allocations: TokenAllocation[],
-): Record<TestnetRebalanceSymbol, number> {
-  const targets: Record<TestnetRebalanceSymbol, number> = { USDC: 0, WETH: 0 }
-
-  for (const allocation of allocations) {
-    const bucket = mapTokenSymbolToRebalanceBucket(allocation.token.symbol)
-    if (!bucket) continue
-    targets[bucket] += allocation.weightPercent
+  basket?: Basket | null,
+): Record<string, number> {
+  if (basket && isMultiTokenRebalanceBasket(basket)) {
+    const targets: Record<string, number> = {}
+    for (const allocation of allocations) {
+      const symbol = allocation.token.symbol.toUpperCase()
+      targets[symbol] = (targets[symbol] ?? 0) + allocation.weightPercent
+    }
+    return normalizeTargetPercents(targets)
   }
 
-  const total = targets.USDC + targets.WETH
+  const bucketTargets: Record<string, number> = { USDC: 0, WETH: 0 }
+  for (const allocation of allocations) {
+    const bucket = mapTokenSymbolToStableBucket(allocation.token.symbol)
+    if (!bucket) continue
+    bucketTargets[bucket] += allocation.weightPercent
+  }
+
+  const total = bucketTargets.USDC + bucketTargets.WETH
   if (total <= 0) {
     return { ...TESTNET_DEFAULT_REBALANCE_TARGETS }
   }
 
   if (Math.abs(total - 100) > 0.01) {
-    targets.USDC = roundPercent((targets.USDC / total) * 100)
-    targets.WETH = roundPercent(100 - targets.USDC)
+    bucketTargets.USDC = roundPercent((bucketTargets.USDC / total) * 100)
+    bucketTargets.WETH = roundPercent(100 - bucketTargets.USDC)
   }
 
-  return targets
+  return bucketTargets
+}
+
+/** @deprecated alias — prefer mapBasketAllocationsToRebalanceTargets */
+export function mapBasketAllocationsToTestnetTargets(
+  allocations: TokenAllocation[],
+): Record<string, number> {
+  return mapBasketAllocationsToRebalanceTargets(allocations)
+}
+
+function normalizeTargetPercents(targets: Record<string, number>): Record<string, number> {
+  const total = Object.values(targets).reduce((sum, weight) => sum + weight, 0)
+  if (total <= 0) return targets
+  if (Math.abs(total - 100) <= 0.01) return targets
+
+  const normalized: Record<string, number> = {}
+  const symbols = Object.keys(targets)
+  let allocated = 0
+  for (let index = 0; index < symbols.length; index++) {
+    const symbol = symbols[index]
+    if (index === symbols.length - 1) {
+      normalized[symbol] = roundPercent(100 - allocated)
+      continue
+    }
+    const share = roundPercent((targets[symbol] / total) * 100)
+    normalized[symbol] = share
+    allocated += share
+  }
+  return normalized
+}
+
+function getRebalanceLegSymbols(basket: Basket): string[] {
+  if (isMultiTokenRebalanceBasket(basket)) {
+    return basket.allocations.map((allocation) => allocation.token.symbol.toUpperCase())
+  }
+  return ['USDC', 'WETH']
 }
 
 function getRebalanceAction(differencePercent: number): {
@@ -102,29 +159,34 @@ function getRebalanceAction(differencePercent: number): {
 
 function getCurrentAllocationPercents(
   valuedAssets: TestnetValuedPortfolioAsset[],
-): Record<TestnetRebalanceSymbol, number> {
-  const totals: Record<TestnetRebalanceSymbol, number> = { USDC: 0, WETH: 0 }
-  const totalValue = valuedAssets.reduce((sum, asset) => sum + asset.estimatedValueUsd, 0)
-
-  if (totalValue <= 0) {
-    return totals
-  }
+  legSymbols: string[],
+): Record<string, number> {
+  const symbolSet = new Set(legSymbols.map((symbol) => symbol.toUpperCase()))
+  let totalValue = 0
 
   for (const asset of valuedAssets) {
-    if (asset.symbol === 'USDC' || asset.symbol === 'WETH') {
-      totals[asset.symbol] = roundPercent((asset.estimatedValueUsd / totalValue) * 100)
+    if (symbolSet.has(asset.symbol.toUpperCase())) {
+      totalValue += asset.estimatedValueUsd
     }
+  }
+
+  const totals: Record<string, number> = {}
+  for (const symbol of legSymbols) {
+    if (totalValue <= 0) {
+      totals[symbol] = 0
+      continue
+    }
+    const asset = valuedAssets.find((entry) => entry.symbol.toUpperCase() === symbol.toUpperCase())
+    totals[symbol] = roundPercent(((asset?.estimatedValueUsd ?? 0) / totalValue) * 100)
   }
 
   return totals
 }
 
-export function resolveRebalanceTargetBasket(
-  latestPosition: TestnetPortfolioPosition | null,
+function resolveRebalanceTargetBasketFromHistory(
+  latestPosition: TestnetPortfolioPosition,
   baskets: Basket[],
 ): Basket | null {
-  if (!latestPosition) return null
-
   const portfolioPrefixMatch = latestPosition.portfolioId.match(/^(.+)-0x[a-fA-F0-9]{10}$/)
   const portfolioKey = portfolioPrefixMatch?.[1]
 
@@ -136,20 +198,45 @@ export function resolveRebalanceTargetBasket(
   return baskets.find((basket) => basket.name === latestPosition.basketLabel) ?? null
 }
 
+export function resolveRebalanceTargetBasket(
+  latestPosition: TestnetPortfolioPosition | null,
+  baskets: Basket[],
+): Basket | null {
+  if (!latestPosition) return null
+  return resolveRebalanceTargetBasketFromHistory(latestPosition, baskets)
+}
+
+/** Default Sepolia Multi-Token Beta; falls back to history match when available */
+export function resolveTestnetRebalanceTargetBasket(
+  latestPosition: TestnetPortfolioPosition | null,
+  baskets: Basket[],
+): Basket {
+  const defaultBasket =
+    baskets.find((basket) => basket.id === TESTNET_MULTI_TOKEN_BASKET_ID) ??
+    TESTNET_MULTI_TOKEN_BASKET
+
+  if (!latestPosition) return defaultBasket
+
+  return resolveRebalanceTargetBasketFromHistory(latestPosition, baskets) ?? defaultBasket
+}
+
 export function computeTestnetRebalancePreview(params: {
   valuedAssets: TestnetValuedPortfolioAsset[]
   targetBasket?: Basket | null
 }): TestnetRebalancePreviewResult {
-  const targetBasket = params.targetBasket ?? null
-  const targetPercents = targetBasket
-    ? mapBasketAllocationsToTestnetTargets(targetBasket.allocations)
-    : TESTNET_DEFAULT_REBALANCE_TARGETS
+  const explicitTarget = params.targetBasket ?? null
+  const targetBasket = explicitTarget ?? TESTNET_MULTI_TOKEN_BASKET
 
-  const currentPercents = getCurrentAllocationPercents(params.valuedAssets)
+  const legSymbols = getRebalanceLegSymbols(targetBasket)
+  const targetPercents = mapBasketAllocationsToRebalanceTargets(
+    targetBasket.allocations,
+    targetBasket,
+  )
+  const currentPercents = getCurrentAllocationPercents(params.valuedAssets, legSymbols)
 
-  const legs: TestnetRebalanceLeg[] = TESTNET_REBALANCE_SYMBOLS.map((symbol) => {
-    const currentPercent = currentPercents[symbol]
-    const targetPercent = targetPercents[symbol]
+  const legs: TestnetRebalanceLeg[] = legSymbols.map((symbol) => {
+    const currentPercent = currentPercents[symbol] ?? 0
+    const targetPercent = targetPercents[symbol] ?? 0
     const differencePercent = roundPercent(targetPercent - currentPercent)
     const { action, actionLabel } = getRebalanceAction(differencePercent)
 
@@ -187,9 +274,9 @@ export function computeTestnetRebalancePreview(params: {
   )
 
   return {
-    targetBasketName: targetBasket?.name ?? 'Default testnet target (50/50 USDC/WETH)',
-    targetBasketId: targetBasket?.id ?? null,
-    usesDefaultTarget: !targetBasket,
+    targetBasketName: targetBasket.name,
+    targetBasketId: targetBasket.id,
+    usesDefaultTarget: explicitTarget === null,
     legs,
     assetsToIncrease,
     assetsToDecrease,

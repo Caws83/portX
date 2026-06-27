@@ -48,6 +48,7 @@ export interface TestnetPortfolioAsset {
 
 export interface TestnetPortfolioBalancesResult {
   walletAddress: Address | null
+  balancesWei: Record<string, bigint>
   usdcBalance: number
   wethBalance: number
   usdcBalanceFormatted: string
@@ -162,6 +163,7 @@ export function useTestnetPortfolioBalances(): TestnetPortfolioBalancesResult {
 
   return {
     walletAddress: address ?? null,
+    balancesWei: query.data?.balancesWei ?? {},
     usdcBalance,
     wethBalance,
     usdcBalanceFormatted: formatTokenAmount(usdcBalance, 6),
