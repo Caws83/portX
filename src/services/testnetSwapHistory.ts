@@ -4,18 +4,22 @@ import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI } from '@/config/testnetExecution'
 import type { ExecutionPlan } from '@/types/execution'
 import type { QuoteProvider } from '@/types/route'
 import {
+  formatTestnetLegInputDisplay,
   formatTestnetPlanTotalInput,
   formatTestnetPlanTotalOutput,
 } from '@/utils/testnetPreview'
 
 export type TestnetSwapHistoryStatus = 'success' | 'failed'
+export type TestnetSwapDirection = 'buy' | 'sell'
 
 export interface TestnetSwapHistoryRecord {
   txHash: string
   chainId: number
   explorerUrl: string
   basketLabel: string
+  direction: TestnetSwapDirection
   routeLabel: string
+  legRoutes: string[]
   inputAmount: string
   outputAmount: string
   provider: QuoteProvider | string
@@ -32,6 +36,10 @@ export function shouldShowRecentTestSwaps(): boolean {
   return ENABLE_TESTNET_MODE
 }
 
+function inferSwapDirection(routeLabel: string): TestnetSwapDirection {
+  return routeLabel.toLowerCase().includes('sell') ? 'sell' : 'buy'
+}
+
 export function loadTestnetSwapHistory(): TestnetSwapHistoryRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -40,10 +48,27 @@ export function loadTestnetSwapHistory(): TestnetSwapHistoryRecord[] {
     if (!Array.isArray(parsed)) return []
     return parsed
       .filter((record) => typeof record?.txHash === 'string' && record.txHash.length > 0)
+      .map((record) => ({
+        ...record,
+        direction: record.direction ?? inferSwapDirection(record.routeLabel),
+        legRoutes: record.legRoutes ?? [],
+      }))
       .sort((a, b) => b.timestamp - a.timestamp)
   } catch {
     return []
   }
+}
+
+function buildSellLegRoutes(plan: ExecutionPlan): string[] {
+  return plan.legs.map((leg) => `${leg.quote.inputToken.symbol} → USDC`)
+}
+
+function buildSellRouteLabel(plan: ExecutionPlan): string {
+  return buildSellLegRoutes(plan).join(' · ')
+}
+
+function buildSellInputAmount(plan: ExecutionPlan): string {
+  return plan.legs.map((leg) => formatTestnetLegInputDisplay(leg)).join(' · ')
 }
 
 export function buildTestnetSwapRecordFromPlan(
@@ -57,15 +82,22 @@ export function buildTestnetSwapRecordFromPlan(
 ): TestnetSwapHistoryRecord {
   const basketLabel = plan.basketName ?? plan.basketId ?? 'Sepolia test basket'
   const legCount = plan.legs.length
-  const routeLabel =
-    legCount > 1
-      ? `${legCount}-leg Uniswap V3 Sepolia ETH → USDC basket`
+  const isSell = plan.type === 'sell_basket'
+  const legRoutes = isSell ? buildSellLegRoutes(plan) : plan.legs.map((leg) => formatTestnetLegInputDisplay(leg) + ` → ${leg.quote.outputToken.symbol}`)
+  const routeLabel = isSell
+    ? buildSellRouteLabel(plan)
+    : legCount > 1
+      ? `${legCount}-leg Uniswap V3 Sepolia ETH → basket`
       : plan.legs[0]?.quote.routeSummary?.length > 0
         ? plan.legs[0].quote.routeSummary.join(' → ')
         : 'Uniswap V3 Sepolia ETH → USDC'
 
   const inputAmount =
-    legCount > 0 ? formatTestnetPlanTotalInput(plan) : `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} ETH`
+    legCount > 0
+      ? isSell
+        ? buildSellInputAmount(plan)
+        : formatTestnetPlanTotalInput(plan)
+      : `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} ETH`
 
   const outputAmount = legCount > 0 ? formatTestnetPlanTotalOutput(plan) : '—'
 
@@ -74,7 +106,9 @@ export function buildTestnetSwapRecordFromPlan(
     chainId: params.chainId,
     explorerUrl: params.explorerUrl,
     basketLabel,
+    direction: isSell ? 'sell' : 'buy',
     routeLabel,
+    legRoutes,
     inputAmount,
     outputAmount,
     provider: plan.legs[0]?.quote.provider ?? 'uniswap-sepolia',

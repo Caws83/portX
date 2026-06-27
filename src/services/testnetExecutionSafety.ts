@@ -1,11 +1,13 @@
 import type { ExecutionPlan } from '@/types/execution'
-import type { BasketQuotePreview } from '@/types/quote'
+import type { BasketQuotePreview, QuoteResponse } from '@/types/quote'
 import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
 import {
   TESTNET_MAX_BASKET_LEGS,
   TESTNET_MAX_SWAP_AMOUNT_WEI,
   TESTNET_SEPOLIA_CHAIN_ID,
   TESTNET_SWAP_ROUTER02_ADDRESS,
+  TESTNET_USDC_ADDRESS,
+  TESTNET_WETH_ADDRESS,
 } from '@/config/testnetExecution'
 import {
   buildSwapCalls,
@@ -26,6 +28,8 @@ export interface TestnetUniswapExecutionContext {
   walletAddress?: string
   contractReachable: boolean
   contractReachableLoading: boolean
+  /** When false, sell ERC20 legs block execute/simulation until user approves BundleExecutor */
+  sellApprovalsSufficient?: boolean
 }
 
 export interface TestnetUniswapExecutionAssessment {
@@ -54,10 +58,129 @@ function sumLegAmountsWei(plan: ExecutionPlan): bigint | null {
   }
 }
 
+function isSellBasketPlan(plan: ExecutionPlan): boolean {
+  return plan.type === 'sell_basket'
+}
+
+/** SwapRouter02 for Uniswap legs; WETH9 only when quote marks a native ETH wrap leg. */
+export function isAllowedTestnetLegRouter(quote: QuoteResponse): boolean {
+  const router = quote.routerAddress.toLowerCase()
+  const swapRouter = TESTNET_SWAP_ROUTER02_ADDRESS.toLowerCase()
+  const wethRouter = TESTNET_WETH_ADDRESS.toLowerCase()
+
+  if (quote.testnetSwap?.wethWrap === true) {
+    return router === wethRouter
+  }
+
+  if (router === wethRouter) {
+    return false
+  }
+
+  return router === swapRouter
+}
+
+function routerValidationError(quote: QuoteResponse, prefix: string): BundleExecutionValidationError | null {
+  if (isAllowedTestnetLegRouter(quote)) {
+    return null
+  }
+
+  if (quote.testnetSwap?.wethWrap === true) {
+    return {
+      code: 'ROUTER_NOT_ALLOWED',
+      message: `WETH wrap leg must use Sepolia WETH9 (${TESTNET_WETH_ADDRESS})`,
+      field: `${prefix}.quote.routerAddress`,
+    }
+  }
+
+  if (quote.routerAddress.toLowerCase() === TESTNET_WETH_ADDRESS.toLowerCase()) {
+    return {
+      code: 'ROUTER_NOT_ALLOWED',
+      message: 'WETH9 router is only allowed for marked WETH wrap legs',
+      field: `${prefix}.quote.routerAddress`,
+    }
+  }
+
+  return {
+    code: 'ROUTER_NOT_ALLOWED',
+    message: `Router must be Sepolia SwapRouter02 (${TESTNET_SWAP_ROUTER02_ADDRESS})`,
+    field: `${prefix}.quote.routerAddress`,
+  }
+}
+
+function validateBuyLeg(quote: QuoteResponse, prefix: string): BundleExecutionValidationError[] {
+  const errors: BundleExecutionValidationError[] = []
+  const tokenIn =
+    quote.inputToken.symbol.toUpperCase() === 'ETH' || isZeroAddress(quote.inputToken.address)
+      ? ZERO_ADDRESS
+      : quote.inputToken.address
+
+  if (tokenIn !== ZERO_ADDRESS) {
+    errors.push({
+      code: 'TOKEN_IN_NOT_ETH',
+      message: 'tokenIn must be native ETH (address zero)',
+      field: `${prefix}.quote.inputToken`,
+    })
+  }
+
+  if (!resolveTestnetBasketToken(quote.outputToken.symbol)) {
+    errors.push({
+      code: 'OUTPUT_TOKEN_UNSUPPORTED',
+      message: `Output token ${quote.outputToken.symbol} is not supported on Sepolia testnet`,
+      field: `${prefix}.quote.outputToken`,
+    })
+  }
+
+  return errors
+}
+
+function validateSellLeg(quote: QuoteResponse, prefix: string): BundleExecutionValidationError[] {
+  const errors: BundleExecutionValidationError[] = []
+  const inputSymbol = quote.inputToken.symbol.toUpperCase()
+
+  if (inputSymbol === 'ETH' || isZeroAddress(quote.inputToken.address)) {
+    errors.push({
+      code: 'TOKEN_IN_NOT_ERC20',
+      message: 'Sell leg tokenIn must be an ERC20 basket token',
+      field: `${prefix}.quote.inputToken`,
+    })
+  } else if (!resolveTestnetBasketToken(inputSymbol)?.sellUsdcPoolFee) {
+    errors.push({
+      code: 'INPUT_TOKEN_UNSUPPORTED',
+      message: `Input token ${quote.inputToken.symbol} is not supported for Sepolia sell`,
+      field: `${prefix}.quote.inputToken`,
+    })
+  }
+
+  if (quote.outputToken.symbol.toUpperCase() !== 'USDC') {
+    errors.push({
+      code: 'OUTPUT_NOT_USDC',
+      message: 'Sell leg tokenOut must be USDC',
+      field: `${prefix}.quote.outputToken`,
+    })
+  } else if (quote.outputToken.address.toLowerCase() !== TESTNET_USDC_ADDRESS.toLowerCase()) {
+    errors.push({
+      code: 'OUTPUT_NOT_USDC',
+      message: `Sell leg USDC address must be ${TESTNET_USDC_ADDRESS}`,
+      field: `${prefix}.quote.outputToken`,
+    })
+  }
+
+  if (quote.testnetSwap?.wethWrap) {
+    errors.push({
+      code: 'WETH_WRAP_NOT_ALLOWED',
+      message: 'WETH wrap legs are not allowed on sell plans',
+      field: `${prefix}.quote.testnetSwap`,
+    })
+  }
+
+  return errors
+}
+
 function validateTestnetUniswapQuoteShape(
   plan: ExecutionPlan,
 ): BundleExecutionValidationError[] {
   const errors: BundleExecutionValidationError[] = []
+  const sellPlan = isSellBasketPlan(plan)
 
   if (plan.legs.length < 1 || plan.legs.length > TESTNET_MAX_BASKET_LEGS) {
     errors.push({
@@ -89,7 +212,7 @@ function validateTestnetUniswapQuoteShape(
       message: 'Total amountIn must be greater than zero',
       field: 'plan.legs',
     })
-  } else if (totalAmountIn > TESTNET_MAX_SWAP_AMOUNT_WEI) {
+  } else if (!sellPlan && totalAmountIn > TESTNET_MAX_SWAP_AMOUNT_WEI) {
     errors.push({
       code: 'AMOUNT_EXCEEDS_CAP',
       message: `Total amountIn exceeds testnet cap of ${TESTNET_MAX_SWAP_AMOUNT_WEI.toString()} wei`,
@@ -109,25 +232,11 @@ function validateTestnetUniswapQuoteShape(
       })
     }
 
-    const tokenIn =
-      quote.inputToken.symbol.toUpperCase() === 'ETH' || isZeroAddress(quote.inputToken.address)
-        ? ZERO_ADDRESS
-        : quote.inputToken.address
+    errors.push(...(sellPlan ? validateSellLeg(quote, prefix) : validateBuyLeg(quote, prefix)))
 
-    if (tokenIn !== ZERO_ADDRESS) {
-      errors.push({
-        code: 'TOKEN_IN_NOT_ETH',
-        message: 'tokenIn must be native ETH (address zero)',
-        field: `${prefix}.quote.inputToken`,
-      })
-    }
-
-    if (quote.routerAddress.toLowerCase() !== TESTNET_SWAP_ROUTER02_ADDRESS.toLowerCase()) {
-      errors.push({
-        code: 'ROUTER_NOT_ALLOWED',
-        message: `Router must be Sepolia SwapRouter02 (${TESTNET_SWAP_ROUTER02_ADDRESS})`,
-        field: `${prefix}.quote.routerAddress`,
-      })
+    const routerError = routerValidationError(quote, prefix)
+    if (routerError) {
+      errors.push(routerError)
     }
 
     try {
@@ -144,14 +253,6 @@ function validateTestnetUniswapQuoteShape(
         code: 'INVALID_AMOUNT',
         message: 'Leg amountIn must be a valid integer string',
         field: `${prefix}.quote.inputAmount`,
-      })
-    }
-
-    if (!resolveTestnetBasketToken(quote.outputToken.symbol)) {
-      errors.push({
-        code: 'OUTPUT_TOKEN_UNSUPPORTED',
-        message: `Output token ${quote.outputToken.symbol} is not supported on Sepolia testnet`,
-        field: `${prefix}.quote.outputToken`,
       })
     }
   })
@@ -178,12 +279,14 @@ export function assessTestnetUniswapBasketExecution(
     }
   }
 
+  const sellPlan = isSellBasketPlan(plan)
   const testnetMode = context.enableTestnetMode ?? ENABLE_TESTNET_MODE
   const liveExecution = context.enableLiveExecution ?? ENABLE_LIVE_EXECUTION
   const walletOnSepolia = context.chainId === TESTNET_SEPOLIA_CHAIN_ID
   const shapeErrors = validateTestnetUniswapQuoteShape(plan)
   const totalAmountIn = sumLegAmountsWei(plan)
   const allProvidersValid = plan.legs.every((leg) => leg.quote.provider === 'uniswap-sepolia')
+  const sellApprovalsSufficient = sellPlan ? context.sellApprovalsSufficient !== false : true
 
   const prepareResult = prepareBundleExecution({
     walletConnected: context.walletConnected,
@@ -191,6 +294,10 @@ export function assessTestnetUniswapBasketExecution(
     walletAddress: context.walletAddress,
     quotePreview,
   })
+
+  const nativeEthGatePassed = sellPlan
+    ? shapeErrors.every((error) => error.code !== 'TOKEN_IN_NOT_ERC20')
+    : shapeErrors.every((error) => error.code !== 'TOKEN_IN_NOT_ETH')
 
   const gates: ExecutionReadinessItem[] = [
     gate(
@@ -240,20 +347,30 @@ export function assessTestnetUniswapBasketExecution(
       `${plan.legs.length} leg(s)`,
     ),
     gate(
-      'native-eth',
-      'All legs use native ETH input',
-      shapeErrors.every((error) => error.code !== 'TOKEN_IN_NOT_ETH'),
-      'ETH / address(0)',
+      sellPlan ? 'erc20-input' : 'native-eth',
+      sellPlan ? 'All legs use ERC20 basket token input' : 'All legs use native ETH input',
+      nativeEthGatePassed,
+      sellPlan ? 'LINK / UNI / WETH / AAVE' : 'ETH / address(0)',
     ),
     gate(
       'swap-router',
-      'All legs use SwapRouter02',
+      'Leg routers allowed (SwapRouter02 or WETH wrap)',
       shapeErrors.every((error) => error.code !== 'ROUTER_NOT_ALLOWED'),
-      TESTNET_SWAP_ROUTER02_ADDRESS,
+      sellPlan
+        ? `SwapRouter02 ${TESTNET_SWAP_ROUTER02_ADDRESS}`
+        : `SwapRouter02 ${TESTNET_SWAP_ROUTER02_ADDRESS} · WETH9 wrap ${TESTNET_WETH_ADDRESS}`,
+    ),
+    gate(
+      sellPlan ? 'usdc-output' : 'output-token',
+      sellPlan ? 'All legs output USDC' : 'Output tokens supported on Sepolia',
+      sellPlan
+        ? shapeErrors.every((error) => error.code !== 'OUTPUT_NOT_USDC')
+        : shapeErrors.every((error) => error.code !== 'OUTPUT_TOKEN_UNSUPPORTED'),
+      sellPlan ? TESTNET_USDC_ADDRESS : 'Basket tokens',
     ),
     gate(
       'amount-cap',
-      'Total amountIn within testnet cap',
+      sellPlan ? 'All leg amounts valid' : 'Total amountIn within testnet cap',
       shapeErrors.every(
         (error) => error.code !== 'AMOUNT_EXCEEDS_CAP' && error.code !== 'INVALID_AMOUNT',
       ),
@@ -284,6 +401,25 @@ export function assessTestnetUniswapBasketExecution(
           : 'Contract not reachable on Sepolia',
     ),
   ]
+
+  if (sellPlan) {
+    gates.push(
+      gate(
+        'zero-msg-value',
+        'msg.value = 0 (ERC20 sell)',
+        prepareResult.status === 'ready' && prepareResult.totalNativeEthWei === 0n,
+        prepareResult.status === 'ready'
+          ? `${prepareResult.totalNativeEthWei.toString()} wei`
+          : 'Pending payload',
+      ),
+      gate(
+        'bundle-approvals',
+        'BundleExecutor ERC20 approvals',
+        sellApprovalsSufficient,
+        sellApprovalsSufficient ? 'All allowances sufficient' : 'Approve each token before execute',
+      ),
+    )
+  }
 
   if (shapeErrors.length > 0) {
     const shapeGate = shapeErrors[0]

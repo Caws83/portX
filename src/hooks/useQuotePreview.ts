@@ -24,6 +24,8 @@ import {
   buildTestnetMultiTokenBasketPreview,
   shouldUseMultiTokenTestnetQuote,
 } from '@/services/testnetMultiTokenQuote'
+import { buildTestnetMultiTokenSellPreview } from '@/services/testnetMultiTokenSellQuote'
+import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
 import { buildExecutionPlan } from '@/services/transactionBuilder'
 import { canPreviewQuoteForBasket } from '@/utils/chainRouting'
 
@@ -56,7 +58,11 @@ export function useQuotePreview() {
   const [error, setError] = useState<string | null>(null)
   const [quoteSource, setQuoteSource] = useState<QuoteSource>(null)
   const lastBuyRef = useRef<{ basket: Basket; amountUsd: number } | null>(null)
-  const lastSellRef = useRef<{ basket: Basket; positionValueUsd: number } | null>(null)
+  const lastSellRef = useRef<{
+    basket: Basket
+    positionValueUsd: number
+    balancesWei?: Record<string, bigint>
+  } | null>(null)
 
   const getParams = useCallback(
     () => ({
@@ -157,16 +163,52 @@ export function useQuotePreview() {
   }, [previewBuy])
 
   const previewSellBasket = useCallback(
-    async (basket: Basket, positionValueUsd: number) => {
+    async (
+      basket: Basket,
+      positionValueUsd: number,
+      balancesWei?: Record<string, bigint>,
+    ) => {
       setLoading(true)
       setError(null)
       setPlan(null)
       setQuoteSource(null)
-      lastSellRef.current = { basket, positionValueUsd }
+      lastSellRef.current = { basket, positionValueUsd, balancesWei }
 
       const params = getParams()
 
       try {
+        if (ENABLE_TESTNET_MODE && ENABLE_LIVE_EXECUTION && params.chainId !== TESTNET_SEPOLIA_CHAIN_ID) {
+          setError('Switch wallet to Sepolia (chain 11155111) for testnet basket sell preview.')
+          return null
+        }
+
+        if (
+          shouldUseTestnetUniswapQuote(params.chainId) &&
+          isTestnetMultiTokenBasket(basket.id)
+        ) {
+          if (!canPreviewQuoteForBasket(basket)) {
+            setError('Testnet sell preview is only available for active Ethereum baskets.')
+            return null
+          }
+
+          if (!balancesWei) {
+            setError('Wallet token balances are required for Sepolia multi-token sell preview.')
+            return null
+          }
+
+          const result = await buildTestnetMultiTokenSellPreview({
+            basketId: basket.id,
+            basketName: basket.name,
+            slippageBps: params.slippageBps,
+            allocations: basket.allocations,
+            balancesWei,
+            recipient: address as `0x${string}` | undefined,
+          })
+          setPreview(result)
+          setQuoteSource('testnet')
+          return result
+        }
+
         const response = await fetchSellBasketQuote({
           walletAddress: params.walletAddress,
           chainId: params.chainId,
@@ -185,6 +227,13 @@ export function useQuotePreview() {
         setQuoteSource('api')
         return result
       } catch (apiErr) {
+        if (shouldUseTestnetUniswapQuote(params.chainId) && isTestnetMultiTokenBasket(basket.id)) {
+          const msg = apiErr instanceof Error ? apiErr.message : 'Testnet sell quote failed'
+          setError(msg)
+          setQuoteSource(null)
+          return null
+        }
+
         console.warn(
           '[PortX] Sell-basket quote API unavailable — using local quote fallback.',
           apiErr
@@ -204,13 +253,13 @@ export function useQuotePreview() {
         setLoading(false)
       }
     },
-    [getParams]
+    [getParams, address]
   )
 
   const retrySellQuote = useCallback(async () => {
     const last = lastSellRef.current
     if (!last) return null
-    return previewSellBasket(last.basket, last.positionValueUsd)
+    return previewSellBasket(last.basket, last.positionValueUsd, last.balancesWei)
   }, [previewSellBasket])
 
   const previewSellAll = useCallback(

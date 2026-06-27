@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { AppModeBanner } from '@/components/AppModeIndicator'
 import { Navbar } from '@/components/Navbar'
 import { Logo } from '@/components/Logo'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
 
 export function MainLayout() {
   return (
@@ -20,7 +21,11 @@ export function MainLayout() {
             className="mx-auto object-center max-w-[min(70vw,200px)]"
           />
           <p className="mb-1">Trade portfolios like a single asset.</p>
-          <p className="text-xs">Demo mode · No real trading · DEX routing placeholders</p>
+          <p className="text-xs">
+            {ENABLE_TESTNET_MODE
+              ? 'Sepolia testnet · Test ETH only · Portfolio trading beta'
+              : 'Demo mode · No real trading · DEX routing placeholders'}
+          </p>
         </div>
       </footer>
     </div>

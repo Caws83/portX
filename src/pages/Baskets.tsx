@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useAccount, useChainId } from 'wagmi'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { BasketCard } from '@/components/BasketCard'
 import { QuotePreviewCard } from '@/components/QuotePreviewCard'
@@ -13,6 +14,10 @@ import { usePortfolio } from '@/hooks/usePortfolio'
 import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
 import { executeDemoPlan } from '@/services/transactionBuilder'
 import { DEFAULT_BUY_AMOUNT_USD } from '@/config/constants'
+import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
+import { TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
+import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
+import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
 import { assessQuoteQuality } from '@/utils/quoteQuality'
 import {
   BUTTON_LABELS,
@@ -24,13 +29,21 @@ import {
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
 import type { Basket } from '@/types/basket'
+import type { ExecutionPlan } from '@/types/execution'
 import { RecentTestSwaps } from '@/components/RecentTestSwaps'
+import { canShowTestnetMultiTokenBasketSell } from '@/utils/testnetBasketHoldings'
+import { TESTNET_BUTTONS, SEPOLIA_PORTFOLIO_TRADE } from '@/config/testnetUxCopy'
+
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 
 export function Baskets() {
+  const chainId = useChainId()
+  const { isConnected } = useAccount()
+  const testnetBalances = useTestnetPortfolioBalances()
   const { allBaskets, basketsLoading, basketsError, basketsSource } = useBasket()
   const buyBasket = usePortfolioStore((s) => s.buyBasket)
   const sellBasket = usePortfolioStore((s) => s.sellBasket)
+  const removeActiveBasket = usePortfolioStore((s) => s.removeActiveBasket)
   const activeBaskets = usePortfolioStore((s) => s.activeBaskets)
 
   const {
@@ -60,6 +73,38 @@ export function Baskets() {
   )
 
   const ownedIds = new Set(activeBaskets.map((b) => b.basketId))
+
+  const testnetSellEligibleIds = useMemo(() => {
+    if (!ENABLE_TESTNET_MODE || !ENABLE_LIVE_EXECUTION || !isConnected) {
+      return new Set<string>()
+    }
+    const balancesWei = testnetBalances.assets.reduce<Record<string, bigint>>((acc, asset) => {
+      acc[asset.symbol] = asset.balanceWei
+      return acc
+    }, {})
+    return new Set(
+      allBaskets
+        .filter((basket) =>
+          canShowTestnetMultiTokenBasketSell({
+            enableTestnetMode: ENABLE_TESTNET_MODE,
+            enableLiveExecution: ENABLE_LIVE_EXECUTION,
+            walletConnected: isConnected,
+            chainId,
+            basketId: basket.id,
+            balancesWei,
+          }),
+        )
+        .map((basket) => basket.id),
+    )
+  }, [allBaskets, chainId, isConnected, testnetBalances.assets])
+
+  const handleTestnetExecutionSuccess = (executedPlan: ExecutionPlan) => {
+    if (!executedPlan.basketId) return
+    if (executedPlan.type === 'sell_basket') {
+      removeActiveBasket(executedPlan.basketId)
+      testnetBalances.refresh()
+    }
+  }
 
   const portfolio = usePortfolio()
 
@@ -101,7 +146,14 @@ export function Baskets() {
     setSelectedBasket(basket)
     setTxMsg(null)
     const purchase = activeBaskets.find((b) => b.basketId === basket.id)
-    await previewSellBasket(basket, purchase?.amountUsd ?? 1000)
+    const balancesWei =
+      ENABLE_TESTNET_MODE &&
+      ENABLE_LIVE_EXECUTION &&
+      chainId === TESTNET_SEPOLIA_CHAIN_ID &&
+      isTestnetMultiTokenBasket(basket.id)
+        ? Object.fromEntries(testnetBalances.assets.map((asset) => [asset.symbol, asset.balanceWei]))
+        : undefined
+    await previewSellBasket(basket, purchase?.amountUsd ?? 1000, balancesWei)
   }
 
   const handleReview = () => {
@@ -170,11 +222,15 @@ export function Baskets() {
       <div className="mb-8">
         <h1 className="section-title">Crypto Baskets</h1>
         <p className="text-portx-muted mt-1">
-          Preview routed quotes on Ethereum mainnet — planned chains show routing status only.
+          {ENABLE_TESTNET_MODE
+            ? `${SEPOLIA_PORTFOLIO_TRADE} — preview and execute portfolio trades on Sepolia.`
+            : 'Preview routed quotes on Ethereum mainnet — planned chains show routing status only.'}
         </p>
       </div>
 
-      <ExecutionWarning variant="info" warnings={[INFO_MESSAGES.demoMode]} />
+      {!ENABLE_TESTNET_MODE ? (
+        <ExecutionWarning variant="info" warnings={[INFO_MESSAGES.demoMode]} />
+      ) : null}
 
       <div className="mt-6 mb-8 card flex flex-col sm:flex-row sm:items-end gap-4">
         <div className="flex-1 min-w-0">
@@ -248,8 +304,10 @@ export function Baskets() {
       )}
 
       {quoteSource === 'testnet' && preview && !loading && (
-        <StatusBanner variant="warning" className="mb-6" compact>
-          Sepolia testnet quote — frontend Uniswap V3 only (no backend /quotes).
+        <StatusBanner variant="info" className="mb-6" compact>
+          {preview.type === 'sell_basket'
+            ? 'Sepolia preview quote — wallet holdings priced to USDC via Uniswap V3.'
+            : 'Sepolia preview quote — Uniswap V3 routing on Sepolia testnet.'}
         </StatusBanner>
       )}
 
@@ -288,6 +346,7 @@ export function Baskets() {
                 onBuy={handleQuickBuy}
                 onPlannedChainSelect={selectPlannedBasket}
                 isOwned={ownedIds.has(basket.id)}
+                canPreviewSell={testnetSellEligibleIds.has(basket.id)}
                 driftStatus={
                   ownedIds.has(basket.id) ? getDriftForBasket(basket.id)?.status : undefined
                 }
@@ -335,7 +394,13 @@ export function Baskets() {
                 quoteSource={quoteSource}
                 onReview={handleReview}
                 loading={loading}
-                reviewLabel={BUTTON_LABELS.reviewExecute}
+                reviewLabel={
+                  quoteSource === 'testnet'
+                    ? preview.type === 'sell_basket'
+                      ? TESTNET_BUTTONS.reviewSell
+                      : TESTNET_BUTTONS.reviewTrade
+                    : BUTTON_LABELS.reviewExecute
+                }
               />
               <button
                 type="button"
@@ -363,6 +428,7 @@ export function Baskets() {
         onClose={() => setModalOpen(false)}
         onConfirm={handleConfirm}
         confirming={confirming}
+        onTestnetExecutionSuccess={handleTestnetExecutionSuccess}
       />
 
       <PortfolioRebalancePreviewModal

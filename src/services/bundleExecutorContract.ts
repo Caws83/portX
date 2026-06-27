@@ -11,7 +11,34 @@ export const BUNDLE_EXECUTOR_ABI = [
     inputs: [],
     outputs: [{ type: 'address' }],
   },
+  {
+    type: 'function',
+    name: 'getFeeConfig',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'feeRecipient', type: 'address' },
+          { name: 'buyFeeBps', type: 'uint16' },
+          { name: 'sellFeeBps', type: 'uint16' },
+          { name: 'maxFeeBps', type: 'uint16' },
+          { name: 'feesEnabled', type: 'bool' },
+        ],
+      },
+    ],
+  },
 ] as const
+
+export interface BundleExecutorFeeConfig {
+  feeRecipient: Address
+  buyFeeBps: number
+  sellFeeBps: number
+  maxFeeBps: number
+  feesEnabled: boolean
+}
 
 /** Matches BundleExecutor.SwapCall — used for executeBasket writes */
 export interface BundleExecutorSwapCall {
@@ -77,6 +104,26 @@ export async function readBundleExecutorOwner(): Promise<Address> {
 
 export async function readSepoliaChainId(): Promise<number> {
   return sepoliaPublicClient.getChainId()
+}
+
+export async function readBundleExecutorFeeConfig(): Promise<BundleExecutorFeeConfig | null> {
+  try {
+    const config = await sepoliaPublicClient.readContract({
+      address: BUNDLE_EXECUTOR_SEPOLIA.address,
+      abi: BUNDLE_EXECUTOR_ABI,
+      functionName: 'getFeeConfig',
+    })
+
+    return {
+      feeRecipient: config.feeRecipient,
+      buyFeeBps: config.buyFeeBps,
+      sellFeeBps: config.sellFeeBps,
+      maxFeeBps: config.maxFeeBps,
+      feesEnabled: config.feesEnabled,
+    }
+  } catch {
+    return null
+  }
 }
 
 export interface BundleExecutorReadStatus {

@@ -29,6 +29,9 @@ export function sumTestnetPlanOutputAmount(plan: ExecutionPlan): bigint {
 }
 
 export function formatTestnetPlanTotalInput(plan: ExecutionPlan): string {
+  if (plan.type === 'sell_basket') {
+    return plan.legs.map((leg) => formatTestnetLegInputDisplay(leg)).join(' · ')
+  }
   return `${formatEther(sumTestnetPlanInputWei(plan))} ETH`
 }
 

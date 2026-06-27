@@ -3,6 +3,8 @@ import { BasketChainBadge } from '@/components/BasketChainBadge'
 import { PortfolioDriftBadge } from '@/components/PortfolioDriftBadge'
 import { formatUsd } from '@/utils/format'
 import { BUTTON_LABELS } from '@/config/uiCopy'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
+import { TESTNET_BUTTONS } from '@/config/testnetUxCopy'
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 import type { DriftStatusLevel } from '@/utils/portfolioDrift'
 
@@ -14,6 +16,8 @@ interface BasketCardProps {
   onBuy?: (basket: Basket) => void
   onPlannedChainSelect?: (basket: Basket) => void
   isOwned?: boolean
+  /** Sepolia testnet: show sell when wallet holds basket tokens on-chain */
+  canPreviewSell?: boolean
   driftStatus?: DriftStatusLevel
   loading?: boolean
   isSelected?: boolean
@@ -27,6 +31,7 @@ export function BasketCard({
   onBuy,
   onPlannedChainSelect,
   isOwned,
+  canPreviewSell,
   driftStatus,
   loading,
   isSelected,
@@ -34,6 +39,8 @@ export function BasketCard({
   const tokenCount = basket.allocations.length
   const quotesAvailable = canPreviewQuoteForBasket(basket)
   const plannedMessage = getPlannedChainMessage(basket)
+
+  const showSellButton = Boolean(onPreviewSell && (isOwned || canPreviewSell))
 
   return (
     <div
@@ -86,7 +93,13 @@ export function BasketCard({
             disabled={quotesAvailable && loading}
             aria-busy={quotesAvailable && loading}
             aria-disabled={quotesAvailable && loading}
-            title={quotesAvailable ? BUTTON_LABELS.previewQuote : plannedMessage}
+            title={
+              quotesAvailable
+                ? ENABLE_TESTNET_MODE
+                  ? TESTNET_BUTTONS.previewPortfolio
+                  : BUTTON_LABELS.previewQuote
+                : plannedMessage
+            }
             className={
               quotesAvailable
                 ? 'btn-primary w-full text-sm py-2.5 disabled:opacity-50'
@@ -96,25 +109,39 @@ export function BasketCard({
             {loading && quotesAvailable
               ? BUTTON_LABELS.fetchingQuotes
               : quotesAvailable
-                ? BUTTON_LABELS.previewQuote
+                ? ENABLE_TESTNET_MODE
+                  ? TESTNET_BUTTONS.previewPortfolio
+                  : BUTTON_LABELS.previewQuote
                 : BUTTON_LABELS.quotesUnavailable}
           </button>
         )}
-        {isOwned && onPreviewSell && (
+        {showSellButton && (
           <button
             type="button"
             onClick={() =>
-              quotesAvailable ? onPreviewSell(basket) : onPlannedChainSelect?.(basket)
+              quotesAvailable ? onPreviewSell!(basket) : onPlannedChainSelect?.(basket)
             }
             disabled={quotesAvailable && loading}
             aria-busy={quotesAvailable && loading}
-            title={quotesAvailable ? BUTTON_LABELS.previewSellQuote : plannedMessage}
+            title={
+              quotesAvailable
+                ? ENABLE_TESTNET_MODE
+                  ? TESTNET_BUTTONS.previewSell
+                  : BUTTON_LABELS.previewSellQuote
+                : plannedMessage
+            }
             className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
           >
             {loading && quotesAvailable
               ? BUTTON_LABELS.fetchingQuotes
               : quotesAvailable
-                ? BUTTON_LABELS.previewSellQuote
+                ? canPreviewSell && !isOwned
+                  ? ENABLE_TESTNET_MODE
+                    ? 'Preview Sell (Holdings)'
+                    : 'Preview Sell (Wallet Holdings)'
+                  : ENABLE_TESTNET_MODE
+                    ? TESTNET_BUTTONS.previewSell
+                    : BUTTON_LABELS.previewSellQuote
                 : BUTTON_LABELS.quotesUnavailable}
           </button>
         )}

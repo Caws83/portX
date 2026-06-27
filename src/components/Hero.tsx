@@ -50,6 +50,15 @@ export function Hero() {
           </Link>
         </div>
 
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Link to="/mint" className="btn-secondary text-base px-6 py-3 w-full sm:w-auto">
+            Buy NFT
+          </Link>
+          <Link to="/lending" className="btn-secondary text-base px-6 py-3 w-full sm:w-auto">
+            Lending Preview
+          </Link>
+        </div>
+
         <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
           {[
             { label: 'One-Tx Buy', desc: 'Enter a full basket in a single flow' },

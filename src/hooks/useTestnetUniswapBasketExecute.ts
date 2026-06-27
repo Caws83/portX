@@ -19,17 +19,34 @@ import {
 import { executionPlanToQuotePreview } from '@/services/bundleExecutorWrite'
 import { useBundleExecutorExecute } from '@/hooks/useBundleExecutorExecute'
 import { useBundleExecutorHealth } from '@/hooks/useBundleExecutorHealth'
+import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import {
+  grossUpEthValueForBuyFee,
+} from '@/services/protocolFee'
+import {
+  useTestnetBundleExecutorApprovals,
+  type UseTestnetBundleExecutorApprovalsResult,
+} from '@/hooks/useTestnetBundleExecutorApprovals'
 import { isTestnetSepoliaUniswapPlan } from '@/utils/testnetPreview'
+import {
+  EXECUTION_ROUTER_NAME,
+  TESTNET_BUTTONS,
+  TESTNET_CONFIRM,
+} from '@/config/testnetUxCopy'
 
-export const TESTNET_UNISWAP_CONFIRMATION_MESSAGE =
-  'Testnet only: sends 0.0001 Sepolia ETH through BundleExecutor to Uniswap V3. ' +
-  'This is a real on-chain transaction using test ETH. Continue?'
+export const TESTNET_UNISWAP_BUY_CONFIRMATION_MESSAGE = TESTNET_CONFIRM.buy
+
+export const TESTNET_UNISWAP_SELL_CONFIRMATION_MESSAGE = TESTNET_CONFIRM.sell
+
+/** @deprecated use TESTNET_UNISWAP_BUY_CONFIRMATION_MESSAGE */
+export const TESTNET_UNISWAP_CONFIRMATION_MESSAGE = TESTNET_UNISWAP_BUY_CONFIRMATION_MESSAGE
 
 export type TestnetUniswapBasketExecuteStatus = 'idle' | 'pending' | 'success' | 'error'
 
 export interface UseTestnetUniswapBasketExecuteResult {
   isTestnetUniswapPlan: boolean
+  isSellPlan: boolean
   gates: ReturnType<typeof finalizeTestnetExecutionAssessment>['gates']
   canExecute: boolean
   disabledReason: string | null
@@ -40,6 +57,7 @@ export interface UseTestnetUniswapBasketExecuteResult {
   errorMessage?: string
   execute: () => Promise<void>
   reset: () => void
+  approvals: UseTestnetBundleExecutorApprovalsResult
 }
 
 async function simulateBundleExecution(
@@ -73,6 +91,8 @@ export function useTestnetUniswapBasketExecute(
   const chainId = useChainId()
   const { enableLiveExecution, enableTestnetMode } = useFeatureFlags()
   const contractHealth = useBundleExecutorHealth()
+  const feeConfigState = useBundleExecutorFeeConfig()
+  const approvals = useTestnetBundleExecutorApprovals(plan, open, feeConfigState.config)
   const {
     status: executeStatus,
     txHash,
@@ -91,6 +111,13 @@ export function useTestnetUniswapBasketExecute(
     [plan],
   )
 
+  const isSellPlan = plan?.type === 'sell_basket'
+
+  const resolveBundleMsgValue = useCallback(
+    (legEthWei: bigint) => grossUpEthValueForBuyFee(legEthWei, feeConfigState.config),
+    [feeConfigState.config],
+  )
+
   const bundleQuotePreview = useMemo(
     () => (plan && open && !plan.isDemo ? executionPlanToQuotePreview(plan) : null),
     [plan, open],
@@ -106,6 +133,7 @@ export function useTestnetUniswapBasketExecute(
       walletAddress: address,
       contractReachable: contractHealth.contractReachable === true,
       contractReachableLoading: contractHealth.isLoading,
+      sellApprovalsSufficient: approvals.allApprovalsSufficient,
     })
   }, [
     plan,
@@ -119,6 +147,7 @@ export function useTestnetUniswapBasketExecute(
     chainId,
     contractHealth.contractReachable,
     contractHealth.isLoading,
+    approvals.allApprovalsSufficient,
   ])
 
   useEffect(() => {
@@ -143,7 +172,7 @@ export function useTestnetUniswapBasketExecute(
       {
         basketId: prepareResult.basketId,
         swaps: prepareResult.swapCalls,
-        value: prepareResult.totalNativeEthWei,
+        value: resolveBundleMsgValue(prepareResult.totalNativeEthWei),
       },
       address,
     ).then((result) => {
@@ -156,7 +185,7 @@ export function useTestnetUniswapBasketExecute(
     return () => {
       cancelled = true
     }
-  }, [open, plan, isTestnetUniswapPlan, address, baseAssessment])
+  }, [open, plan, isTestnetUniswapPlan, address, baseAssessment, resolveBundleMsgValue])
 
   const assessment = useMemo(() => {
     if (!baseAssessment) {
@@ -184,13 +213,16 @@ export function useTestnetUniswapBasketExecute(
     assessment.isTestnetUniswapPlan &&
     assessment.canExecute &&
     executeStatus !== 'pending' &&
-    !isWritePending
+    !isWritePending &&
+    approvals.allApprovalsSufficient
 
   const disabledReason = !assessment.isTestnetUniswapPlan
     ? null
     : executeStatus === 'pending' || isWritePending
       ? 'Transaction pending…'
-      : assessment.blockedReason
+      : !approvals.allApprovalsSufficient
+        ? `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
+        : assessment.blockedReason
 
   const reset = useCallback(() => {
     resetExecute()
@@ -201,19 +233,23 @@ export function useTestnetUniswapBasketExecute(
   const execute = useCallback(async () => {
     if (!canExecute || !plan || baseAssessment?.prepareResult?.status !== 'ready') return
 
-    const confirmed = window.confirm(TESTNET_UNISWAP_CONFIRMATION_MESSAGE)
+    const confirmationMessage = isSellPlan
+      ? TESTNET_UNISWAP_SELL_CONFIRMATION_MESSAGE
+      : TESTNET_UNISWAP_BUY_CONFIRMATION_MESSAGE
+    const confirmed = window.confirm(confirmationMessage)
     if (!confirmed) return
 
     const prepareResult = baseAssessment.prepareResult
     await executeBundle({
       basketId: prepareResult.basketId,
       swaps: prepareResult.swapCalls,
-      value: prepareResult.totalNativeEthWei,
+      value: resolveBundleMsgValue(prepareResult.totalNativeEthWei),
     })
-  }, [canExecute, plan, baseAssessment, executeBundle])
+  }, [canExecute, plan, baseAssessment, executeBundle, isSellPlan, resolveBundleMsgValue])
 
   return {
     isTestnetUniswapPlan: assessment.isTestnetUniswapPlan,
+    isSellPlan,
     gates: assessment.gates,
     canExecute,
     disabledReason,
@@ -224,9 +260,18 @@ export function useTestnetUniswapBasketExecute(
     errorMessage,
     execute,
     reset,
+    approvals,
   }
 }
 
 export function getTestnetUniswapExecuteAmountLabel(): string {
   return `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} Sepolia ETH`
+}
+
+export function getTestnetUniswapSellExecuteLabel(): string {
+  return TESTNET_BUTTONS.executeTestnetSell
+}
+
+export function getTestnetUniswapBuyExecuteLabel(): string {
+  return TESTNET_BUTTONS.executeTestnetTrade
 }

@@ -11,5 +11,5 @@ export const APP_MODE_BADGE_LABEL =
   APP_MODE === 'testnet' ? 'Testnet Mode' : 'Production Preview'
 
 export const APP_MODE_BANNER_MESSAGE = IS_TESTNET_MODE
-  ? 'Testnet mode is for Sepolia testing only. Do not use real funds.'
+  ? 'Testnet mode uses Sepolia assets only. No real funds are used.'
   : 'Live execution disabled. Preview mode only.'

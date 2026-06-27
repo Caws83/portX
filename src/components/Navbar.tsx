@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { BUTTON_LABELS } from '@/config/uiCopy'
 import { AppModeBadge } from './AppModeIndicator'
 import { Logo } from './Logo'
 import { WalletButton } from './WalletButton'
@@ -13,12 +14,12 @@ const links: NavLinkItem[] = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/discover', label: 'Discover' },
   { to: '/baskets', label: 'Baskets' },
-  // { to: '/lending', label: 'Lending', badge: '🚧' },
-  // { to: '/create-basket', label: 'Create' },
+  { to: '/create-basket', label: 'Create' },
+  { to: '/sell-all', label: BUTTON_LABELS.sellAllNav },
+  { to: '/agents', label: 'Agents' },
+  { to: '/lending', label: 'Lending', badge: 'Preview' },
   { to: '/mint', label: 'NFT' },
-  // { to: '/sell-all', label: BUTTON_LABELS.sellAllNav },
-  // { to: '/agents', label: 'Agents' },
-  // { to: '/settings', label: 'Settings' },
+  { to: '/settings', label: 'Settings' },
 ]
 
 export function Navbar() {
@@ -31,7 +32,7 @@ export function Navbar() {
               <Logo variant="header" height="sm" className="max-w-[min(36vw,120px)] sm:max-w-[130px]" />
             </div>
 
-            <nav className="hidden lg:flex items-center gap-0.5">
+            <nav className="hidden xl:flex items-center gap-0.5">
               {links.map(({ to, label, badge }) => (
                 <NavLink
                   key={to}
@@ -60,7 +61,7 @@ export function Navbar() {
             </div>
           </div>
 
-          <nav className="lg:hidden flex gap-1 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+          <nav className="xl:hidden flex gap-1 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
             {links.map(({ to, label, badge }) => (
               <NavLink
                 key={to}

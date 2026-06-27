@@ -4,6 +4,17 @@ import { TrendingAddresses } from '@/components/TrendingAddresses'
 import { NotablePortfolios } from '@/components/NotablePortfolios'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 
+const PLATFORM_CARDS = [
+  { title: 'Dashboard', description: 'Portfolio P&L and holdings', to: '/dashboard' },
+  { title: 'Baskets', description: 'Preview and execute basket trades', to: '/baskets' },
+  { title: 'Create Basket', description: 'Compose custom allocations', to: '/create-basket' },
+  { title: 'Sell All', description: 'Exit a full portfolio in one flow', to: '/sell-all' },
+  { title: 'Discover', description: 'Copy notable portfolio templates', to: '/discover' },
+  { title: 'Agents', description: 'Automated trading scripts (preview)', to: '/agents' },
+  { title: 'Lending', description: 'Portfolio loan calculator preview', to: '/lending' },
+  { title: 'Genesis NFT', description: 'Sepolia mint and ecosystem utility', to: '/mint' },
+] as const
+
 const ECOSYSTEM_CARDS = [
   {
     title: 'Portfolio Trading',
@@ -18,7 +29,7 @@ const ECOSYSTEM_CARDS = [
   {
     title: 'PortX NFT',
     description: 'Premium ecosystem access',
-    to: ENABLE_TESTNET_MODE ? '/mint' : '/lending',
+    to: '/mint',
   },
 ] as const
 
@@ -41,6 +52,28 @@ export function Home() {
 
       <section className="py-20 border-t border-portx-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="section-title text-center mb-3">Platform</h2>
+          <p className="text-portx-muted text-center max-w-2xl mx-auto mb-10 text-sm">
+            {ENABLE_TESTNET_MODE
+              ? 'Portfolio trading on Sepolia — baskets, dashboard, lending preview, and Genesis NFT mint.'
+              : 'Full PortX development surface — baskets, portfolio tools, lending preview, agents, and Sepolia testnet execution.'}
+          </p>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+            {PLATFORM_CARDS.map((card) => (
+              <Link
+                key={card.title}
+                to={card.to}
+                className="card-glow group block p-5 hover:border-portx-green/40 transition-colors"
+              >
+                <h3 className="font-bold mb-1 group-hover:text-portx-green transition-colors">
+                  {card.title}
+                </h3>
+                <p className="text-sm text-portx-muted">{card.description}</p>
+              </Link>
+            ))}
+          </div>
+
           <h2 className="section-title text-center mb-4">What is PortX?</h2>
           <p className="text-portx-muted text-center max-w-3xl mx-auto mb-12">
             PortX lets you buy, manage, and sell crypto portfolios as one position instead of swapping
@@ -67,9 +100,14 @@ export function Home() {
             <p className="text-portx-muted mb-6">
               Stop juggling dozens of swaps. Manage conviction like an investor.
             </p>
-            <Link to="/dashboard" className="btn-primary">
-              Open Dashboard
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link to="/dashboard" className="btn-primary w-full sm:w-auto">
+                Launch App
+              </Link>
+              <Link to="/create-basket" className="btn-secondary w-full sm:w-auto">
+                Create Basket
+              </Link>
+            </div>
           </div>
         </div>
       </section>
@@ -78,7 +116,7 @@ export function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="section-title text-center mb-3">Unlock the full PortX ecosystem</h2>
           <p className="text-portx-muted text-center max-w-2xl mx-auto mb-10 text-sm">
-            Trade baskets, preview portfolio loans, and access premium NFT utility — built for
+            Trade baskets, preview portfolio loans, and mint the Genesis NFT on Sepolia — built for
             long-term ecosystem members.
           </p>
 
@@ -97,19 +135,19 @@ export function Home() {
             ))}
           </div>
 
-          <div className="text-center">
-            <Link
-              to={ENABLE_TESTNET_MODE ? '/mint' : '/lending'}
-              className="btn-primary px-10 py-4 text-lg"
-            >
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link to="/mint" className="btn-primary px-10 py-4 text-lg w-full sm:w-auto">
               Buy NFT
             </Link>
-            <p className="text-xs text-portx-muted mt-3">
-              {ENABLE_TESTNET_MODE
-                ? 'Sepolia Genesis NFT mint — demo mode until contract address is configured.'
-                : 'NFT mint coming soon — explore lending utility in preview.'}
-            </p>
+            <Link to="/lending" className="btn-secondary px-10 py-4 text-lg w-full sm:w-auto">
+              Lending Preview
+            </Link>
           </div>
+          <p className="text-xs text-portx-muted mt-3 text-center">
+            {ENABLE_TESTNET_MODE
+              ? 'Sepolia Genesis NFT mint on /mint — public mint opens when goPublic is enabled on-chain.'
+              : 'NFT mint coming soon — explore lending utility in preview.'}
+          </p>
         </div>
       </section>
 

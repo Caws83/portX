@@ -1,3 +1,5 @@
+import { ENABLE_TESTNET_MODE } from '@/config/features'
+import { ASSET_NOT_ROUTEABLE } from '@/config/testnetUxCopy'
 import type { QuoteQualityAssessment } from '@/utils/quoteQuality'
 import { formatUsd } from '@/utils/format'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -36,7 +38,8 @@ export function QuoteQualityPanel({
         {!hideBadge && <QuoteQualityBadge quality={quality} />}
         {showLegCounts && (
           <span className="text-xs text-portx-muted font-mono">
-            {liveLegCount} live · {unsupportedLegCount} unsupported
+            {liveLegCount} routable · {unsupportedLegCount}{' '}
+            {ENABLE_TESTNET_MODE ? 'not on network' : 'unsupported'}
           </span>
         )}
       </div>
@@ -48,7 +51,9 @@ export function QuoteQualityPanel({
       {unsupportedLegCount > 0 && (
         <div className="rounded-xl border border-portx-warning/40 bg-portx-warning/10 p-3 space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-portx-warning">
-            Unsupported legs ({unsupportedLegCount})
+            {ENABLE_TESTNET_MODE
+              ? `Assets not routeable (${unsupportedLegCount})`
+              : `Unsupported legs (${unsupportedLegCount})`}
           </p>
           <ul className="text-sm space-y-1">
             {quality.unsupportedLegs.map((leg) => (
@@ -66,7 +71,8 @@ export function QuoteQualityPanel({
       {showProceedsDetail && proceedsExcludeUnsupported && totalOutputUsd !== undefined && (
         <p className="text-xs text-portx-muted">
           Est. proceeds {formatUsd(totalOutputUsd)} USDC exclude{' '}
-          {formatUsd(excludedProceedsUsd)} from {unsupportedLegCount} unsupported leg(s).
+          {formatUsd(excludedProceedsUsd)} from {unsupportedLegCount}{' '}
+          {ENABLE_TESTNET_MODE ? ASSET_NOT_ROUTEABLE.toLowerCase() : 'unsupported leg(s)'}.
         </p>
       )}
 

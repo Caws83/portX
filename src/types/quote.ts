@@ -42,8 +42,10 @@ export interface QuoteResponse {
   testnetSwap?: {
     tokenIn: string
     tokenOut: string
-    poolFee: number
+    poolFee?: number
     nativeEth: boolean
+    /** Native ETH → WETH deposit leg (not Uniswap) */
+    wethWrap?: boolean
   }
 }
 

@@ -1,5 +1,6 @@
 import { AgentCard } from '@/components/AgentCard'
 import { DEMO_AGENTS } from '@/services/agentService'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
 
 export function Agents() {
   return (
@@ -7,8 +8,9 @@ export function Agents() {
       <div className="mb-8">
         <h1 className="section-title">AI Agents</h1>
         <p className="text-portx-muted mt-1 max-w-2xl">
-          Placeholder automation agents for future auto-trading scripts. Arm agents in demo mode —
-          live execution will connect to keepers and AI strategy runners.
+          {ENABLE_TESTNET_MODE
+            ? 'Preview automation agents for future portfolio strategies. No live agent execution on testnet yet.'
+            : 'Placeholder automation agents for future auto-trading scripts. Arm agents in demo mode — live execution will connect to keepers and AI strategy runners.'}
         </p>
       </div>
 
