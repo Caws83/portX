@@ -475,7 +475,7 @@ describe('BundleExecutor', () => {
       )
     })
 
-    it('does not change executeBasket behavior when fees are configured', async () => {
+    it('does not change executeBasket behavior when fees are disabled', async () => {
       const { executor, router, outputToken, owner, user, other } = await loadFixture(deployFixture)
       const returnAmount = 5_000n
       await configureRouterOutput(router, outputToken, returnAmount)
@@ -483,7 +483,7 @@ describe('BundleExecutor', () => {
       await executor.connect(owner).setFeeRecipient(other.address)
       await executor.connect(owner).setBuyFeeBps(100)
       await executor.connect(owner).setSellFeeBps(100)
-      await executor.connect(owner).setFeesEnabled(true)
+      // feesEnabled left false
 
       const routerAddr = await router.getAddress()
       const tokenOut = await outputToken.getAddress()
@@ -496,6 +496,210 @@ describe('BundleExecutor', () => {
 
       expect(await outputToken.balanceOf(user.address)).to.equal(userBefore + returnAmount)
       expect(await outputToken.balanceOf(other.address)).to.equal(recipientBefore)
+    })
+  })
+
+  describe('protocol fee collection', () => {
+    async function enableBuyFees(
+      executor: BundleExecutor,
+      owner: Awaited<ReturnType<typeof deployFixture>>['owner'],
+      recipient: string,
+      buyFeeBps = 100,
+    ) {
+      await executor.connect(owner).setFeeRecipient(recipient)
+      await executor.connect(owner).setBuyFeeBps(buyFeeBps)
+      await executor.connect(owner).setFeesEnabled(true)
+    }
+
+    async function enableSellFees(
+      executor: BundleExecutor,
+      owner: Awaited<ReturnType<typeof deployFixture>>['owner'],
+      recipient: string,
+      sellFeeBps = 100,
+    ) {
+      await executor.connect(owner).setFeeRecipient(recipient)
+      await executor.connect(owner).setSellFeeBps(sellFeeBps)
+      await executor.connect(owner).setFeesEnabled(true)
+    }
+
+    it('collects buy fee when enabled and leaves correct ETH for legs', async () => {
+      const { executor, router, outputToken, owner, user, other } = await loadFixture(deployFixture)
+      const returnAmount = 5_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      await enableBuyFees(executor, owner, other.address, 100)
+
+      const msgValue = 100_000n
+      const expectedFee = 1_000n
+      const legEth = msgValue - expectedFee
+      const routerAddr = await router.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const swaps = [buildEthSwap(routerAddr, legEth, tokenOut, returnAmount)]
+
+      const recipientEthBefore = await ethers.provider.getBalance(other.address)
+      const userOutBefore = await outputToken.balanceOf(user.address)
+
+      const tx = await executor.connect(user).executeBasket(BASKET_ID, swaps, { value: msgValue })
+      await expect(tx)
+        .to.emit(executor, 'ProtocolFeeCollected')
+        .withArgs(user.address, ethers.ZeroAddress, expectedFee, true)
+
+      const recipientEthAfter = await ethers.provider.getBalance(other.address)
+      expect(recipientEthAfter - recipientEthBefore).to.equal(expectedFee)
+      expect(await outputToken.balanceOf(user.address)).to.equal(userOutBefore + returnAmount)
+      expect(await executor.getAddress().then((a) => ethers.provider.getBalance(a))).to.equal(0n)
+    })
+
+    it('does not collect buy fee when disabled', async () => {
+      const { executor, router, outputToken, owner, user, other } = await loadFixture(deployFixture)
+      const returnAmount = 5_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      await executor.connect(owner).setFeeRecipient(other.address)
+      await executor.connect(owner).setBuyFeeBps(100)
+
+      const routerAddr = await router.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const swaps = [buildEthSwap(routerAddr, 100_000n, tokenOut, returnAmount)]
+
+      const recipientEthBefore = await ethers.provider.getBalance(other.address)
+      const tx = await executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 100_000n })
+      await expect(tx).to.not.emit(executor, 'ProtocolFeeCollected')
+      const recipientEthAfter = await ethers.provider.getBalance(other.address)
+      expect(recipientEthAfter - recipientEthBefore).to.equal(0n)
+    })
+
+    it('rejects buy fee collection with zero fee recipient', async () => {
+      const { executor, router, outputToken, owner, user } = await loadFixture(deployFixture)
+      const returnAmount = 5_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      await executor.connect(owner).setBuyFeeBps(100)
+      await executor.connect(owner).setFeesEnabled(true)
+
+      const routerAddr = await router.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const swaps = [buildEthSwap(routerAddr, 99_000n, tokenOut, returnAmount)]
+
+      await expect(
+        executor.connect(user).executeBasket(BASKET_ID, swaps, { value: 100_000n })
+      ).to.be.revertedWithCustomError(executor, 'InvalidFeeRecipient')
+    })
+
+    it('collects sell fee when enabled and leaves correct USDC for user', async () => {
+      const { executor, router, token, outputToken, owner, user, other } = await loadFixture(deployFixture)
+      const returnAmount = 10_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      await enableSellFees(executor, owner, other.address, 100)
+
+      const routerAddr = await router.getAddress()
+      const tokenAddr = await token.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const erc20Amount = 1_000n
+
+      await token.connect(user).approve(await executor.getAddress(), erc20Amount)
+      await outputToken.connect(user).approve(await executor.getAddress(), returnAmount)
+
+      const swaps = [buildErc20Swap(routerAddr, tokenAddr, erc20Amount, tokenOut, returnAmount)]
+
+      const recipientBefore = await outputToken.balanceOf(other.address)
+      const userBefore = await outputToken.balanceOf(user.address)
+      const executorAddr = await executor.getAddress()
+
+      const expectedFee = 100n
+      const tx = await executor.connect(user).executeBasket(BASKET_ID, swaps)
+      await expect(tx)
+        .to.emit(executor, 'ProtocolFeeCollected')
+        .withArgs(user.address, tokenOut, expectedFee, false)
+
+      expect(await outputToken.balanceOf(other.address)).to.equal(recipientBefore + expectedFee)
+      expect(await outputToken.balanceOf(user.address)).to.equal(userBefore + returnAmount - expectedFee)
+      expect(await outputToken.balanceOf(executorAddr)).to.equal(0n)
+    })
+
+    it('does not collect sell fee when disabled', async () => {
+      const { executor, router, token, outputToken, owner, user, other } = await loadFixture(deployFixture)
+      const returnAmount = 10_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      await executor.connect(owner).setFeeRecipient(other.address)
+      await executor.connect(owner).setSellFeeBps(100)
+
+      const routerAddr = await router.getAddress()
+      const tokenAddr = await token.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const erc20Amount = 1_000n
+
+      await token.connect(user).approve(await executor.getAddress(), erc20Amount)
+
+      const swaps = [buildErc20Swap(routerAddr, tokenAddr, erc20Amount, tokenOut, returnAmount)]
+
+      const recipientBefore = await outputToken.balanceOf(other.address)
+      const userBefore = await outputToken.balanceOf(user.address)
+
+      const tx = await executor.connect(user).executeBasket(BASKET_ID, swaps)
+      await expect(tx).to.not.emit(executor, 'ProtocolFeeCollected')
+
+      expect(await outputToken.balanceOf(other.address)).to.equal(recipientBefore)
+      expect(await outputToken.balanceOf(user.address)).to.equal(userBefore + returnAmount)
+    })
+
+    it('rejects sell fee collection with zero fee recipient', async () => {
+      const { executor, router, token, outputToken, owner, user } = await loadFixture(deployFixture)
+      const returnAmount = 10_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      await executor.connect(owner).setSellFeeBps(100)
+      await executor.connect(owner).setFeesEnabled(true)
+
+      const routerAddr = await router.getAddress()
+      const tokenAddr = await token.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      await token.connect(user).approve(await executor.getAddress(), 1_000n)
+      await outputToken.connect(user).approve(await executor.getAddress(), returnAmount)
+
+      const swaps = [buildErc20Swap(routerAddr, tokenAddr, 1_000n, tokenOut, returnAmount)]
+
+      await expect(executor.connect(user).executeBasket(BASKET_ID, swaps)).to.be.revertedWithCustomError(
+        executor,
+        'InvalidFeeRecipient'
+      )
+    })
+
+    it('keeps SwapExecuted amountOut unchanged when sell fee is collected', async () => {
+      const { executor, router, token, outputToken, owner, user, other } = await loadFixture(deployFixture)
+      const returnAmount = 10_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      await enableSellFees(executor, owner, other.address, 100)
+
+      const routerAddr = await router.getAddress()
+      const tokenAddr = await token.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      await token.connect(user).approve(await executor.getAddress(), 1_000n)
+      await outputToken.connect(user).approve(await executor.getAddress(), returnAmount)
+
+      const swaps = [buildErc20Swap(routerAddr, tokenAddr, 1_000n, tokenOut, returnAmount)]
+      const tx = await executor.connect(user).executeBasket(BASKET_ID, swaps)
+      const receipt = await tx.wait()
+      const swapLog = receipt!.logs.find(
+        (log) => executor.interface.parseLog(log as { topics: string[]; data: string })?.name === 'SwapExecuted'
+      )
+      const parsed = executor.interface.parseLog(swapLog as { topics: string[]; data: string })
+      expect(parsed?.args[6]).to.equal(returnAmount)
+    })
+
+    it('leaves executor with zero stranded balances after fee collection', async () => {
+      const { executor, router, outputToken, owner, user, other } = await loadFixture(deployFixture)
+      const returnAmount = 5_000n
+      await configureRouterOutput(router, outputToken, returnAmount)
+      await enableBuyFees(executor, owner, other.address, 100)
+
+      const msgValue = 100_000n
+      const legEth = 99_000n
+      const routerAddr = await router.getAddress()
+      const tokenOut = await outputToken.getAddress()
+      const swaps = [buildEthSwap(routerAddr, legEth, tokenOut, returnAmount)]
+      const executorAddr = await executor.getAddress()
+
+      await executor.connect(user).executeBasket(BASKET_ID, swaps, { value: msgValue })
+
+      expect(await ethers.provider.getBalance(executorAddr)).to.equal(0n)
+      expect(await outputToken.balanceOf(executorAddr)).to.equal(0n)
     })
   })
 })

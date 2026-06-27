@@ -41,6 +41,14 @@ import {
   formatTestnetPlanTotalInput,
   formatTestnetPlanTotalOutput,
 } from '@/utils/testnetPreview'
+import { useBundleExecutorFeeConfig, formatFeeBps } from '@/hooks/useBundleExecutorFeeConfig'
+import {
+  estimateBuyProtocolFee,
+  estimateSellProtocolFee,
+  formatProtocolFeeBps,
+  isFeeCollectionActive,
+} from '@/services/protocolFee'
+import { formatEther, formatUnits } from 'viem'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
 import { QuoteQualityPanel } from './QuoteQualityPanel'
@@ -118,6 +126,7 @@ export function TransactionReviewModal({
   const [simulating, setSimulating] = useState(false)
   const testnetExecute = useTestnetUniswapBasketExecute(plan, open)
   const testnetBalances = useTestnetPortfolioBalances()
+  const feeConfigState = useBundleExecutorFeeConfig()
   const mainnetPilot = useMainnetSwapExecute(plan, open, quoteSource ?? null)
   const isProductionPreview = !ENABLE_TESTNET_MODE
   const showTestnetExecute =
@@ -203,6 +212,46 @@ export function TransactionReviewModal({
     plan && isSellPlan
       ? plan.legs.map((leg) => leg.quote.inputToken.symbol).join(', ')
       : null
+
+  const estimatedProtocolFee = useMemo(() => {
+    if (!plan || !feeConfigState.config || !isFeeCollectionActive(feeConfigState.config)) {
+      return null
+    }
+
+    if (testnetExecute.isSellPlan) {
+      const totalOutputWei = plan.legs.reduce(
+        (sum, leg) => sum + BigInt(leg.quote.outputAmount),
+        0n,
+      )
+      const feeAmount = estimateSellProtocolFee(totalOutputWei, feeConfigState.config)
+      const outputToken = plan.legs[0]?.quote.outputToken
+      if (feeAmount <= 0n || !outputToken) return null
+      return {
+        amount: feeAmount,
+        symbol: outputToken.symbol,
+        decimals: outputToken.decimals,
+        isBuy: false,
+        rateLabel: formatProtocolFeeBps(feeConfigState.config.sellFeeBps),
+      }
+    }
+
+    if (bundlePrepareResult?.status === 'ready') {
+      const feeAmount = estimateBuyProtocolFee(
+        bundlePrepareResult.totalNativeEthWei,
+        feeConfigState.config,
+      )
+      if (feeAmount <= 0n) return null
+      return {
+        amount: feeAmount,
+        symbol: 'ETH',
+        decimals: 18,
+        isBuy: true,
+        rateLabel: formatProtocolFeeBps(feeConfigState.config.buyFeeBps),
+      }
+    }
+
+    return null
+  }, [plan, feeConfigState.config, testnetExecute.isSellPlan, bundlePrepareResult])
 
   if (!open || !plan) return null
   const quoteQuality = assessQuoteQualityFromPlan(plan, quoteSource ?? null)
@@ -692,6 +741,38 @@ export function TransactionReviewModal({
                   </dt>
                   <dd className="font-mono font-semibold">{formatTestnetPlanTotalOutput(plan)}</dd>
                 </div>
+                {estimatedProtocolFee ? (
+                  <div className="col-span-2 rounded-lg border border-portx-border bg-portx-surface px-3 py-2">
+                    <dt className="text-xs text-portx-muted mb-1">Est. protocol fee</dt>
+                    <dd className="font-mono font-semibold text-portx-warning">
+                      {estimatedProtocolFee.isBuy
+                        ? `${formatEther(estimatedProtocolFee.amount)} ETH`
+                        : formatUnits(
+                            estimatedProtocolFee.amount,
+                            estimatedProtocolFee.decimals,
+                          )}{' '}
+                      {!estimatedProtocolFee.isBuy ? estimatedProtocolFee.symbol : ''}
+                      <span className="text-portx-muted font-sans font-normal text-xs ml-2">
+                        ({estimatedProtocolFee.rateLabel})
+                      </span>
+                    </dd>
+                    {feeConfigState.config?.feeRecipient &&
+                    feeConfigState.config.feeRecipient !==
+                      '0x0000000000000000000000000000000000000000' ? (
+                      <p className="text-[11px] text-portx-muted mt-1">
+                        Recipient: {truncateAddress(feeConfigState.config.feeRecipient, 6)}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : feeConfigState.isAvailable && feeConfigState.config?.feesEnabled ? (
+                  <div className="col-span-2 text-xs text-portx-muted">
+                    Protocol fees enabled — no fee on this transaction (
+                    {testnetExecute.isSellPlan
+                      ? `sell ${formatFeeBps(feeConfigState.config.sellFeeBps)}`
+                      : `buy ${formatFeeBps(feeConfigState.config.buyFeeBps)}`}
+                    ).
+                  </div>
+                ) : null}
               </dl>
               <ul className="space-y-2">
                 {plan.legs.map((leg, index) => {

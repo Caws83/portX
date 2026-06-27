@@ -63,12 +63,20 @@ contract BundleExecutor {
     event SellFeeUpdated(uint16 sellFeeBps);
     event FeesEnabledUpdated(bool feesEnabled);
 
+    event ProtocolFeeCollected(
+        address indexed payer,
+        address indexed token,
+        uint256 amount,
+        bool isBuy
+    );
+
     // -------------------------------------------------------------------------
     // Errors
     // -------------------------------------------------------------------------
 
     error NotOwner();
     error FeeExceedsMax(uint16 requested, uint16 max);
+    error InvalidFeeRecipient();
     error ReentrancyGuardActive();
     error EmptyBasket();
     error RouterCallFailed(uint256 legIndex);
@@ -143,7 +151,7 @@ contract BundleExecutor {
     }
 
     // -------------------------------------------------------------------------
-    // Owner — protocol fee config (no fee deduction until a future phase)
+    // Owner — protocol fee config
     // -------------------------------------------------------------------------
 
     function setFeeRecipient(address recipient) external onlyOwner {
@@ -194,6 +202,19 @@ contract BundleExecutor {
 
         uint256 ethRemaining = msg.value;
 
+        if (feesEnabled && buyFeeBps > 0 && msg.value > 0) {
+            if (feeRecipient == address(0)) revert InvalidFeeRecipient();
+            uint256 buyFeeAmount = _calculateFeeAmount(msg.value, buyFeeBps);
+            if (buyFeeAmount > 0) {
+                ethRemaining = msg.value - buyFeeAmount;
+                _transferEth(feeRecipient, buyFeeAmount);
+                emit ProtocolFeeCollected(msg.sender, address(0), buyFeeAmount, true);
+            }
+        }
+
+        address sellOutputToken = address(0);
+        uint256 totalSellOutput = 0;
+
         for (uint256 i = 0; i < swaps.length; ) {
             SwapCall calldata swap = swaps[i];
 
@@ -220,6 +241,18 @@ contract BundleExecutor {
 
             if (amountOut < swap.minAmountOut) revert SlippageExceeded();
 
+            if (swap.tokenOut != address(0)) {
+                if (sellOutputToken == address(0)) {
+                    sellOutputToken = swap.tokenOut;
+                    totalSellOutput = amountOut;
+                } else if (sellOutputToken == swap.tokenOut) {
+                    totalSellOutput += amountOut;
+                } else {
+                    sellOutputToken = address(0);
+                    totalSellOutput = 0;
+                }
+            }
+
             emit SwapExecuted(
                 basketId,
                 i,
@@ -232,6 +265,21 @@ contract BundleExecutor {
 
             unchecked {
                 ++i;
+            }
+        }
+
+        if (
+            feesEnabled &&
+            sellFeeBps > 0 &&
+            msg.value == 0 &&
+            sellOutputToken != address(0) &&
+            totalSellOutput > 0
+        ) {
+            if (feeRecipient == address(0)) revert InvalidFeeRecipient();
+            uint256 sellFeeAmount = _calculateFeeAmount(totalSellOutput, sellFeeBps);
+            if (sellFeeAmount > 0) {
+                IERC20(sellOutputToken).transferFrom(msg.sender, feeRecipient, sellFeeAmount);
+                emit ProtocolFeeCollected(msg.sender, sellOutputToken, sellFeeAmount, false);
             }
         }
 
@@ -295,6 +343,13 @@ contract BundleExecutor {
     function _transferEth(address to, uint256 amount) internal {
         (bool ok, ) = to.call{value: amount}("");
         if (!ok) revert EthTransferFailed();
+    }
+
+    function _calculateFeeAmount(uint256 amount, uint16 feeBps) internal pure returns (uint256) {
+        if (feeBps == 0 || amount == 0) {
+            return 0;
+        }
+        return (amount * feeBps) / 10_000;
     }
 
     receive() external payable {}

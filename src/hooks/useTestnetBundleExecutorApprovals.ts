@@ -6,7 +6,8 @@ import { erc20Abi, formatUnits } from 'viem'
 import { sepolia } from 'viem/chains'
 import { wagmiConfig } from '@/config/wagmi'
 import { TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
-import { getBundleExecutorAddress } from '@/services/bundleExecutorContract'
+import { getBundleExecutorAddress, type BundleExecutorFeeConfig } from '@/services/bundleExecutorContract'
+import { estimateSellProtocolFee } from '@/services/protocolFee'
 import type { ExecutionPlan } from '@/types/execution'
 import { isZeroAddress } from '@/utils/addresses'
 import { isTestnetSepoliaUniswapPlan } from '@/utils/testnetPreview'
@@ -69,6 +70,55 @@ function buildApprovalLegs(plan: ExecutionPlan): Omit<TestnetApprovalRequirement
   return [...byToken.values()]
 }
 
+function buildSellFeeApprovalLeg(
+  plan: ExecutionPlan,
+  feeConfig: BundleExecutorFeeConfig | null,
+): Omit<TestnetApprovalRequirement, 'allowance' | 'sufficient'> | null {
+  if (plan.type !== 'sell_basket') return null
+
+  const totalOutputWei = plan.legs.reduce(
+    (sum, leg) => sum + BigInt(leg.quote.outputAmount),
+    0n,
+  )
+  const feeAmount = estimateSellProtocolFee(totalOutputWei, feeConfig)
+  if (feeAmount <= 0n) return null
+
+  const outputToken = plan.legs[0]?.quote.outputToken
+  if (!outputToken || isZeroAddress(outputToken.address)) return null
+
+  return {
+    symbol: `${outputToken.symbol} (protocol fee)`,
+    tokenAddress: outputToken.address as Address,
+    amountRequired: feeAmount,
+    amountDisplay: formatUnits(feeAmount, outputToken.decimals),
+  }
+}
+
+function mergeApprovalLegs(
+  plan: ExecutionPlan,
+  feeConfig: BundleExecutorFeeConfig | null,
+): Omit<TestnetApprovalRequirement, 'allowance' | 'sufficient'>[] {
+  const legs = buildApprovalLegs(plan)
+  const feeLeg = buildSellFeeApprovalLeg(plan, feeConfig)
+  if (!feeLeg) return legs
+
+  const existingIndex = legs.findIndex(
+    (leg) => leg.tokenAddress.toLowerCase() === feeLeg.tokenAddress.toLowerCase(),
+  )
+  if (existingIndex >= 0) {
+    const existing = legs[existingIndex]
+    const combined = existing.amountRequired + feeLeg.amountRequired
+    legs[existingIndex] = {
+      ...existing,
+      amountRequired: combined,
+      amountDisplay: formatUnits(combined, plan.legs[0]?.quote.outputToken.decimals ?? 6),
+    }
+    return legs
+  }
+
+  return [...legs, feeLeg]
+}
+
 async function readAllowances(
   publicClient: NonNullable<ReturnType<typeof usePublicClient>>,
   owner: Address,
@@ -97,6 +147,7 @@ async function readAllowances(
 export function useTestnetBundleExecutorApprovals(
   plan: ExecutionPlan | null,
   open: boolean,
+  feeConfig: BundleExecutorFeeConfig | null = null,
 ): UseTestnetBundleExecutorApprovalsResult {
   const { address } = useAccount()
   const publicClient = usePublicClient({ chainId: TESTNET_SEPOLIA_CHAIN_ID })
@@ -111,13 +162,13 @@ export function useTestnetBundleExecutorApprovals(
     if (!plan || !open || plan.type !== 'sell_basket' || !isTestnetSepoliaUniswapPlan(plan)) {
       return false
     }
-    return buildApprovalLegs(plan).length > 0
-  }, [plan, open])
+    return mergeApprovalLegs(plan, feeConfig).length > 0
+  }, [plan, open, feeConfig])
 
   const approvalLegDefs = useMemo(() => {
     if (!requiresApprovals || !plan) return []
-    return buildApprovalLegs(plan)
-  }, [requiresApprovals, plan])
+    return mergeApprovalLegs(plan, feeConfig)
+  }, [requiresApprovals, plan, feeConfig])
 
   const refetchAllowances = useCallback(async () => {
     if (!requiresApprovals || !address || !publicClient || approvalLegDefs.length === 0) {

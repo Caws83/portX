@@ -19,7 +19,11 @@ import {
 import { executionPlanToQuotePreview } from '@/services/bundleExecutorWrite'
 import { useBundleExecutorExecute } from '@/hooks/useBundleExecutorExecute'
 import { useBundleExecutorHealth } from '@/hooks/useBundleExecutorHealth'
+import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import {
+  grossUpEthValueForBuyFee,
+} from '@/services/protocolFee'
 import {
   useTestnetBundleExecutorApprovals,
   type UseTestnetBundleExecutorApprovalsResult,
@@ -86,7 +90,8 @@ export function useTestnetUniswapBasketExecute(
   const chainId = useChainId()
   const { enableLiveExecution, enableTestnetMode } = useFeatureFlags()
   const contractHealth = useBundleExecutorHealth()
-  const approvals = useTestnetBundleExecutorApprovals(plan, open)
+  const feeConfigState = useBundleExecutorFeeConfig()
+  const approvals = useTestnetBundleExecutorApprovals(plan, open, feeConfigState.config)
   const {
     status: executeStatus,
     txHash,
@@ -106,6 +111,11 @@ export function useTestnetUniswapBasketExecute(
   )
 
   const isSellPlan = plan?.type === 'sell_basket'
+
+  const resolveBundleMsgValue = useCallback(
+    (legEthWei: bigint) => grossUpEthValueForBuyFee(legEthWei, feeConfigState.config),
+    [feeConfigState.config],
+  )
 
   const bundleQuotePreview = useMemo(
     () => (plan && open && !plan.isDemo ? executionPlanToQuotePreview(plan) : null),
@@ -161,7 +171,7 @@ export function useTestnetUniswapBasketExecute(
       {
         basketId: prepareResult.basketId,
         swaps: prepareResult.swapCalls,
-        value: prepareResult.totalNativeEthWei,
+        value: resolveBundleMsgValue(prepareResult.totalNativeEthWei),
       },
       address,
     ).then((result) => {
@@ -174,7 +184,7 @@ export function useTestnetUniswapBasketExecute(
     return () => {
       cancelled = true
     }
-  }, [open, plan, isTestnetUniswapPlan, address, baseAssessment])
+  }, [open, plan, isTestnetUniswapPlan, address, baseAssessment, resolveBundleMsgValue])
 
   const assessment = useMemo(() => {
     if (!baseAssessment) {
@@ -232,9 +242,9 @@ export function useTestnetUniswapBasketExecute(
     await executeBundle({
       basketId: prepareResult.basketId,
       swaps: prepareResult.swapCalls,
-      value: prepareResult.totalNativeEthWei,
+      value: resolveBundleMsgValue(prepareResult.totalNativeEthWei),
     })
-  }, [canExecute, plan, baseAssessment, executeBundle, isSellPlan])
+  }, [canExecute, plan, baseAssessment, executeBundle, isSellPlan, resolveBundleMsgValue])
 
   return {
     isTestnetUniswapPlan: assessment.isTestnetUniswapPlan,
