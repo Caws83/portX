@@ -32,6 +32,7 @@ import type { Basket } from '@/types/basket'
 import type { ExecutionPlan } from '@/types/execution'
 import { RecentTestSwaps } from '@/components/RecentTestSwaps'
 import { canShowTestnetMultiTokenBasketSell } from '@/utils/testnetBasketHoldings'
+import { TESTNET_BUTTONS, SEPOLIA_PORTFOLIO_TRADE } from '@/config/testnetUxCopy'
 
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 
@@ -221,11 +222,15 @@ export function Baskets() {
       <div className="mb-8">
         <h1 className="section-title">Crypto Baskets</h1>
         <p className="text-portx-muted mt-1">
-          Preview routed quotes on Ethereum mainnet — planned chains show routing status only.
+          {ENABLE_TESTNET_MODE
+            ? `${SEPOLIA_PORTFOLIO_TRADE} — preview and execute portfolio trades on Sepolia.`
+            : 'Preview routed quotes on Ethereum mainnet — planned chains show routing status only.'}
         </p>
       </div>
 
-      <ExecutionWarning variant="info" warnings={[INFO_MESSAGES.demoMode]} />
+      {!ENABLE_TESTNET_MODE ? (
+        <ExecutionWarning variant="info" warnings={[INFO_MESSAGES.demoMode]} />
+      ) : null}
 
       <div className="mt-6 mb-8 card flex flex-col sm:flex-row sm:items-end gap-4">
         <div className="flex-1 min-w-0">
@@ -299,10 +304,10 @@ export function Baskets() {
       )}
 
       {quoteSource === 'testnet' && preview && !loading && (
-        <StatusBanner variant="warning" className="mb-6" compact>
+        <StatusBanner variant="info" className="mb-6" compact>
           {preview.type === 'sell_basket'
-            ? 'Sepolia testnet sell quote — wallet balances quoted to USDC via Uniswap V3 (no backend /quotes).'
-            : 'Sepolia testnet quote — frontend Uniswap V3 only (no backend /quotes).'}
+            ? 'Sepolia preview quote — wallet holdings priced to USDC via Uniswap V3.'
+            : 'Sepolia preview quote — Uniswap V3 routing on Sepolia testnet.'}
         </StatusBanner>
       )}
 
@@ -389,7 +394,13 @@ export function Baskets() {
                 quoteSource={quoteSource}
                 onReview={handleReview}
                 loading={loading}
-                reviewLabel={BUTTON_LABELS.reviewExecute}
+                reviewLabel={
+                  quoteSource === 'testnet'
+                    ? preview.type === 'sell_basket'
+                      ? TESTNET_BUTTONS.reviewSell
+                      : TESTNET_BUTTONS.reviewTrade
+                    : BUTTON_LABELS.reviewExecute
+                }
               />
               <button
                 type="button"

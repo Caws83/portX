@@ -41,19 +41,30 @@ import {
   formatTestnetPlanTotalInput,
   formatTestnetPlanTotalOutput,
 } from '@/utils/testnetPreview'
-import { useBundleExecutorFeeConfig, formatFeeBps } from '@/hooks/useBundleExecutorFeeConfig'
+import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
 import {
   estimateBuyProtocolFee,
   estimateSellProtocolFee,
   formatProtocolFeeBps,
   isFeeCollectionActive,
 } from '@/services/protocolFee'
-import { formatEther, formatUnits } from 'viem'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
 import { QuoteQualityPanel } from './QuoteQualityPanel'
 import { MainnetPilotReadinessPanel } from './MainnetPilotReadinessPanel'
 import { assessQuoteQualityFromPlan, isLegUnsupported } from '@/utils/quoteQuality'
+import { AdvancedDisclosure } from '@/components/ui/AdvancedDisclosure'
+import { TestnetProtocolFeeSummary } from '@/components/TestnetProtocolFeeSummary'
+import {
+  EXECUTION_ROUTER_NAME,
+  EXECUTE_PORTFOLIO_TRADE,
+  formatDisabledReason,
+  formatSafetyGateLabel,
+  SEPOLIA_PORTFOLIO_TRADE,
+  TESTNET_BUTTONS,
+  TESTNET_SUCCESS,
+  ASSET_NOT_ROUTEABLE,
+} from '@/config/testnetUxCopy'
 
 type ReviewQuoteSource = 'api' | 'fallback' | 'testnet' | null
 
@@ -67,7 +78,12 @@ interface TransactionReviewModalProps {
   onTestnetExecutionSuccess?: (plan: ExecutionPlan) => void
 }
 
-function getPlanTypeLabel(plan: ExecutionPlan): string {
+function getPlanTypeLabel(plan: ExecutionPlan, testnetPlan?: boolean): string {
+  if (testnetPlan) {
+    if (plan.type === 'buy') return TESTNET_BUTTONS.reviewTrade
+    if (plan.type === 'sell_basket') return TESTNET_BUTTONS.reviewSell
+    return 'Review Sell All'
+  }
   if (plan.type === 'buy') return 'Buy Basket'
   if (plan.type === 'sell_basket') return 'Sell Basket'
   return 'Sell All Portfolio'
@@ -303,8 +319,14 @@ export function TransactionReviewModal({
       <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto card-glow border-portx-green/20 shadow-glow">
         <div className="flex items-start justify-between mb-6 gap-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-bold">Review Transaction</h2>
-            <p className="text-sm text-portx-muted mt-0.5">{getPlanTypeLabel(plan)}</p>
+            <h2 className="text-xl font-bold">
+              {testnetExecute.isTestnetUniswapPlan ? getPlanTypeLabel(plan, true) : 'Review Transaction'}
+            </h2>
+            <p className="text-sm text-portx-muted mt-0.5">
+              {testnetExecute.isTestnetUniswapPlan
+                ? SEPOLIA_PORTFOLIO_TRADE
+                : getPlanTypeLabel(plan)}
+            </p>
             <div className="mt-3">
               <QuoteQualityPanel
                 quality={quoteQuality}
@@ -555,14 +577,10 @@ export function TransactionReviewModal({
         )}
 
         {ENABLE_TESTNET_MODE && !plan.isDemo && bundleQuotePreview && (
-          <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-border space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-              BundleExecutor Testnet Payload Preview
-            </p>
-
+          <AdvancedDisclosure title="Advanced — trade payload & routing" className="mb-6">
             {!walletOnSepolia && (
               <div className="rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-portx-warning p-3 text-sm">
-                Sepolia required for BundleExecutor testnet execution.
+                Sepolia required for testnet portfolio trades.
               </div>
             )}
 
@@ -600,6 +618,10 @@ export function TransactionReviewModal({
                       {BUNDLE_EXECUTOR_SEPOLIA.networkLabel} ({bundleBuildResult.chainId})
                     </dd>
                   </div>
+                  <div className="col-span-2">
+                    <dt className="text-portx-muted text-xs">{EXECUTION_ROUTER_NAME}</dt>
+                    <dd className="font-mono text-xs break-all">{getBundleExecutorAddress()}</dd>
+                  </div>
                 </dl>
 
                 {bundleBuildResult.swapCalls.map((swapCall, index) => {
@@ -611,9 +633,9 @@ export function TransactionReviewModal({
                     calldataStatus === 'available'
                       ? `Available (${legQuote?.calldata.length ?? 0} chars)`
                       : calldataStatus === 'demo'
-                        ? 'Demo placeholder'
+                        ? 'Preview placeholder'
                         : calldataStatus === 'unsupported'
-                          ? 'Unsupported'
+                          ? ASSET_NOT_ROUTEABLE
                           : 'Missing'
 
                   return (
@@ -650,7 +672,7 @@ export function TransactionReviewModal({
                         {swapCall.minAmountOut.toString()}
                       </p>
                       <p>
-                        <span className="text-portx-muted">calldata status: </span>
+                        <span className="text-portx-muted">calldata: </span>
                         <span
                           className={
                             calldataStatus === 'available' ? 'text-portx-green' : 'text-portx-warning'
@@ -661,14 +683,10 @@ export function TransactionReviewModal({
                       </p>
                       {legQuote?.calldata?.startsWith('0x') && (
                         <p>
-                          <span className="text-portx-muted">calldata: </span>
+                          <span className="text-portx-muted">calldata hex: </span>
                           {truncateCalldata(legQuote.calldata, 24)}
                         </p>
                       )}
-                      <p>
-                        <span className="text-portx-muted">chain target: </span>
-                        {BUNDLE_EXECUTOR_SEPOLIA.networkLabel} ({sepoliaChainId})
-                      </p>
                     </div>
                   )
                 })}
@@ -692,28 +710,28 @@ export function TransactionReviewModal({
 
             <p className="text-xs text-portx-muted">
               {testnetExecute.isTestnetUniswapPlan
-                ? 'Sepolia BundleExecutor payload — execute below when all safety gates pass.'
-                : 'Payload preview only — no wallet writes or contract calls.'}
+                ? `${EXECUTE_PORTFOLIO_TRADE} — execute below when checks pass.`
+                : 'Payload preview only — no wallet writes.'}
             </p>
-          </div>
+          </AdvancedDisclosure>
         )}
 
         {testnetExecute.isTestnetUniswapPlan && (
-          <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-warning/40 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-portx-warning">
-              Sepolia testnet execution
+          <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-green/30 space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-portx-green">
+              {SEPOLIA_PORTFOLIO_TRADE}
             </p>
 
             <ExecutionWarning
-              variant="warning"
+              variant="info"
               warnings={
                 testnetExecute.isSellPlan
                   ? [
-                      'Testnet only: sells LINK/UNI/WETH/AAVE from your wallet to USDC via BundleExecutor + Uniswap V3. msg.value = 0.',
-                      'Approve each basket token for BundleExecutor before execute.',
+                      'Sells your Sepolia portfolio tokens to USDC in one transaction.',
+                      `Approve tokens for ${EXECUTION_ROUTER_NAME} if prompted.`,
                     ]
                   : [
-                      `Testnet only: sends ${getTestnetUniswapExecuteAmountLabel()} through BundleExecutor via Uniswap V3 + WETH wrap testnet basket. Not for production.`,
+                      `Buys your portfolio allocation with ${getTestnetUniswapExecuteAmountLabel()} on Sepolia.`,
                     ]
               }
             />
@@ -742,35 +760,29 @@ export function TransactionReviewModal({
                   <dd className="font-mono font-semibold">{formatTestnetPlanTotalOutput(plan)}</dd>
                 </div>
                 {estimatedProtocolFee ? (
-                  <div className="col-span-2 rounded-lg border border-portx-border bg-portx-surface px-3 py-2">
-                    <dt className="text-xs text-portx-muted mb-1">Est. protocol fee</dt>
-                    <dd className="font-mono font-semibold text-portx-warning">
-                      {estimatedProtocolFee.isBuy
-                        ? `${formatEther(estimatedProtocolFee.amount)} ETH`
-                        : formatUnits(
-                            estimatedProtocolFee.amount,
-                            estimatedProtocolFee.decimals,
-                          )}{' '}
-                      {!estimatedProtocolFee.isBuy ? estimatedProtocolFee.symbol : ''}
-                      <span className="text-portx-muted font-sans font-normal text-xs ml-2">
-                        ({estimatedProtocolFee.rateLabel})
-                      </span>
-                    </dd>
-                    {feeConfigState.config?.feeRecipient &&
-                    feeConfigState.config.feeRecipient !==
-                      '0x0000000000000000000000000000000000000000' ? (
-                      <p className="text-[11px] text-portx-muted mt-1">
-                        Recipient: {truncateAddress(feeConfigState.config.feeRecipient, 6)}
-                      </p>
-                    ) : null}
+                  <div className="col-span-2">
+                    <TestnetProtocolFeeSummary
+                      feeConfig={feeConfigState.config}
+                      isAvailable={feeConfigState.isAvailable}
+                      estimatedFee={estimatedProtocolFee}
+                      netOutputWei={
+                        testnetExecute.isSellPlan
+                          ? plan.legs.reduce(
+                              (sum, leg) => sum + BigInt(leg.quote.outputAmount),
+                              0n,
+                            ) - estimatedProtocolFee.amount
+                          : undefined
+                      }
+                      compact
+                    />
                   </div>
                 ) : feeConfigState.isAvailable && feeConfigState.config?.feesEnabled ? (
-                  <div className="col-span-2 text-xs text-portx-muted">
-                    Protocol fees enabled — no fee on this transaction (
-                    {testnetExecute.isSellPlan
-                      ? `sell ${formatFeeBps(feeConfigState.config.sellFeeBps)}`
-                      : `buy ${formatFeeBps(feeConfigState.config.buyFeeBps)}`}
-                    ).
+                  <div className="col-span-2">
+                    <TestnetProtocolFeeSummary
+                      feeConfig={feeConfigState.config}
+                      isAvailable={feeConfigState.isAvailable}
+                      compact
+                    />
                   </div>
                 ) : null}
               </dl>
@@ -810,11 +822,10 @@ export function TransactionReviewModal({
             {testnetExecute.approvals.requiresApprovals ? (
               <div className="space-y-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-                  BundleExecutor approvals
+                  {TESTNET_BUTTONS.approveTokens}
                 </p>
                 <p className="text-xs text-portx-muted">
-                  Approve each token manually so BundleExecutor can transferFrom your wallet. Spender:{' '}
-                  {truncateAddress(getBundleExecutorAddress(), 6)}
+                  Approve each token so {EXECUTION_ROUTER_NAME} can complete your sell.
                 </p>
                 <ul className="space-y-2">
                   {testnetExecute.approvals.legs.map((leg) => (
@@ -865,33 +876,29 @@ export function TransactionReviewModal({
                 ) : null}
                 {testnetExecute.approvals.allApprovalsSufficient ? (
                   <p className="text-xs text-portx-green">
-                    All token allowances sufficient — execute is enabled when other gates pass.
+                    All approvals complete — ready to execute when checks pass.
                   </p>
                 ) : null}
               </div>
             ) : null}
 
-            <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-                Safety gates
-              </p>
+            <AdvancedDisclosure title="Advanced — execution checks">
               <ul className="space-y-2">
                 {testnetExecute.gates.map((gate) => (
                   <ChecklistRow
                     key={gate.id}
-                    label={gate.label}
+                    label={formatSafetyGateLabel(gate.label)}
                     passed={gate.passed}
                     detail={gate.detail}
                   />
                 ))}
               </ul>
-            </div>
-
-            {testnetExecute.disabledReason && !testnetExecute.canExecute ? (
-              <p className="text-xs text-portx-muted">
-                Disabled: {testnetExecute.disabledReason}
-              </p>
-            ) : null}
+              {testnetExecute.disabledReason && !testnetExecute.canExecute ? (
+                <p className="text-xs text-portx-muted mt-2">
+                  Disabled: {formatDisabledReason(testnetExecute.disabledReason)}
+                </p>
+              ) : null}
+            </AdvancedDisclosure>
 
             {testnetExecute.status === 'pending' ? (
               <div className="rounded-xl border border-portx-border bg-portx-surface p-3 text-sm">
@@ -906,9 +913,7 @@ export function TransactionReviewModal({
                     Swap confirmed
                   </p>
                   <p className="font-bold text-lg text-portx-green">
-                    {testnetExecute.isSellPlan
-                      ? 'Sepolia basket sell executed successfully'
-                      : 'Sepolia test swap executed successfully'}
+                    {testnetExecute.isSellPlan ? TESTNET_SUCCESS.sell : TESTNET_SUCCESS.buy}
                   </p>
                   <p className="text-sm text-portx-muted mt-1">
                     Your transaction was confirmed on Sepolia. Review the hash below or open
@@ -1011,7 +1016,8 @@ export function TransactionReviewModal({
             {quoteQuality.proceedsExcludeUnsupported && (
               <p className="text-xs text-portx-warning">
                 Proceeds exclude {formatUsd(quoteQuality.excludedProceedsUsd)} from{' '}
-                {quoteQuality.unsupportedLegCount} unsupported leg(s).
+                {quoteQuality.unsupportedLegCount}{' '}
+                {ENABLE_TESTNET_MODE ? ASSET_NOT_ROUTEABLE.toLowerCase() : 'unsupported leg(s)'}.
               </p>
             )}
           </div>
@@ -1147,7 +1153,11 @@ export function TransactionReviewModal({
                   disabled={confirming}
                   className="btn-primary flex-1 disabled:opacity-50"
                 >
-                  {confirming ? 'Processing...' : 'Confirm Demo Execution'}
+                  {confirming
+                    ? 'Processing...'
+                    : ENABLE_TESTNET_MODE
+                      ? TESTNET_BUTTONS.confirmDemoExecution
+                      : 'Confirm Demo Execution'}
                 </button>
               ) : showTestnetExecute ? (
                 <button
@@ -1159,8 +1169,8 @@ export function TransactionReviewModal({
                 >
                   {testnetExecute.status === 'pending'
                     ? testnetExecute.isSellPlan
-                      ? 'Executing Sepolia Basket Sell…'
-                      : 'Executing Sepolia Test Swap…'
+                      ? TESTNET_BUTTONS.executingTestnetSell
+                      : TESTNET_BUTTONS.executingTestnetTrade
                     : testnetExecute.isSellPlan
                       ? getTestnetUniswapSellExecuteLabel()
                       : getTestnetUniswapBuyExecuteLabel()}

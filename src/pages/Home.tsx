@@ -54,8 +54,9 @@ export function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="section-title text-center mb-3">Platform</h2>
           <p className="text-portx-muted text-center max-w-2xl mx-auto mb-10 text-sm">
-            Full PortX development surface — baskets, portfolio tools, lending preview, agents, and
-            Sepolia testnet execution.
+            {ENABLE_TESTNET_MODE
+              ? 'Portfolio trading on Sepolia — baskets, dashboard, lending preview, and Genesis NFT mint.'
+              : 'Full PortX development surface — baskets, portfolio tools, lending preview, agents, and Sepolia testnet execution.'}
           </p>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">

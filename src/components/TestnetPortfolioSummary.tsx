@@ -83,7 +83,7 @@ export function TestnetPortfolioSummary({
   return (
     <div className={`card space-y-4 ${className}`}>
       <div>
-        <h2 className="font-bold">Testnet Portfolio</h2>
+        <h2 className="font-bold">Sepolia Portfolio</h2>
         <p className="text-xs text-portx-muted mt-1">
           Local browser tracking only — not real wallet balances or production portfolio data.
         </p>
@@ -165,8 +165,8 @@ export function TestnetPortfolioSummary({
         </div>
       ) : (
         <p className="text-sm text-portx-muted">
-          No testnet basket executions recorded yet. Successful Sepolia swaps from Review &amp;
-          Execute will appear here.
+          No Sepolia portfolio trades recorded yet. Completed trades from Review Trade will appear
+          here.
         </p>
       )}
 

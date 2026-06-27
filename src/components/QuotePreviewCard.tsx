@@ -3,6 +3,14 @@ import { formatEther, formatUnits } from 'viem'
 import type { BasketQuotePreview } from '@/types/quote'
 import { BUTTON_LABELS } from '@/config/uiCopy'
 import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI, TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
+import { SEPOLIA_PORTFOLIO_TRADE } from '@/config/testnetUxCopy'
+import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
+import { TestnetProtocolFeeSummary } from '@/components/TestnetProtocolFeeSummary'
+import {
+  estimateBuyProtocolFee,
+  estimateSellProtocolFee,
+  isFeeCollectionActive,
+} from '@/services/protocolFee'
 import { formatUsd } from '@/utils/format'
 import { formatSlippage, isHighSlippage } from '@/utils/slippage'
 import { buildLiveExecutionSummaryFromPreview } from '@/services/transactionBuilder'
@@ -25,6 +33,12 @@ const TYPE_LABELS = {
   buy: 'Buy Basket Quote',
   sell_basket: 'Sell Basket Quote',
   sell_all: 'Sell All Portfolio Quote',
+}
+
+const TESTNET_TYPE_LABELS = {
+  buy: `${SEPOLIA_PORTFOLIO_TRADE} — Buy`,
+  sell_basket: `${SEPOLIA_PORTFOLIO_TRADE} — Sell`,
+  sell_all: 'Sepolia Sell All Preview',
 }
 
 function formatTestnetSellTokenInputs(preview: BasketQuotePreview): string {
@@ -65,6 +79,45 @@ export function QuotePreviewCard({
   )
   const isTestnetPreview = isTestnetSepoliaUniswapPreview(preview)
   const isTestnetSell = isTestnetPreview && quoteSource === 'testnet' && preview.type === 'sell_basket'
+  const feeConfigState = useBundleExecutorFeeConfig()
+  const estimatedProtocolFee = useMemo(() => {
+    if (!isTestnetPreview || !feeConfigState.config || !isFeeCollectionActive(feeConfigState.config)) {
+      return null
+    }
+    if (isTestnetSell) {
+      const totalUsdc = preview.legs.reduce(
+        (sum, leg) => sum + BigInt(leg.bestQuote.outputAmount),
+        0n,
+      )
+      const fee = estimateSellProtocolFee(totalUsdc, feeConfigState.config)
+      if (fee <= 0n) return null
+      const decimals = preview.legs[0]?.bestQuote.outputToken.decimals ?? 6
+      return {
+        amount: fee,
+        symbol: 'USDC',
+        decimals,
+        isBuy: false,
+        rateLabel: `${(feeConfigState.config.sellFeeBps / 100).toFixed(2)}%`,
+      }
+    }
+    const fee = estimateBuyProtocolFee(TESTNET_DEFAULT_SWAP_AMOUNT_WEI, feeConfigState.config)
+    if (fee <= 0n) return null
+    return {
+      amount: fee,
+      symbol: 'ETH',
+      decimals: 18,
+      isBuy: true,
+      rateLabel: `${(feeConfigState.config.buyFeeBps / 100).toFixed(2)}%`,
+    }
+  }, [isTestnetPreview, isTestnetSell, preview.legs, feeConfigState.config])
+  const netUsdcAfterFee = useMemo(() => {
+    if (!isTestnetSell || !estimatedProtocolFee || estimatedProtocolFee.isBuy) return undefined
+    const totalUsdc = preview.legs.reduce(
+      (sum, leg) => sum + BigInt(leg.bestQuote.outputAmount),
+      0n,
+    )
+    return totalUsdc - estimatedProtocolFee.amount
+  }, [isTestnetSell, estimatedProtocolFee, preview.legs])
   const isSell = preview.type === 'sell_basket' || preview.type === 'sell_all'
   const showLivePrep =
     quality.kind === 'live_0x' &&
@@ -88,7 +141,9 @@ export function QuotePreviewCard({
     <div className="card-glow space-y-6 min-w-0">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-lg font-bold">{TYPE_LABELS[preview.type]}</h3>
+          <h3 className="text-lg font-bold">
+            {isTestnetPreview ? TESTNET_TYPE_LABELS[preview.type] : TYPE_LABELS[preview.type]}
+          </h3>
           {preview.basketName && (
             <p className="text-sm text-portx-muted truncate">{preview.basketName}</p>
           )}
@@ -188,8 +243,30 @@ export function QuotePreviewCard({
               {formatTestnetSellUsdcOutput(preview)}
             </span>
           </p>
+          {netUsdcAfterFee !== undefined ? (
+            <p>
+              <span className="text-portx-muted">Est. net after fee: </span>
+              <span className="font-mono font-semibold text-portx-green">
+                {Number.parseFloat(
+                  formatUnits(netUsdcAfterFee, preview.legs[0]?.bestQuote.outputToken.decimals ?? 6),
+                ).toLocaleString('en-US', { maximumFractionDigits: 6 })}{' '}
+                USDC
+              </span>
+            </p>
+          ) : null}
         </div>
       )}
+
+      {isTestnetPreview && feeConfigState.isAvailable ? (
+        <TestnetProtocolFeeSummary
+          feeConfig={feeConfigState.config}
+          isAvailable={feeConfigState.isAvailable}
+          isLoading={feeConfigState.isLoading}
+          estimatedFee={estimatedProtocolFee}
+          netOutputWei={netUsdcAfterFee}
+          compact
+        />
+      ) : null}
 
       {preview.type === 'buy' && (
         <div className="p-3 rounded-xl bg-portx-surface border border-portx-border text-sm">

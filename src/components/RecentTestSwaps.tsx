@@ -61,9 +61,9 @@ export function RecentTestSwaps({ className = '', compact = false }: RecentTestS
     <div className={`card space-y-4 ${className}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-bold">Recent Test Swaps</h2>
+          <h2 className="font-bold">Recent Trades</h2>
           <p className="text-xs text-portx-muted mt-1">
-            Local browser history only — last {records.length || 0} Sepolia test swap(s).
+            Your Sepolia portfolio trade history in this browser.
           </p>
         </div>
         {records.length > 0 ? (
@@ -75,8 +75,7 @@ export function RecentTestSwaps({ className = '', compact = false }: RecentTestS
 
       {records.length === 0 ? (
         <p className="text-sm text-portx-muted">
-          No test swaps saved yet. Successful Sepolia basket swaps from Review &amp; Execute will
-          appear here.
+          No trades saved yet. Successful Sepolia portfolio trades will appear here.
         </p>
       ) : (
         <ul className="space-y-3">

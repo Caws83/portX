@@ -29,14 +29,15 @@ import {
   type UseTestnetBundleExecutorApprovalsResult,
 } from '@/hooks/useTestnetBundleExecutorApprovals'
 import { isTestnetSepoliaUniswapPlan } from '@/utils/testnetPreview'
+import {
+  EXECUTION_ROUTER_NAME,
+  TESTNET_BUTTONS,
+  TESTNET_CONFIRM,
+} from '@/config/testnetUxCopy'
 
-export const TESTNET_UNISWAP_BUY_CONFIRMATION_MESSAGE =
-  'Testnet only: sends Sepolia ETH through BundleExecutor via Uniswap V3 + WETH wrap testnet basket. ' +
-  'This is a real on-chain transaction using test ETH. Continue?'
+export const TESTNET_UNISWAP_BUY_CONFIRMATION_MESSAGE = TESTNET_CONFIRM.buy
 
-export const TESTNET_UNISWAP_SELL_CONFIRMATION_MESSAGE =
-  'Testnet only: sells your Sepolia basket tokens (LINK/UNI/WETH/AAVE) to USDC through BundleExecutor. ' +
-  'This is a real on-chain transaction. msg.value = 0. Continue?'
+export const TESTNET_UNISWAP_SELL_CONFIRMATION_MESSAGE = TESTNET_CONFIRM.sell
 
 /** @deprecated use TESTNET_UNISWAP_BUY_CONFIRMATION_MESSAGE */
 export const TESTNET_UNISWAP_CONFIRMATION_MESSAGE = TESTNET_UNISWAP_BUY_CONFIRMATION_MESSAGE
@@ -220,7 +221,7 @@ export function useTestnetUniswapBasketExecute(
     : executeStatus === 'pending' || isWritePending
       ? 'Transaction pending…'
       : !approvals.allApprovalsSufficient
-        ? 'Approve each basket token for BundleExecutor'
+        ? `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
         : assessment.blockedReason
 
   const reset = useCallback(() => {
@@ -268,9 +269,9 @@ export function getTestnetUniswapExecuteAmountLabel(): string {
 }
 
 export function getTestnetUniswapSellExecuteLabel(): string {
-  return 'Execute Sepolia Basket Sell'
+  return TESTNET_BUTTONS.executeTestnetSell
 }
 
 export function getTestnetUniswapBuyExecuteLabel(): string {
-  return 'Execute Sepolia Test Swap'
+  return TESTNET_BUTTONS.executeTestnetTrade
 }
