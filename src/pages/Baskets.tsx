@@ -33,6 +33,10 @@ import type { ExecutionPlan } from '@/types/execution'
 import { RecentTestSwaps } from '@/components/RecentTestSwaps'
 import { canShowTestnetMultiTokenBasketSell } from '@/utils/testnetBasketHoldings'
 import { TESTNET_BUTTONS, SEPOLIA_PORTFOLIO_TRADE } from '@/config/testnetUxCopy'
+import {
+  shouldShowTestnetEnvWarning,
+  TESTNET_EXECUTION_ENV_MESSAGE,
+} from '@/utils/testnetQuoteRouting'
 
 import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
 
@@ -217,6 +221,8 @@ export function Baskets() {
     selectedBasket !== null &&
     canPreviewQuoteForBasket(selectedBasket)
 
+  const showTestnetEnvWarning = shouldShowTestnetEnvWarning(chainId, isConnected)
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
       <div className="mb-8">
@@ -230,6 +236,12 @@ export function Baskets() {
 
       {!ENABLE_TESTNET_MODE ? (
         <ExecutionWarning variant="info" warnings={[INFO_MESSAGES.demoMode]} />
+      ) : null}
+
+      {showTestnetEnvWarning ? (
+        <StatusBanner variant="warning" className="mb-6" compact>
+          {TESTNET_EXECUTION_ENV_MESSAGE}
+        </StatusBanner>
       ) : null}
 
       <div className="mt-6 mb-8 card flex flex-col sm:flex-row sm:items-end gap-4">

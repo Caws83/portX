@@ -12,6 +12,7 @@ import {
   assessMainnetPilotEligibility,
   type MainnetPilotQuoteSource,
 } from '@/utils/mainnetPilotReadiness'
+import { shouldSuppressMainnetPilotPanel } from '@/utils/testnetQuoteRouting'
 import { formatSimulationError } from '@/utils/rpcErrors'
 
 const NATIVE_ETH_ADDRESS = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
@@ -270,8 +271,13 @@ export function useMainnetSwapExecute(
 
   const isBusy = status === 'pending' || status === 'approving' || isApprovePending || isSendPending
   const canExecuteSwap = assessment.eligible && allowanceSufficient && !isBusy && status !== 'success'
-  const showPilotUi = assessment.eligible && plan?.type === 'buy'
-  const showPilotPanel = plan?.type === 'buy'
+  const suppressMainnetPilot = shouldSuppressMainnetPilotPanel({
+    quoteSource,
+    chainId,
+    plan,
+  })
+  const showPilotUi = !suppressMainnetPilot && assessment.eligible && plan?.type === 'buy'
+  const showPilotPanel = !suppressMainnetPilot && plan?.type === 'buy'
 
   const spenderDisplay = execution?.spender
     ? `${execution.spender.slice(0, 8)}…${execution.spender.slice(-4)}`

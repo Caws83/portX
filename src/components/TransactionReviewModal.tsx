@@ -24,6 +24,7 @@ import {
 } from '@/services/executionService'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
+import { shouldSuppressMainnetPilotPanel } from '@/utils/testnetQuoteRouting'
 import {
   getTestnetUniswapExecuteAmountLabel,
   getTestnetUniswapBuyExecuteLabel,
@@ -145,10 +146,17 @@ export function TransactionReviewModal({
   const feeConfigState = useBundleExecutorFeeConfig()
   const mainnetPilot = useMainnetSwapExecute(plan, open, quoteSource ?? null)
   const isProductionPreview = !ENABLE_TESTNET_MODE
+  const suppressMainnetPilot = shouldSuppressMainnetPilotPanel({
+    quoteSource,
+    chainId,
+    plan,
+  })
   const showTestnetExecute =
     testnetExecute.isTestnetUniswapPlan && ENABLE_TESTNET_MODE && enableLiveExecution
-  const showMainnetPilotExecute = mainnetPilot.showPilotUi && !showTestnetExecute
-  const showMainnetPilotPanel = mainnetPilot.showPilotPanel && !showTestnetExecute
+  const showMainnetPilotExecute =
+    mainnetPilot.showPilotUi && !showTestnetExecute && !suppressMainnetPilot
+  const showMainnetPilotPanel =
+    mainnetPilot.showPilotPanel && !showTestnetExecute && !suppressMainnetPilot
   const savedHistoryTxRef = useRef<string | null>(null)
 
   const walletConnected = isConnected && Boolean(address)
@@ -284,7 +292,11 @@ export function TransactionReviewModal({
     featureFlagEnabled: enableLiveExecution,
   })
 
-  const showLivePrep = !plan.isDemo && readiness.hasZeroExRoute && !testnetExecute.isTestnetUniswapPlan
+  const showLivePrep =
+    !plan.isDemo &&
+    readiness.hasZeroExRoute &&
+    !testnetExecute.isTestnetUniswapPlan &&
+    !suppressMainnetPilot
   const statusTone =
     readiness.status === 'ready_for_wallet'
       ? 'border-portx-green/40 bg-portx-green/10 text-portx-green'

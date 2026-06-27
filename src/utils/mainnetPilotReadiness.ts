@@ -1,6 +1,9 @@
 import type { ExecutionPlan } from '@/types/execution'
 import { mainnet } from 'viem/chains'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
+import { TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
 import { PILOT_MIN_AMOUNT_WARNING, PILOT_MIN_BUY_AMOUNT_USD } from '@/config/constants'
+import { isTestnetSepoliaUniswapPlan } from '@/utils/testnetPreview'
 
 export type MainnetPilotQuoteSource = 'api' | 'fallback' | 'testnet' | null
 
@@ -45,6 +48,22 @@ export function assessMainnetPilotEligibility(
       eligible: false,
       disabledReason: 'No execution plan',
       checks,
+      passingChecks: [],
+      failingChecks: [],
+    }
+  }
+
+  if (
+    ENABLE_TESTNET_MODE &&
+    (context.quoteSource === 'testnet' ||
+      isTestnetSepoliaUniswapPlan(plan) ||
+      (context.currentChainId === TESTNET_SEPOLIA_CHAIN_ID &&
+        plan.legs.every((leg) => leg.quote.provider === 'uniswap-sepolia')))
+  ) {
+    return {
+      eligible: false,
+      disabledReason: null,
+      checks: [],
       passingChecks: [],
       failingChecks: [],
     }

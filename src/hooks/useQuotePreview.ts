@@ -28,15 +28,16 @@ import { buildTestnetMultiTokenSellPreview } from '@/services/testnetMultiTokenS
 import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
 import { buildExecutionPlan } from '@/services/transactionBuilder'
 import { canPreviewQuoteForBasket } from '@/utils/chainRouting'
+import {
+  getTestnetQuoteBlockMessage,
+  isTestnetRoutingBasket,
+  shouldUseTestnetUniswapQuotePath,
+} from '@/utils/testnetQuoteRouting'
 
 export type QuoteSource = 'api' | 'fallback' | 'testnet' | null
 
 function shouldUseTestnetUniswapQuote(chainId: number): boolean {
-  return (
-    ENABLE_TESTNET_MODE &&
-    ENABLE_LIVE_EXECUTION &&
-    chainId === TESTNET_SEPOLIA_CHAIN_ID
-  )
+  return shouldUseTestnetUniswapQuotePath(chainId)
 }
 
 function loadSlippage(): number {
@@ -84,6 +85,33 @@ export function useQuotePreview() {
       const params = getParams()
 
       try {
+        if (isTestnetRoutingBasket(basket.id)) {
+          if (!shouldUseTestnetUniswapQuote(params.chainId)) {
+            setError(getTestnetQuoteBlockMessage(params.chainId))
+            return null
+          }
+
+          if (!canPreviewQuoteForBasket(basket)) {
+            setError('Testnet preview is only available for active Ethereum baskets.')
+            return null
+          }
+
+          const previewParams = {
+            basketId: basket.id,
+            basketName: basket.name,
+            slippageBps: params.slippageBps,
+            allocations: basket.allocations,
+          }
+
+          const result = await buildTestnetMultiTokenBasketPreview(
+            previewParams,
+            address as `0x${string}` | undefined,
+          )
+          setPreview(result)
+          setQuoteSource('testnet')
+          return result
+        }
+
         if (ENABLE_TESTNET_MODE && ENABLE_LIVE_EXECUTION && params.chainId !== TESTNET_SEPOLIA_CHAIN_ID) {
           setError('Switch wallet to Sepolia (chain 11155111) for testnet basket preview.')
           return null
@@ -134,6 +162,13 @@ export function useQuotePreview() {
         setQuoteSource('api')
         return result
       } catch (apiErr) {
+        if (isTestnetRoutingBasket(basket.id)) {
+          const msg = apiErr instanceof Error ? apiErr.message : 'Sepolia testnet quote failed'
+          setError(msg)
+          setQuoteSource(null)
+          return null
+        }
+
         console.warn(
           '[PortX] Buy-basket quote API unavailable — using local quote fallback.',
           apiErr
@@ -177,6 +212,35 @@ export function useQuotePreview() {
       const params = getParams()
 
       try {
+        if (isTestnetRoutingBasket(basket.id)) {
+          if (!shouldUseTestnetUniswapQuote(params.chainId)) {
+            setError(getTestnetQuoteBlockMessage(params.chainId))
+            return null
+          }
+
+          if (!canPreviewQuoteForBasket(basket)) {
+            setError('Testnet sell preview is only available for active Ethereum baskets.')
+            return null
+          }
+
+          if (!balancesWei) {
+            setError('Wallet token balances are required for Sepolia multi-token sell preview.')
+            return null
+          }
+
+          const result = await buildTestnetMultiTokenSellPreview({
+            basketId: basket.id,
+            basketName: basket.name,
+            slippageBps: params.slippageBps,
+            allocations: basket.allocations,
+            balancesWei,
+            recipient: address as `0x${string}` | undefined,
+          })
+          setPreview(result)
+          setQuoteSource('testnet')
+          return result
+        }
+
         if (ENABLE_TESTNET_MODE && ENABLE_LIVE_EXECUTION && params.chainId !== TESTNET_SEPOLIA_CHAIN_ID) {
           setError('Switch wallet to Sepolia (chain 11155111) for testnet basket sell preview.')
           return null
@@ -227,7 +291,7 @@ export function useQuotePreview() {
         setQuoteSource('api')
         return result
       } catch (apiErr) {
-        if (shouldUseTestnetUniswapQuote(params.chainId) && isTestnetMultiTokenBasket(basket.id)) {
+        if (isTestnetRoutingBasket(basket.id)) {
           const msg = apiErr instanceof Error ? apiErr.message : 'Testnet sell quote failed'
           setError(msg)
           setQuoteSource(null)
