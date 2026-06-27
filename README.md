@@ -1,4 +1,4 @@
-# PortX official 
+# PortX official.
 
 **Trade portfolios like a single asset.**
 
