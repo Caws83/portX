@@ -93,6 +93,38 @@ export function executionPlanToQuotePreview(plan: ExecutionPlan): BasketQuotePre
 const SEPOLIA_CHAIN_ID = getBundleExecutorChainId()
 const MAINNET_CHAIN_ID = 1
 
+/** WETH9.deposit() — 4-byte selector only; valid on-chain but fails generic calldata length checks */
+const WETH_DEPOSIT_CALLDATA = '0xd0e30db0'
+
+function isTestnetUniswapSepoliaQuote(quote: QuoteResponse): boolean {
+  return quote.provider === 'uniswap-sepolia' && Boolean(quote.testnetSwap)
+}
+
+/** Accepts WETH deposit selector-only payloads and standard ABI-encoded router calldata */
+function isValidBundleSwapCalldata(data: string): boolean {
+  if (data?.toLowerCase() === WETH_DEPOSIT_CALLDATA) return true
+  return isValidCalldata(data)
+}
+
+/** Quote-time calldata for Sepolia legs is rebuilt at execute time from testnetSwap metadata */
+function isQuoteCalldataReadyForBundle(quote: QuoteResponse): boolean {
+  if (isTestnetUniswapSepoliaQuote(quote)) {
+    const swap = quote.testnetSwap!
+    if (swap.wethWrap) {
+      return isValidRouterAddress(quote.routerAddress)
+    }
+    if (swap.nativeEth === false) {
+      return (
+        isValidRouterAddress(quote.routerAddress) &&
+        isValidAddress(swap.tokenIn) &&
+        isValidAddress(swap.tokenOut)
+      )
+    }
+    return isValidRouterAddress(quote.routerAddress) && isValidAddress(swap.tokenOut)
+  }
+  return isValidCalldata(quote.calldata)
+}
+
 function isValidAddress(address: string): address is `0x${string}` {
   return /^0x[0-9a-fA-F]{40}$/.test(address)
 }
@@ -131,16 +163,16 @@ function resolveSwapCalldata(
   recipient?: Address,
 ): `0x${string}` | BundleExecutionValidationError {
   if (quote.provider === 'uniswap-sepolia') {
+    if (quote.testnetSwap?.wethWrap) {
+      return encodeTestnetWethDepositCalldata()
+    }
+
     if (!recipient) {
       return {
         code: 'RECIPIENT_REQUIRED',
         message: 'Wallet address is required to build non-custodial Uniswap calldata',
         field: 'walletAddress',
       }
-    }
-
-    if (quote.testnetSwap?.wethWrap) {
-      return encodeTestnetWethDepositCalldata()
     }
 
     if (quote.testnetSwap?.nativeEth === false) {
@@ -184,7 +216,7 @@ function validateSwapCallShape(swapCall: BundleSwapCall, legIndex: number): Bund
   if (!isValidRouterAddress(swapCall.router)) {
     errors.push({ code: 'INVALID_SWAP_CALL', message: 'router must be a non-zero address', field: `${prefix}.router` })
   }
-  if (!isValidCalldata(swapCall.data)) {
+  if (!isValidBundleSwapCalldata(swapCall.data)) {
     errors.push({ code: 'INVALID_SWAP_CALL', message: 'data must be valid hex calldata', field: `${prefix}.data` })
   }
   if (!isValidAddress(swapCall.tokenIn) && swapCall.tokenIn !== ZERO_ADDRESS) {
@@ -213,7 +245,7 @@ function validateQuoteStructure(quote: QuoteResponse, legIndex: number): BundleE
   if (!isValidRouterAddress(quote.routerAddress)) {
     errors.push({ code: 'INVALID_QUOTE', message: 'routerAddress is missing or invalid', field: `${prefix}.routerAddress` })
   }
-  if (!isValidCalldata(quote.calldata)) {
+  if (!isQuoteCalldataReadyForBundle(quote)) {
     errors.push({ code: 'INVALID_QUOTE', message: 'calldata is missing or invalid', field: `${prefix}.calldata` })
   }
   if (!isValidAddress(quote.inputToken.address) && quote.inputToken.symbol.toUpperCase() !== 'ETH') {
