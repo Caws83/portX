@@ -1,14 +1,14 @@
 import { SEPOLIA_TESTNET } from '@/config/networks'
 
-/** Sepolia BundleExecutor — T-2 hardened; update address after redeploy */
+/** Sepolia BundleExecutor — C-2 fee config; update address after redeploy */
 export const BUNDLE_EXECUTOR_SEPOLIA = {
   name: 'BundleExecutor',
-  address: '0x62cf7897E37155404658f885743BAfE4CDd58890' as const,
+  address: '0xcEcA20114623B87d638E785af4f3756eb4ced061' as const,
   chainId: SEPOLIA_TESTNET.chainId,
   networkLabel: SEPOLIA_TESTNET.label,
   verified: true,
-  explorerUrl: `${SEPOLIA_TESTNET.explorerBaseUrl}/address/0x62cf7897E37155404658f885743BAfE4CDd58890#code`,
-  deploymentTxUrl: `${SEPOLIA_TESTNET.explorerBaseUrl}/tx/0x6d310244583cdc9a2a10e0d4afadae6ac6790508c58b2f76f949d7edebbc8e51`,
+  explorerUrl: `${SEPOLIA_TESTNET.explorerBaseUrl}/address/0xcEcA20114623B87d638E785af4f3756eb4ced061#code`,
+  deploymentTxUrl: `${SEPOLIA_TESTNET.explorerBaseUrl}/tx/0x8cef26c3a24f372418d3760f6bb1714302e2201dd19d611ab8bc6026c00ac3cf`,
 } as const
 
 /** Sepolia MockRouter — Phase C testnet executeBasket only */
