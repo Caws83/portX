@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract PortXGenesisNFT is ERC721Enumerable, Ownable, ReentrancyGuard {
-    uint256 public constant ABSOLUTE_MAX_SUPPLY = 10000;
+    uint256 public constant ABSOLUTE_MAX_SUPPLY = 250000;
     uint256 public constant MAX_MINTS_PER_TX = 5;
 
     uint256 public maxSupply;
