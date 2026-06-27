@@ -155,7 +155,7 @@ export async function buildTestnetSellLegQuote(
     calldata,
     routerAddress: TESTNET_SWAP_ROUTER02_ADDRESS,
     warnings: [
-      'Sepolia testnet Uniswap V3 sell quote — not for production execution.',
+      'Sepolia testnet Uniswap V3 sell quote.',
       `Quoted min USDC out after ${params.slippageBps} bps slippage: ${minAmountOut.toString()}.`,
     ],
     testnetDisplayRoute: {

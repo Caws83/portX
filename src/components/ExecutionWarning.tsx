@@ -2,16 +2,22 @@ import { ENABLE_DEMO_QUOTES } from '@/config/constants'
 
 interface ExecutionWarningProps {
   warnings?: string[]
-  variant?: 'info' | 'demo' | 'slippage' | 'warning' | 'error'
+  variant?: 'info' | 'demo' | 'testnet' | 'slippage' | 'warning' | 'error'
+  /** Override default section title for demo/testnet variants */
+  title?: string
 }
 
-export function ExecutionWarning({ warnings = [], variant = 'demo' }: ExecutionWarningProps) {
+export function ExecutionWarning({
+  warnings = [],
+  variant = 'demo',
+  title,
+}: ExecutionWarningProps) {
   const base =
     variant === 'slippage' || variant === 'warning'
       ? 'border-portx-warning/50 bg-portx-warning/10 text-portx-warning'
       : variant === 'error'
         ? 'border-portx-danger/50 bg-portx-danger/10 text-portx-danger'
-        : variant === 'info'
+        : variant === 'info' || variant === 'testnet'
           ? 'border-portx-blue/30 bg-portx-blue/5 text-portx-blue'
           : 'border-portx-green/30 bg-portx-green/5 text-portx-muted'
 
@@ -25,7 +31,12 @@ export function ExecutionWarning({ warnings = [], variant = 'demo' }: ExecutionW
     <div className={`rounded-xl border p-4 text-sm space-y-2 ${base}`}>
       {variant === 'demo' && (
         <p className="font-semibold text-portx-green text-xs uppercase tracking-wide">
-          Demo / Coming Soon
+          {title ?? 'Demo / Coming Soon'}
+        </p>
+      )}
+      {variant === 'testnet' && (
+        <p className="font-semibold text-portx-green text-xs uppercase tracking-wide">
+          {title ?? 'Sepolia Testnet Trade'}
         </p>
       )}
       {items.map((w) => (

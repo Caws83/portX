@@ -41,6 +41,7 @@ import {
   formatTestnetLegInputDisplay,
   formatTestnetPlanTotalInput,
   formatTestnetPlanTotalOutput,
+  isSepoliaTestnetTradePlan,
 } from '@/utils/testnetPreview'
 import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
 import {
@@ -65,6 +66,7 @@ import {
   TESTNET_BUTTONS,
   TESTNET_SUCCESS,
   ASSET_NOT_ROUTEABLE,
+  TESTNET_TRADE_NOTE,
 } from '@/config/testnetUxCopy'
 
 type ReviewQuoteSource = 'api' | 'fallback' | 'testnet' | null
@@ -77,6 +79,16 @@ interface TransactionReviewModalProps {
   onConfirm: () => void
   confirming?: boolean
   onTestnetExecutionSuccess?: (plan: ExecutionPlan) => void
+}
+
+function getSepoliaReviewWarnings(warnings: string[]): string[] {
+  const filtered = warnings.filter(
+    (w) =>
+      !/not for production/i.test(w) &&
+      !/^Sepolia testnet Uniswap V3/i.test(w) &&
+      !/^Demo mode/i.test(w),
+  )
+  return [TESTNET_TRADE_NOTE, ...filtered]
 }
 
 function getPlanTypeLabel(plan: ExecutionPlan, testnetPlan?: boolean): string {
@@ -141,18 +153,19 @@ export function TransactionReviewModal({
   const { enableLiveExecution } = useFeatureFlags()
   const [simulation, setSimulation] = useState<SimulationResult | null>(null)
   const [simulating, setSimulating] = useState(false)
-  const testnetExecute = useTestnetUniswapBasketExecute(plan, open)
+  const testnetExecute = useTestnetUniswapBasketExecute(plan, open, quoteSource ?? null)
   const testnetBalances = useTestnetPortfolioBalances()
   const feeConfigState = useBundleExecutorFeeConfig()
   const mainnetPilot = useMainnetSwapExecute(plan, open, quoteSource ?? null)
   const isProductionPreview = !ENABLE_TESTNET_MODE
+  const isSepoliaTestnetTrade = isSepoliaTestnetTradePlan(plan, quoteSource ?? null)
   const suppressMainnetPilot = shouldSuppressMainnetPilotPanel({
     quoteSource,
     chainId,
     plan,
   })
   const showTestnetExecute =
-    testnetExecute.isTestnetUniswapPlan && ENABLE_TESTNET_MODE && enableLiveExecution
+    isSepoliaTestnetTrade && ENABLE_TESTNET_MODE && enableLiveExecution
   const showMainnetPilotExecute =
     mainnetPilot.showPilotUi && !showTestnetExecute && !suppressMainnetPilot
   const showMainnetPilotPanel =
@@ -295,7 +308,7 @@ export function TransactionReviewModal({
   const showLivePrep =
     !plan.isDemo &&
     readiness.hasZeroExRoute &&
-    !testnetExecute.isTestnetUniswapPlan &&
+    !isSepoliaTestnetTrade &&
     !suppressMainnetPilot
   const statusTone =
     readiness.status === 'ready_for_wallet'
@@ -332,12 +345,10 @@ export function TransactionReviewModal({
         <div className="flex items-start justify-between mb-6 gap-3">
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-bold">
-              {testnetExecute.isTestnetUniswapPlan ? getPlanTypeLabel(plan, true) : 'Review Transaction'}
+              {isSepoliaTestnetTrade ? getPlanTypeLabel(plan, true) : 'Review Transaction'}
             </h2>
             <p className="text-sm text-portx-muted mt-0.5">
-              {testnetExecute.isTestnetUniswapPlan
-                ? SEPOLIA_PORTFOLIO_TRADE
-                : getPlanTypeLabel(plan)}
+              {isSepoliaTestnetTrade ? SEPOLIA_PORTFOLIO_TRADE : getPlanTypeLabel(plan)}
             </p>
             <div className="mt-3">
               <QuoteQualityPanel
@@ -721,28 +732,30 @@ export function TransactionReviewModal({
             ) : null}
 
             <p className="text-xs text-portx-muted">
-              {testnetExecute.isTestnetUniswapPlan
+              {isSepoliaTestnetTrade
                 ? `${EXECUTE_PORTFOLIO_TRADE} — execute below when checks pass.`
                 : 'Payload preview only — no wallet writes.'}
             </p>
           </AdvancedDisclosure>
         )}
 
-        {testnetExecute.isTestnetUniswapPlan && (
+        {isSepoliaTestnetTrade && (
           <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-green/30 space-y-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-portx-green">
               {SEPOLIA_PORTFOLIO_TRADE}
             </p>
 
             <ExecutionWarning
-              variant="info"
+              variant="testnet"
               warnings={
                 testnetExecute.isSellPlan
                   ? [
+                      TESTNET_TRADE_NOTE,
                       'Sells your Sepolia portfolio tokens to USDC in one transaction.',
                       `Approve tokens for ${EXECUTION_ROUTER_NAME} if prompted.`,
                     ]
                   : [
+                      TESTNET_TRADE_NOTE,
                       `Buys your portfolio allocation with ${getTestnetUniswapExecuteAmountLabel()} on Sepolia.`,
                     ]
               }
@@ -1049,6 +1062,7 @@ export function TransactionReviewModal({
               allQuotes: [q],
             }
             const unsupported = isLegUnsupported(legQuote)
+            const showTestnetLegAmounts = isSepoliaTestnetTrade
             return (
               <div
                 key={leg.index}
@@ -1060,14 +1074,28 @@ export function TransactionReviewModal({
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium">
-                    {q.inputToken.symbol} → {q.outputToken.symbol}
+                    {showTestnetLegAmounts
+                      ? formatTestnetLegRouteLabel(leg)
+                      : `${q.inputToken.symbol} → ${q.outputToken.symbol}`}
                   </span>
                   <RouteProviderBadge provider={q.provider} />
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs text-portx-muted font-mono">
-                  <span>In: {formatUsd(q.inputAmountUsd)}</span>
                   <span>
-                    Out: ~{formatTokenAmount(parseFloat(q.outputAmount))} {q.outputToken.symbol}
+                    In:{' '}
+                    {showTestnetLegAmounts
+                      ? formatTestnetLegInputDisplay(leg)
+                      : formatUsd(q.inputAmountUsd)}
+                  </span>
+                  <span>
+                    Out:{' '}
+                    {showTestnetLegAmounts
+                      ? formatTestnetLegOutput(
+                          q.outputAmount,
+                          q.outputToken.decimals,
+                          q.outputToken.symbol,
+                        )
+                      : `~${formatTokenAmount(parseFloat(q.outputAmount))} ${q.outputToken.symbol}`}
                   </span>
                   <span>Gas: {formatUsd(q.estimatedGasUsd)}</span>
                   <span>Impact: {q.priceImpactPercent.toFixed(2)}%</span>
@@ -1085,7 +1113,11 @@ export function TransactionReviewModal({
             <dt className="text-portx-muted text-xs">
               {isSellPlan ? 'Est. proceeds (USDC)' : 'Est. total out'}
             </dt>
-            <dd className="font-mono font-bold text-portx-green">{formatUsd(plan.totalOutputUsd)}</dd>
+            <dd className="font-mono font-bold text-portx-green">
+              {isSepoliaTestnetTrade
+                ? formatTestnetPlanTotalOutput(plan)
+                : formatUsd(plan.totalOutputUsd)}
+            </dd>
           </div>
           <div>
             <dt className="text-portx-muted text-xs">Est. total gas</dt>
@@ -1102,14 +1134,17 @@ export function TransactionReviewModal({
         </dl>
 
         <ExecutionWarning
+          variant={
+            isSepoliaTestnetTrade ? 'testnet' : plan.isDemo ? 'demo' : showMainnetPilotPanel ? 'warning' : 'info'
+          }
           warnings={
-            plan.isDemo
+            plan.isDemo && !isSepoliaTestnetTrade
               ? [
                   'Demo mode. Real swap execution is not live yet.',
                   ...plan.warnings.filter((w) => !w.includes('Demo mode')),
                 ]
-              : testnetExecute.isTestnetUniswapPlan
-                ? plan.warnings
+              : isSepoliaTestnetTrade
+                ? getSepoliaReviewWarnings(plan.warnings)
                 : showMainnetPilotPanel
                   ? [
                       'Mainnet pilot — single-leg buy only. Multi-leg and sell execution remain disabled.',
@@ -1127,7 +1162,7 @@ export function TransactionReviewModal({
         )}
 
         <div className="flex gap-3 mt-6">
-          {testnetExecute.isTestnetUniswapPlan && testnetExecute.status === 'success' ? (
+          {isSepoliaTestnetTrade && testnetExecute.status === 'success' ? (
             <>
               <button
                 type="button"
@@ -1158,20 +1193,7 @@ export function TransactionReviewModal({
               <button type="button" onClick={onClose} className="btn-secondary flex-1">
                 Cancel
               </button>
-              {plan.isDemo && !isProductionPreview ? (
-                <button
-                  type="button"
-                  onClick={onConfirm}
-                  disabled={confirming}
-                  className="btn-primary flex-1 disabled:opacity-50"
-                >
-                  {confirming
-                    ? 'Processing...'
-                    : ENABLE_TESTNET_MODE
-                      ? TESTNET_BUTTONS.confirmDemoExecution
-                      : 'Confirm Demo Execution'}
-                </button>
-              ) : showTestnetExecute ? (
+              {showTestnetExecute ? (
                 <button
                   type="button"
                   onClick={() => void testnetExecute.execute()}
@@ -1186,6 +1208,33 @@ export function TransactionReviewModal({
                     : testnetExecute.isSellPlan
                       ? getTestnetUniswapSellExecuteLabel()
                       : getTestnetUniswapBuyExecuteLabel()}
+                </button>
+              ) : isSepoliaTestnetTrade ? (
+                <button
+                  type="button"
+                  disabled
+                  title={
+                    testnetExecute.disabledReason ??
+                    'Complete Sepolia testnet checks to enable execution.'
+                  }
+                  className="btn-primary flex-1 opacity-50 cursor-not-allowed"
+                >
+                  {testnetExecute.isSellPlan
+                    ? TESTNET_BUTTONS.executeTestnetSell
+                    : TESTNET_BUTTONS.executeTestnetTrade}
+                </button>
+              ) : plan.isDemo && !isProductionPreview ? (
+                <button
+                  type="button"
+                  onClick={onConfirm}
+                  disabled={confirming}
+                  className="btn-primary flex-1 disabled:opacity-50"
+                >
+                  {confirming
+                    ? 'Processing...'
+                    : ENABLE_TESTNET_MODE
+                      ? TESTNET_BUTTONS.confirmDemoExecution
+                      : 'Confirm Demo Execution'}
                 </button>
               ) : showMainnetPilotExecute ? (
                 <button

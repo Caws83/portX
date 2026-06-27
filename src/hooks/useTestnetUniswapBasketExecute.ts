@@ -28,7 +28,7 @@ import {
   useTestnetBundleExecutorApprovals,
   type UseTestnetBundleExecutorApprovalsResult,
 } from '@/hooks/useTestnetBundleExecutorApprovals'
-import { isTestnetSepoliaUniswapPlan } from '@/utils/testnetPreview'
+import { isSepoliaTestnetTradePlan, type TestnetQuoteSource } from '@/utils/testnetPreview'
 import {
   EXECUTION_ROUTER_NAME,
   TESTNET_BUTTONS,
@@ -86,6 +86,7 @@ async function simulateBundleExecution(
 export function useTestnetUniswapBasketExecute(
   plan: ExecutionPlan | null,
   open: boolean,
+  quoteSource: TestnetQuoteSource = null,
 ): UseTestnetUniswapBasketExecuteResult {
   const { isConnected, address } = useAccount()
   const chainId = useChainId()
@@ -107,8 +108,8 @@ export function useTestnetUniswapBasketExecute(
   const [simulating, setSimulating] = useState(false)
 
   const isTestnetUniswapPlan = useMemo(
-    () => (plan ? isTestnetSepoliaUniswapPlan(plan) : false),
-    [plan],
+    () => (plan ? isSepoliaTestnetTradePlan(plan, quoteSource) : false),
+    [plan, quoteSource],
   )
 
   const isSellPlan = plan?.type === 'sell_basket'

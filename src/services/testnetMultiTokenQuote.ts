@@ -293,7 +293,7 @@ export async function buildTestnetSwapLegQuote(
     calldata,
     routerAddress: TESTNET_SWAP_ROUTER02_ADDRESS,
     warnings: [
-      'Sepolia testnet Uniswap V3 quote — not for production execution.',
+      'Sepolia testnet Uniswap V3 quote.',
       `Quoted min out after ${params.slippageBps} bps slippage: ${minAmountOut.toString()} (${params.outputToken.decimals} decimals).`,
     ],
     testnetDisplayRoute: params.usdcNotionalDisplay

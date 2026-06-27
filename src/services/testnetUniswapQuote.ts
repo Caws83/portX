@@ -222,7 +222,7 @@ function buildQuoteResponse(
     calldata: details.calldata,
     routerAddress: details.routerAddress,
     warnings: [
-      'Sepolia testnet Uniswap V3 quote — not for production execution.',
+      'Sepolia testnet Uniswap V3 quote.',
       `Quoted min out after ${details.slippageBps} bps slippage: ${details.minAmountOut.toString()} (6 decimals).`,
     ],
     testnetSwap: {

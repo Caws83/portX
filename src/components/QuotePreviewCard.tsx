@@ -3,7 +3,7 @@ import { formatEther, formatUnits } from 'viem'
 import type { BasketQuotePreview } from '@/types/quote'
 import { BUTTON_LABELS } from '@/config/uiCopy'
 import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI, TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
-import { SEPOLIA_PORTFOLIO_TRADE } from '@/config/testnetUxCopy'
+import { SEPOLIA_PORTFOLIO_TRADE, TESTNET_TRADE_NOTE } from '@/config/testnetUxCopy'
 import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
 import { TestnetProtocolFeeSummary } from '@/components/TestnetProtocolFeeSummary'
 import {
@@ -321,7 +321,21 @@ export function QuotePreviewCard({
 
       <AllocationBreakdown legs={preview.legs} direction={direction} />
 
-      <ExecutionWarning warnings={preview.warnings} />
+      <ExecutionWarning
+        variant={isTestnetPreview && quoteSource === 'testnet' ? 'testnet' : 'demo'}
+        warnings={
+          isTestnetPreview && quoteSource === 'testnet'
+            ? [
+                TESTNET_TRADE_NOTE,
+                ...preview.warnings.filter(
+                  (w) =>
+                    !/not for production/i.test(w) &&
+                    !/^Sepolia testnet Uniswap V3/i.test(w),
+                ),
+              ]
+            : preview.warnings
+        }
+      />
 
       {onReview && (
         <button

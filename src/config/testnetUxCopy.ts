@@ -11,6 +11,11 @@ export const ASSET_NOT_ROUTEABLE = 'Asset not routeable on this network'
 export const TESTNET_BANNER_MESSAGE =
   'Testnet mode uses Sepolia assets only. No real funds are used.'
 
+export const TESTNET_TRADE_NOTE =
+  'This is a Sepolia testnet trade. No real funds are used.'
+
+export const SEPOLIA_TESTNET_TRADE_TITLE = 'Sepolia Testnet Trade'
+
 export const TESTNET_BUTTONS = {
   previewPortfolio: 'Preview Portfolio',
   previewSell: 'Preview Sell',
