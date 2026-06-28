@@ -30,7 +30,7 @@ import {
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
 import { TestnetPortfolioSummary } from '@/components/TestnetPortfolioSummary'
-import { useTestnetPortfolioTradeActions } from '@/hooks/useTestnetPortfolioTradeActions'
+import { usePortfolioTradeEngine } from '@/hooks/usePortfolioTradeEngine'
 import { TestnetPortfolioTradeModals } from '@/components/TestnetPortfolioTradeModals'
 import { formatUsd, formatPercent } from '@/utils/format'
 
@@ -276,7 +276,7 @@ function TestnetDashboard() {
   const testnetPortfolio = useTestnetDashboardPortfolio()
   const { canSell, hasBasketHoldings } = useTestnetPortfolioOwnership()
   const { allBaskets, basketsLoading } = useBasket()
-  const trade = useTestnetPortfolioTradeActions()
+  const trade = usePortfolioTradeEngine()
 
   const ownedPortfolios = useMemo(() => {
     if (testnetPortfolio.activeBaskets.length > 0) return testnetPortfolio.activeBaskets
@@ -431,22 +431,7 @@ function TestnetDashboard() {
         />
       </section>
 
-      <TestnetPortfolioTradeModals
-        preview={trade.preview}
-        plan={trade.plan}
-        quoteSource={trade.quoteSource}
-        loading={trade.loading}
-        selectedBasket={trade.selectedBasket}
-        modalOpen={trade.modalOpen}
-        confirming={trade.confirming}
-        showQuotePreview={trade.showQuotePreview}
-        rebalanceBasket={trade.rebalanceBasket}
-        onCloseModal={() => trade.setModalOpen(false)}
-        onConfirm={() => void trade.handleConfirm()}
-        onReview={trade.openReviewModal}
-        onTestnetExecutionSuccess={trade.handleTestnetExecutionSuccess}
-        onCloseRebalance={trade.closeRebalancePreview}
-      />
+      <TestnetPortfolioTradeModals />
     </>
   )
 }

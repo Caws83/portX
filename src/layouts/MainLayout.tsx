@@ -3,6 +3,7 @@ import { AppModeBanner } from '@/components/AppModeIndicator'
 import { Navbar } from '@/components/Navbar'
 import { Logo } from '@/components/Logo'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
+import { PortfolioTradeProvider } from '@/context/PortfolioTradeProvider'
 
 export function MainLayout() {
   return (
@@ -10,7 +11,9 @@ export function MainLayout() {
       <Navbar />
       <main className="flex-1 pt-[7.25rem] lg:pt-[5.25rem]">
         <AppModeBanner />
-        <Outlet />
+        <PortfolioTradeProvider>
+          <Outlet />
+        </PortfolioTradeProvider>
       </main>
       <footer className="border-t border-portx-border py-8 mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-portx-muted flex flex-col items-center gap-3">

@@ -12,7 +12,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBanner } from '@/components/ui/StatusBanner'
 import { useBasket } from '@/hooks/useBasket'
 import { useQuotePreview } from '@/hooks/useQuotePreview'
-import { useTestnetPortfolioTradeActions } from '@/hooks/useTestnetPortfolioTradeActions'
+import { usePortfolioTradeEngineOptional } from '@/hooks/usePortfolioTradeEngine'
 import { TestnetPortfolioTradeModals } from '@/components/TestnetPortfolioTradeModals'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
@@ -83,10 +83,10 @@ export function Baskets() {
   const [localConfirming, setLocalConfirming] = useState(false)
   const [localTxMsg, setLocalTxMsg] = useState<string | null>(null)
 
-  const testnetTrade = useTestnetPortfolioTradeActions({ buyAmountUsd: buyAmount })
+  const testnetTrade = usePortfolioTradeEngineOptional()
   const productionQuote = useQuotePreview()
 
-  const activeQuote = ENABLE_TESTNET_MODE ? testnetTrade : productionQuote
+  const activeQuote = ENABLE_TESTNET_MODE && testnetTrade ? testnetTrade : productionQuote
   const {
     preview,
     plan,
@@ -101,16 +101,28 @@ export function Baskets() {
     clear,
   } = activeQuote
 
-  const selectedBasket = ENABLE_TESTNET_MODE ? testnetTrade.selectedBasket : localSelectedBasket
-  const rebalanceBasket = ENABLE_TESTNET_MODE ? testnetTrade.rebalanceBasket : localRebalanceBasket
-  const modalOpen = ENABLE_TESTNET_MODE ? testnetTrade.modalOpen : localModalOpen
-  const setModalOpen = ENABLE_TESTNET_MODE ? testnetTrade.setModalOpen : setLocalModalOpen
-  const confirming = ENABLE_TESTNET_MODE ? testnetTrade.confirming : localConfirming
-  const txMsg = ENABLE_TESTNET_MODE ? testnetTrade.txMsg : localTxMsg
-  const setTxMsg = ENABLE_TESTNET_MODE ? testnetTrade.setTxMsg : setLocalTxMsg
+  const selectedBasket = ENABLE_TESTNET_MODE && testnetTrade ? testnetTrade.selectedBasket : localSelectedBasket
+  const rebalanceBasket = ENABLE_TESTNET_MODE && testnetTrade ? testnetTrade.rebalanceBasket : localRebalanceBasket
+  const modalOpen = ENABLE_TESTNET_MODE && testnetTrade ? testnetTrade.modalOpen : localModalOpen
+  const setModalOpen = ENABLE_TESTNET_MODE && testnetTrade ? testnetTrade.setModalOpen : setLocalModalOpen
+  const confirming = ENABLE_TESTNET_MODE && testnetTrade ? testnetTrade.confirming : localConfirming
+  const txMsg = ENABLE_TESTNET_MODE && testnetTrade ? testnetTrade.txMsg : localTxMsg
+  const setTxMsg = ENABLE_TESTNET_MODE && testnetTrade ? testnetTrade.setTxMsg : setLocalTxMsg
+
+  const setBuyAmountForPage = (amount: number) => {
+    if (ENABLE_TESTNET_MODE && testnetTrade) {
+      testnetTrade.setBuyAmountUsd(amount)
+      return
+    }
+    setBuyAmount(amount)
+  }
+
+  const buyAmountForPage =
+    ENABLE_TESTNET_MODE && testnetTrade ? testnetTrade.buyAmountUsd : buyAmount
 
   const setSelectedBasket = (basket: Basket | null) => {
     if (ENABLE_TESTNET_MODE) {
+      if (!testnetTrade) return
       if (basket === null) testnetTrade.closeTradeFlow()
       else testnetTrade.selectBasket(basket)
       return
@@ -120,6 +132,7 @@ export function Baskets() {
 
   const setRebalanceBasket = (basket: Basket | null) => {
     if (ENABLE_TESTNET_MODE) {
+      if (!testnetTrade) return
       if (basket === null) testnetTrade.closeRebalancePreview()
       else testnetTrade.openRebalancePreview(basket)
       return
@@ -141,7 +154,7 @@ export function Baskets() {
 
   const handleTestnetExecutionSuccess = (executedPlan: ExecutionPlan) => {
     if (ENABLE_TESTNET_MODE) {
-      testnetTrade.handleTestnetExecutionSuccess()
+      testnetTrade?.handleTestnetExecutionSuccess()
       return
     }
     testnetBalances.refresh()
@@ -190,6 +203,7 @@ export function Baskets() {
     setSelectedBasket(basket)
     setTxMsg(null)
     if (ENABLE_TESTNET_MODE) {
+      if (!testnetTrade) return
       await testnetTrade.openBuyPreview(basket)
       return
     }
@@ -201,6 +215,7 @@ export function Baskets() {
     setSelectedBasket(basket)
     setTxMsg(null)
     if (ENABLE_TESTNET_MODE) {
+      if (!testnetTrade) return
       await testnetTrade.openSellPreview(basket)
       return
     }
@@ -215,7 +230,7 @@ export function Baskets() {
   const handleReview = () => {
     if (!preview || !selectedBasket || !canShowBasketQuotes(selectedBasket)) return
     if (ENABLE_TESTNET_MODE) {
-      testnetTrade.openReviewModal()
+      testnetTrade?.openReviewModal()
       return
     }
     buildPlan(preview)
@@ -225,6 +240,7 @@ export function Baskets() {
   const handleConfirm = async () => {
     if (!plan) return
     if (ENABLE_TESTNET_MODE) {
+      if (!testnetTrade) return
       await testnetTrade.handleConfirm()
       return
     }
@@ -270,7 +286,7 @@ export function Baskets() {
 
   const clearSelection = () => {
     if (ENABLE_TESTNET_MODE) {
-      testnetTrade.closeTradeFlow()
+      testnetTrade?.closeTradeFlow()
       return
     }
     clear()
@@ -292,13 +308,13 @@ export function Baskets() {
     if (!basket) return
 
     if (state.action === 'sell') {
-      if (ENABLE_TESTNET_MODE) void testnetTrade.openSellPreviewAndReview(basket)
+      if (ENABLE_TESTNET_MODE) void testnetTrade?.openSellPreviewAndReview(basket)
       else void handlePreviewSell(basket)
     } else if (state.action === 'rebalance') {
       setRebalanceBasket(basket)
       setSelectedBasket(basket)
     } else {
-      if (ENABLE_TESTNET_MODE) void testnetTrade.openBuyPreviewAndReview(basket)
+      if (ENABLE_TESTNET_MODE) void testnetTrade?.openBuyPreviewAndReview(basket)
       else void handlePreviewBuy(basket)
     }
 
@@ -325,10 +341,12 @@ export function Baskets() {
             balanceDisplay: asset.balanceDisplay,
             estimatedValueDisplay: asset.estimatedValueDisplay,
           }))}
-          onBuyMore={() => void testnetTrade.openBuyPreviewAndReview(basket)}
-          onSell={() => void testnetTrade.openSellPreviewAndReview(basket)}
-          onRebalance={() => testnetTrade.openRebalancePreview(basket)}
-          actionLoading={testnetTrade.loading && testnetTrade.selectedBasket?.id === basket.id}
+          onBuyMore={() => void testnetTrade?.openBuyPreviewAndReview(basket)}
+          onSell={() => void testnetTrade?.openSellPreviewAndReview(basket)}
+          onRebalance={() => testnetTrade?.openRebalancePreview(basket)}
+          actionLoading={
+            (testnetTrade?.loading ?? false) && testnetTrade?.selectedBasket?.id === basket.id
+          }
         />
       )
     }
@@ -400,15 +418,15 @@ export function Baskets() {
             type="number"
             min={100}
             step={100}
-            value={buyAmount}
-            onChange={(e) => setBuyAmount(parseFloat(e.target.value) || 0)}
+            value={buyAmountForPage}
+            onChange={(e) => setBuyAmountForPage(parseFloat(e.target.value) || 0)}
             className="input-field max-w-xs font-mono w-full"
             disabled={showPlannedPanel}
             aria-disabled={showPlannedPanel}
           />
         </div>
         <p className="text-xs text-portx-muted sm:max-w-md">
-          Example: ${buyAmount.toLocaleString()} USDC into an Ethereum basket splits across
+          Example: ${buyAmountForPage.toLocaleString()} USDC into an Ethereum basket splits across
           allocation legs, each quoted independently. Planned-chain baskets do not request quotes.
         </p>
       </div>
@@ -581,25 +599,11 @@ export function Baskets() {
 
       {ENABLE_TESTNET_MODE ? (
         <TestnetPortfolioTradeModals
-          preview={testnetTrade.preview}
-          plan={testnetTrade.plan}
-          quoteSource={testnetTrade.quoteSource}
-          loading={testnetTrade.loading}
-          selectedBasket={testnetTrade.selectedBasket}
-          modalOpen={testnetTrade.modalOpen}
-          confirming={testnetTrade.confirming}
-          showQuotePreview={testnetTrade.showQuotePreview}
-          rebalanceBasket={testnetTrade.rebalanceBasket}
           rebalanceDrift={
-            testnetTrade.rebalanceBasket
+            testnetTrade?.rebalanceBasket
               ? getDriftForBasket(testnetTrade.rebalanceBasket.id)
               : null
           }
-          onCloseModal={() => testnetTrade.setModalOpen(false)}
-          onConfirm={() => void testnetTrade.handleConfirm()}
-          onReview={testnetTrade.openReviewModal}
-          onTestnetExecutionSuccess={testnetTrade.handleTestnetExecutionSuccess}
-          onCloseRebalance={testnetTrade.closeRebalancePreview}
         />
       ) : (
         <>

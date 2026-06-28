@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useSellAllPreview } from '@/hooks/useSellAllPreview'
 import { useTestnetPortfolioOwnership } from '@/hooks/useTestnetPortfolioOwnership'
-import { useTestnetPortfolioTradeActions } from '@/hooks/useTestnetPortfolioTradeActions'
+import { usePortfolioTradeEngine } from '@/hooks/usePortfolioTradeEngine'
 import { SellAllButton } from '@/components/SellAllButton'
 import { TargetSellForm } from '@/components/TargetSellForm'
 import { StopLossForm } from '@/components/StopLossForm'
@@ -31,7 +31,7 @@ import { estimateBasketHoldingsValueUsd } from '@/utils/basketCatalog'
 
 function TestnetSellAll() {
   const { portfolio, hasBasketHoldings, canSell } = useTestnetPortfolioOwnership()
-  const trade = useTestnetPortfolioTradeActions()
+  const trade = usePortfolioTradeEngine()
 
   const ownedBasket = useMemo(() => {
     if (hasBasketHoldings) return TESTNET_MULTI_TOKEN_BASKET
@@ -202,20 +202,7 @@ function TestnetSellAll() {
         )
       )}
 
-      <TestnetPortfolioTradeModals
-        preview={trade.preview}
-        plan={trade.plan}
-        quoteSource={trade.quoteSource}
-        loading={trade.loading}
-        selectedBasket={trade.selectedBasket}
-        modalOpen={trade.modalOpen}
-        confirming={trade.confirming}
-        showQuotePreview={trade.showQuotePreview}
-        onCloseModal={() => trade.setModalOpen(false)}
-        onConfirm={() => void trade.handleConfirm()}
-        onReview={trade.openReviewModal}
-        onTestnetExecutionSuccess={trade.handleTestnetExecutionSuccess}
-      />
+      <TestnetPortfolioTradeModals />
     </div>
   )
 }
