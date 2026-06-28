@@ -1,11 +1,14 @@
 import type { Basket } from '@/types/basket'
 import { BasketChainBadge } from '@/components/BasketChainBadge'
 import { PortfolioDriftBadge } from '@/components/PortfolioDriftBadge'
+import { TokenLogo } from '@/components/TokenLogo'
 import { formatUsd } from '@/utils/format'
 import { BUTTON_LABELS } from '@/config/uiCopy'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { TESTNET_BUTTONS } from '@/config/testnetUxCopy'
-import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
+import { canShowBasketQuotes } from '@/utils/basketCatalog'
+import { SPORT_FAN_ROUTING_MESSAGE } from '@/data/sportFanBaskets'
+import { getPlannedChainMessage } from '@/utils/chainRouting'
 import type { DriftStatusLevel } from '@/utils/portfolioDrift'
 
 interface BasketCardProps {
@@ -37,8 +40,11 @@ export function BasketCard({
   isSelected,
 }: BasketCardProps) {
   const tokenCount = basket.allocations.length
-  const quotesAvailable = canPreviewQuoteForBasket(basket)
-  const plannedMessage = getPlannedChainMessage(basket)
+  const quotesAvailable = canShowBasketQuotes(basket)
+  const isTemplate = basket.templateOnly === true
+  const plannedMessage = isTemplate
+    ? SPORT_FAN_ROUTING_MESSAGE
+    : getPlannedChainMessage(basket)
 
   const showSellButton = Boolean(onPreviewSell && (isOwned || canPreviewSell))
 
@@ -46,18 +52,29 @@ export function BasketCard({
     <div
       className={`card-glow flex flex-col h-full min-w-0 hover:border-portx-green/30 transition-colors ${
         isSelected ? 'border-portx-green/50 shadow-glow' : ''
-      }`}
+      } ${isOwned ? 'border-portx-green/25' : ''}`}
     >
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="min-w-0">
           <h3 className="text-lg font-bold">{basket.name}</h3>
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
             <span className="badge">{basket.tag}</span>
+            {basket.tags?.slice(0, 2).map((tag) => (
+              <span key={tag} className="badge-blue text-[10px]">
+                {tag}
+              </span>
+            ))}
             <BasketChainBadge chainLabel={basket.chainLabel} chainStatus={basket.chainStatus} />
             {isOwned && driftStatus && <PortfolioDriftBadge status={driftStatus} />}
+            {isOwned && !driftStatus && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-portx-green">
+                Owned
+              </span>
+            )}
           </div>
         </div>
         {basket.isCustom && <span className="badge-blue text-[10px] shrink-0">Custom</span>}
+        {isTemplate && <span className="badge text-[10px] shrink-0">Template</span>}
       </div>
 
       <p className="text-sm text-portx-muted mb-4 flex-grow">{basket.description}</p>
@@ -66,15 +83,23 @@ export function BasketCard({
         {basket.allocations.map(({ token, weightPercent }) => (
           <span
             key={token.symbol}
-            className="text-xs px-2 py-1 rounded-md bg-portx-surface border border-portx-border font-mono"
+            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-portx-surface border border-portx-border font-mono"
           >
+            <TokenLogo symbol={token.symbol} logoUrl={token.logoUrl} />
             {token.symbol} {weightPercent}%
           </span>
         ))}
       </div>
 
       <div className="text-sm text-portx-muted mb-4">
-        {tokenCount} tokens · Demo TVL {formatUsd(basket.totalValueUsd ?? 0, true)}
+        {tokenCount} tokens
+        {ENABLE_TESTNET_MODE
+          ? isTemplate
+            ? ' · Preview template'
+            : isOwned
+              ? ' · In your wallet'
+              : ''
+          : ` · Demo TVL ${formatUsd(basket.totalValueUsd ?? 0, true)}`}
       </div>
 
       {!quotesAvailable && (
@@ -112,7 +137,9 @@ export function BasketCard({
                 ? ENABLE_TESTNET_MODE
                   ? TESTNET_BUTTONS.previewPortfolio
                   : BUTTON_LABELS.previewQuote
-                : BUTTON_LABELS.quotesUnavailable}
+                : isTemplate
+                  ? 'Coming soon'
+                  : BUTTON_LABELS.quotesUnavailable}
           </button>
         )}
         {showSellButton && (
@@ -135,13 +162,9 @@ export function BasketCard({
             {loading && quotesAvailable
               ? BUTTON_LABELS.fetchingQuotes
               : quotesAvailable
-                ? canPreviewSell && !isOwned
-                  ? ENABLE_TESTNET_MODE
-                    ? 'Preview Sell (Holdings)'
-                    : 'Preview Sell (Wallet Holdings)'
-                  : ENABLE_TESTNET_MODE
-                    ? TESTNET_BUTTONS.previewSell
-                    : BUTTON_LABELS.previewSellQuote
+                ? ENABLE_TESTNET_MODE
+                  ? TESTNET_BUTTONS.previewSell
+                  : BUTTON_LABELS.previewSellQuote
                 : BUTTON_LABELS.quotesUnavailable}
           </button>
         )}
@@ -151,10 +174,10 @@ export function BasketCard({
             onClick={() => onPreviewRebalance(basket)}
             className="btn-secondary w-full text-sm py-2.5 border-portx-blue/40 text-portx-blue hover:border-portx-blue/60"
           >
-            Preview Rebalance
+            Rebalance
           </button>
         )}
-        {onBuy && (
+        {onBuy && !ENABLE_TESTNET_MODE && (
           <button
             type="button"
             onClick={() => (quotesAvailable ? onBuy(basket) : onPlannedChainSelect?.(basket))}

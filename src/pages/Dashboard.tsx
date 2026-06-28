@@ -1,15 +1,17 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { PortfolioSummary, PortfolioCard } from '@/components/PortfolioCard'
 import { TokenRow } from '@/components/TokenRow'
 import { BasketCard } from '@/components/BasketCard'
+import { MyPortfolioCard } from '@/components/MyPortfolioCard'
 import { WhalePortfolioCard } from '@/components/WhalePortfolioCard'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBanner } from '@/components/ui/StatusBanner'
 import { PortfolioHealthCard } from '@/components/PortfolioHealthCard'
 import { PortfolioRebalancePreviewModal } from '@/components/PortfolioRebalancePreviewModal'
-import { AdvancedDisclosure } from '@/components/ui/AdvancedDisclosure'
+import { RecentTestSwaps } from '@/components/RecentTestSwaps'
+import { TestnetRebalancePreview } from '@/components/TestnetRebalancePreview'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useBasket } from '@/hooks/useBasket'
 import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
@@ -17,6 +19,7 @@ import { useTestnetDashboardPortfolio } from '@/hooks/useTestnetDashboardPortfol
 import { NOTABLE_PORTFOLIOS } from '@/data/notablePortfolios'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { TESTNET_DASHBOARD } from '@/config/testnetUxCopy'
+import { estimateBasketHoldingsValueUsd } from '@/utils/basketCatalog'
 import {
   BUTTON_LABELS,
   EMPTY_MESSAGES,
@@ -97,9 +100,10 @@ function ProductionDashboard() {
       {!portfolio.portfolioLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
           <PortfolioCard
-            label="Number of Positions"
-            value={String(portfolio.positionCount)}
-            subValue="Token holdings"
+            label="Portfolio Value"
+            value={formatUsd(portfolio.totalValueUsd)}
+            subValue="Demo portfolio"
+            highlight
           />
           <PortfolioCard
             label="Largest Position"
@@ -112,10 +116,10 @@ function ProductionDashboard() {
             highlight={!!portfolio.largestPosition}
           />
           <PortfolioCard
-            label="Active Baskets"
+            label="My Portfolios"
             value={String(portfolio.activeBasketsCount)}
             subValue={
-              portfolio.activeBasketsCount === 1 ? '1 basket' : `${portfolio.activeBasketsCount} baskets`
+              portfolio.activeBasketsCount === 1 ? '1 portfolio' : `${portfolio.activeBasketsCount} portfolios`
             }
           />
         </div>
@@ -141,7 +145,7 @@ function ProductionDashboard() {
 
       <div className="grid lg:grid-cols-2 gap-6 mt-8">
         <div className="card min-w-0">
-          <h2 className="text-lg font-bold tracking-tight mb-4">Tokens Held</h2>
+          <h2 className="text-lg font-bold tracking-tight mb-4">Wallet Assets</h2>
           {portfolio.portfolioLoading ? (
             <p className="text-portx-muted text-sm" role="status">
               {LOADING_MESSAGES.holdings}
@@ -196,7 +200,7 @@ function ProductionDashboard() {
       <section className="mt-10">
         <div className="flex items-center justify-between mb-6 gap-4">
           <div>
-            <h2 className="text-xl font-bold">Trending now</h2>
+            <h2 className="text-xl font-bold">Featured Portfolios</h2>
             <p className="text-sm text-portx-muted">Portfolio templates — copy from Discover</p>
           </div>
           <Link to="/discover" className="text-sm text-portx-green hover:underline shrink-0">
@@ -212,7 +216,7 @@ function ProductionDashboard() {
 
       <section className="mt-10">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">Active Baskets</h2>
+          <h2 className="text-xl font-bold">My Portfolios</h2>
           <Link to="/baskets" className="text-sm text-portx-green hover:underline">
             View all baskets →
           </Link>
@@ -264,10 +268,14 @@ function ProductionDashboard() {
 }
 
 function TestnetDashboard() {
+  const navigate = useNavigate()
   const { isConnected } = useAccount()
   const testnetPortfolio = useTestnetDashboardPortfolio()
-  const { basketsLoading } = useBasket()
-  const demoPortfolio = usePortfolio()
+  const { allBaskets, basketsLoading } = useBasket()
+
+  const goToBasket = (basketId: string, action: 'buy' | 'sell' | 'rebalance') => {
+    navigate('/baskets', { state: { basketId, action } })
+  }
 
   return (
     <>
@@ -314,39 +322,33 @@ function TestnetDashboard() {
           <PortfolioCard
             label={TESTNET_DASHBOARD.positionsLabel}
             value={String(testnetPortfolio.assetCount)}
-            subValue="Non-zero Sepolia ERC-20 balances"
+            subValue="Non-zero Sepolia balances"
           />
           <PortfolioCard
             label={TESTNET_DASHBOARD.activeBasketsLabel}
             value={String(testnetPortfolio.activeBasketsCount)}
             subValue={
               testnetPortfolio.activeBasketsCount === 1
-                ? '1 testnet basket'
-                : `${testnetPortfolio.activeBasketsCount} testnet baskets`
+                ? '1 portfolio'
+                : `${testnetPortfolio.activeBasketsCount} portfolios`
             }
           />
         </div>
       )}
 
-      <TestnetPortfolioSummary
-        className="mt-6"
-        embeddedInDashboard
-        portfolio={testnetPortfolio}
-      />
-
-      <section className="mt-10">
+      <section className="mt-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">Active Baskets</h2>
+          <h2 className="text-xl font-bold">{TESTNET_DASHBOARD.myPortfoliosTitle}</h2>
           <Link to="/baskets" className="text-sm text-portx-green hover:underline">
-            View all baskets →
+            Browse baskets →
           </Link>
         </div>
         {basketsLoading || testnetPortfolio.isLoading ? (
           <StatusBanner variant="loading">{LOADING_MESSAGES.basketDetails}</StatusBanner>
         ) : testnetPortfolio.activeBaskets.length === 0 ? (
           <EmptyState
-            title="No active testnet baskets"
-            description="Execute a Sepolia Multi-Token Beta trade from Baskets to build an on-chain portfolio."
+            title={TESTNET_DASHBOARD.myPortfoliosEmptyTitle}
+            description={TESTNET_DASHBOARD.myPortfoliosEmptyDescription}
             action={
               <Link to="/baskets" className="btn-primary">
                 {BUTTON_LABELS.exploreBaskets}
@@ -355,31 +357,48 @@ function TestnetDashboard() {
           />
         ) : (
           <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
-            {testnetPortfolio.activeBaskets.map(({ basket, basketId, source }) => (
-              <div key={basketId} className="card-glow min-w-0">
-                <BasketCard basket={basket} isOwned />
-                <p className="text-xs text-zinc-400 mt-3">
-                  Inferred from on-chain {source === 'both' ? 'holdings and trade history' : 'holdings'}
-                </p>
-              </div>
-            ))}
+            {testnetPortfolio.activeBaskets.map(({ basket, basketId, source }) => {
+              const estimatedValueUsd = estimateBasketHoldingsValueUsd(
+                basket,
+                testnetPortfolio.walletAssets,
+              )
+              return (
+                <MyPortfolioCard
+                  key={basketId}
+                  basket={basket}
+                  estimatedValueUsd={estimatedValueUsd}
+                  ownershipNote={`Inferred from ${source === 'both' ? 'holdings and trade history' : 'on-chain holdings'}`}
+                  canSell={testnetPortfolio.walletAssets.length > 0}
+                  onBuyMore={() => goToBasket(basketId, 'buy')}
+                  onSell={() => goToBasket(basketId, 'sell')}
+                  onRebalance={() => goToBasket(basketId, 'rebalance')}
+                />
+              )
+            })}
           </div>
         )}
       </section>
 
-      <AdvancedDisclosure title={TESTNET_DASHBOARD.advancedDemoTitle} className="mt-10">
-        <p className="text-xs text-portx-muted">
-          Production/API portfolio preview for reference only — not used for Sepolia testnet trading.
-        </p>
-        {!demoPortfolio.portfolioLoading && (
-          <PortfolioSummary
-            totalValueUsd={demoPortfolio.totalValueUsd}
-            pnlUsd={demoPortfolio.pnlUsd}
-            pnlPercent={demoPortfolio.pnlPercent}
-            costBasisUsd={demoPortfolio.costBasisUsd}
-          />
-        )}
-      </AdvancedDisclosure>
+      <section className="mt-10">
+        <h2 className="text-xl font-bold mb-4">{TESTNET_DASHBOARD.recentTradesTitle}</h2>
+        <RecentTestSwaps compact />
+      </section>
+
+      <TestnetPortfolioSummary
+        className="mt-10"
+        embeddedInDashboard
+        portfolio={testnetPortfolio}
+      />
+
+      <section className="mt-10">
+        <h2 className="text-xl font-bold mb-4">{TESTNET_DASHBOARD.rebalanceTitle}</h2>
+        <TestnetRebalancePreview
+          balances={testnetPortfolio.balances}
+          latestPosition={testnetPortfolio.latestExecution}
+          baskets={allBaskets}
+          compact
+        />
+      </section>
     </>
   )
 }

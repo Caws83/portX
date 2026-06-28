@@ -21,13 +21,19 @@ export const TESTNET_DASHBOARD = {
   portfolioSectionTitle: 'Sepolia wallet portfolio',
   portfolioSectionDescription:
     'On-chain wallet assets on Sepolia with testnet estimate pricing.',
-  totalValueLabel: 'Total Portfolio Value',
+  totalValueLabel: 'Portfolio Value',
   largestPositionLabel: 'Largest Position',
-  positionsLabel: 'On-chain Positions',
-  activeBasketsLabel: 'Active Baskets',
+  positionsLabel: 'Wallet Assets',
+  activeBasketsLabel: 'My Portfolios',
+  myPortfoliosTitle: 'My Portfolios',
+  myPortfoliosEmptyTitle: 'No portfolios yet',
+  myPortfoliosEmptyDescription:
+    'Buy a Sepolia portfolio from Baskets — your holdings will appear here automatically.',
   testnetEstimateNote: 'Testnet estimate — not mainnet portfolio data',
-  advancedDemoTitle: 'Demo / API preview',
-  tradeBasketsCta: 'Trade baskets',
+  tradeBasketsCta: 'Explore baskets',
+  recentTradesTitle: 'Recent trades',
+  walletAssetsTitle: 'Wallet assets',
+  rebalanceTitle: 'Rebalance status',
 } as const
 
 export const SEPOLIA_TESTNET_TRADE_TITLE = 'Sepolia Testnet Trade'

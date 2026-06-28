@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { BUTTON_LABELS } from '@/config/uiCopy'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { AppModeBadge } from './AppModeIndicator'
 import { Logo } from './Logo'
 import { WalletButton } from './WalletButton'
@@ -10,7 +11,7 @@ type NavLinkItem = {
   badge?: string
 }
 
-const links: NavLinkItem[] = [
+const productionLinks: NavLinkItem[] = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/discover', label: 'Discover' },
   { to: '/baskets', label: 'Baskets' },
@@ -22,7 +23,17 @@ const links: NavLinkItem[] = [
   { to: '/settings', label: 'Settings' },
 ]
 
+const testnetLinks: NavLinkItem[] = [
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/discover', label: 'Discover' },
+  { to: '/baskets', label: 'Baskets' },
+  { to: '/sell-all', label: 'Sell' },
+  { to: '/lending', label: 'Lending', badge: 'Preview' },
+  { to: '/settings', label: 'Settings' },
+]
+
 export function Navbar() {
+  const links = ENABLE_TESTNET_MODE ? testnetLinks : productionLinks
   return (
     <header className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 pt-2.5 pb-1.5 pointer-events-none">
       <div className="glass-nav max-w-7xl mx-auto rounded-xl pointer-events-auto">

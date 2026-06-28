@@ -226,7 +226,7 @@ export function Settings() {
             </Link>
           </div>
 
-          <AdvancedDisclosure title="Advanced developer tools" className="mb-6">
+          <AdvancedDisclosure title="Developer Mode" className="mb-6">
             <div className="space-y-4">
               <div className="space-y-2 text-sm">
                 <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAccount, useChainId } from 'wagmi'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { BasketCard } from '@/components/BasketCard'
@@ -32,16 +33,37 @@ import {
 import type { Basket } from '@/types/basket'
 import type { ExecutionPlan } from '@/types/execution'
 import { RecentTestSwaps } from '@/components/RecentTestSwaps'
-import { canShowTestnetMultiTokenBasketSell } from '@/utils/testnetBasketHoldings'
 import { TESTNET_BUTTONS, SEPOLIA_PORTFOLIO_TRADE } from '@/config/testnetUxCopy'
 import {
   shouldShowTestnetEnvWarning,
   TESTNET_EXECUTION_ENV_MESSAGE,
 } from '@/utils/testnetQuoteRouting'
 
-import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
+import { useTestnetPortfolioOwnership } from '@/hooks/useTestnetPortfolioOwnership'
+import {
+  BASKET_SECTION_LABELS,
+  canShowBasketQuotes,
+  groupBasketsBySection,
+  type BasketCatalogSection,
+} from '@/utils/basketCatalog'
+
+import { getPlannedChainMessage } from '@/utils/chainRouting'
+
+interface BasketsLocationState {
+  basketId?: string
+  action?: 'buy' | 'sell' | 'rebalance'
+}
+
+const CATALOG_SECTION_ORDER: BasketCatalogSection[] = [
+  'my-portfolios',
+  'featured',
+  'testnet',
+  'sport-fan',
+  'community',
+]
 
 export function Baskets() {
+  const location = useLocation()
   const chainId = useChainId()
   const { isConnected } = useAccount()
   const testnetBalances = useTestnetPortfolioBalances()
@@ -49,7 +71,8 @@ export function Baskets() {
   const buyBasket = usePortfolioStore((s) => s.buyBasket)
   const sellBasket = usePortfolioStore((s) => s.sellBasket)
   const removeActiveBasket = usePortfolioStore((s) => s.removeActiveBasket)
-  const activeBaskets = usePortfolioStore((s) => s.activeBaskets)
+  const testnetOwnership = useTestnetPortfolioOwnership()
+  const demoActiveBaskets = usePortfolioStore((s) => s.activeBaskets)
 
   const {
     preview,
@@ -77,31 +100,12 @@ export function Baskets() {
     [preview, quoteSource]
   )
 
-  const ownedIds = new Set(activeBaskets.map((b) => b.basketId))
+  const ownedIds = useMemo(() => {
+    if (ENABLE_TESTNET_MODE) return testnetOwnership.ownedIds
+    return new Set(demoActiveBaskets.map((b) => b.basketId))
+  }, [demoActiveBaskets, testnetOwnership.ownedIds])
 
-  const testnetSellEligibleIds = useMemo(() => {
-    if (!ENABLE_TESTNET_MODE || !ENABLE_LIVE_EXECUTION || !isConnected) {
-      return new Set<string>()
-    }
-    const balancesWei = testnetBalances.assets.reduce<Record<string, bigint>>((acc, asset) => {
-      acc[asset.symbol] = asset.balanceWei
-      return acc
-    }, {})
-    return new Set(
-      allBaskets
-        .filter((basket) =>
-          canShowTestnetMultiTokenBasketSell({
-            enableTestnetMode: ENABLE_TESTNET_MODE,
-            enableLiveExecution: ENABLE_LIVE_EXECUTION,
-            walletConnected: isConnected,
-            chainId,
-            basketId: basket.id,
-            balancesWei,
-          }),
-        )
-        .map((basket) => basket.id),
-    )
-  }, [allBaskets, chainId, isConnected, testnetBalances.assets])
+  const testnetSellEligibleIds = testnetOwnership.sellEligibleIds
 
   const handleTestnetExecutionSuccess = (executedPlan: ExecutionPlan) => {
     testnetBalances.refresh()
@@ -114,15 +118,20 @@ export function Baskets() {
 
   const portfolio = usePortfolio()
 
+  const catalogSections = useMemo(
+    () => groupBasketsBySection(allBaskets, ownedIds),
+    [allBaskets, ownedIds],
+  )
+
   const ownedBasketInputs = useMemo(
     () =>
-      activeBaskets
-        .map((purchase) => {
-          const basket = allBaskets.find((b) => b.id === purchase.basketId)
-          return basket ? { basket, basketId: purchase.basketId } : null
+      [...ownedIds]
+        .map((basketId) => {
+          const basket = allBaskets.find((b) => b.id === basketId)
+          return basket ? { basket, basketId } : null
         })
         .filter((entry): entry is { basket: Basket; basketId: string } => entry !== null),
-    [activeBaskets, allBaskets]
+    [ownedIds, allBaskets],
   )
 
   const { getDriftForBasket } = usePortfolioDrift(portfolio.heldTokens, ownedBasketInputs)
@@ -135,7 +144,7 @@ export function Baskets() {
   }
 
   const guardQuotePreview = (basket: Basket): boolean => {
-    if (canPreviewQuoteForBasket(basket)) return true
+    if (canShowBasketQuotes(basket)) return true
     selectPlannedBasket(basket)
     return false
   }
@@ -151,7 +160,7 @@ export function Baskets() {
     if (!guardQuotePreview(basket)) return
     setSelectedBasket(basket)
     setTxMsg(null)
-    const purchase = activeBaskets.find((b) => b.basketId === basket.id)
+    const purchase = demoActiveBaskets.find((b) => b.basketId === basket.id)
     const balancesWei =
       ENABLE_TESTNET_MODE &&
       ENABLE_LIVE_EXECUTION &&
@@ -163,7 +172,7 @@ export function Baskets() {
   }
 
   const handleReview = () => {
-    if (!preview || !selectedBasket || !canPreviewQuoteForBasket(selectedBasket)) return
+    if (!preview || !selectedBasket || !canShowBasketQuotes(selectedBasket)) return
     buildPlan(preview)
     setModalOpen(true)
   }
@@ -184,7 +193,7 @@ export function Baskets() {
           selectedBasket.allocations
         )
       } else if (plan.type === 'sell_basket' && plan.basketId && selectedBasket) {
-        const purchase = activeBaskets.find((b) => b.basketId === plan.basketId)
+        const purchase = demoActiveBaskets.find((b) => b.basketId === plan.basketId)
         sellBasket({
           basketId: plan.basketId,
           allocations: selectedBasket.allocations,
@@ -217,11 +226,53 @@ export function Baskets() {
   }
 
   const showPlannedPanel =
-    selectedBasket !== null && !canPreviewQuoteForBasket(selectedBasket)
+    selectedBasket !== null && !canShowBasketQuotes(selectedBasket)
   const showQuotePreview =
     preview !== null &&
     selectedBasket !== null &&
-    canPreviewQuoteForBasket(selectedBasket)
+    canShowBasketQuotes(selectedBasket)
+
+  useEffect(() => {
+    const state = location.state as BasketsLocationState | null
+    if (!state?.basketId || basketsLoading) return
+    const basket = allBaskets.find((b) => b.id === state.basketId)
+    if (!basket) return
+
+    if (state.action === 'sell') {
+      void handlePreviewSell(basket)
+    } else if (state.action === 'rebalance') {
+      setRebalanceBasket(basket)
+      setSelectedBasket(basket)
+    } else {
+      void handlePreviewBuy(basket)
+    }
+
+    window.history.replaceState({}, document.title)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when deep-link state arrives
+  }, [location.state, basketsLoading, allBaskets.length])
+
+  const renderBasketCard = (basket: Basket) => (
+    <BasketCard
+      key={basket.id}
+      basket={basket}
+      onPreviewBuy={handlePreviewBuy}
+      onPreviewSell={handlePreviewSell}
+      onPreviewRebalance={
+        ownedIds.has(basket.id) ? () => setRebalanceBasket(basket) : undefined
+      }
+      onBuy={ENABLE_TESTNET_MODE ? undefined : handleQuickBuy}
+      onPlannedChainSelect={selectPlannedBasket}
+      isOwned={ownedIds.has(basket.id)}
+      canPreviewSell={testnetSellEligibleIds.has(basket.id)}
+      driftStatus={
+        ownedIds.has(basket.id) ? getDriftForBasket(basket.id)?.status : undefined
+      }
+      loading={loading && selectedBasket?.id === basket.id}
+      isSelected={
+        selectedBasket?.id === basket.id && (showQuotePreview || showPlannedPanel)
+      }
+    />
+  )
 
   const showTestnetEnvWarning = shouldShowTestnetEnvWarning(chainId, isConnected)
 
@@ -238,6 +289,13 @@ export function Baskets() {
 
       {!ENABLE_TESTNET_MODE ? (
         <ExecutionWarning variant="info" warnings={[INFO_MESSAGES.demoMode]} />
+      ) : null}
+
+      {ENABLE_TESTNET_MODE && ownedIds.size > 0 ? (
+        <StatusBanner variant="info" className="mb-6" compact>
+          You own {ownedIds.size} portfolio{ownedIds.size === 1 ? '' : 's'} — inferred from Sepolia
+          wallet holdings and trade history.
+        </StatusBanner>
       ) : null}
 
       {showTestnetEnvWarning ? (
@@ -281,7 +339,7 @@ export function Baskets() {
         </StatusBanner>
       )}
 
-      {basketsSource === 'api' && !basketsLoading && (
+      {basketsSource === 'api' && !basketsLoading && !ENABLE_TESTNET_MODE && (
         <StatusBanner variant="success" className="mb-6" compact>
           {SUCCESS_MESSAGES.basketsApi}
         </StatusBanner>
@@ -338,38 +396,38 @@ export function Baskets() {
       )}
 
       <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
-        <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4 sm:gap-6 min-w-0">
+        <div className="lg:col-span-2 min-w-0 space-y-10">
           {!basketsLoading && allBaskets.length === 0 ? (
-            <div className="sm:col-span-2">
-              <EmptyState
-                title={EMPTY_MESSAGES.noBaskets.title}
-                description={EMPTY_MESSAGES.noBaskets.description}
-              />
-            </div>
+            <EmptyState
+              title={EMPTY_MESSAGES.noBaskets.title}
+              description={EMPTY_MESSAGES.noBaskets.description}
+            />
           ) : (
             !basketsLoading &&
-            allBaskets.map((basket) => (
-              <BasketCard
-                key={basket.id}
-                basket={basket}
-                onPreviewBuy={handlePreviewBuy}
-                onPreviewSell={handlePreviewSell}
-                onPreviewRebalance={
-                  ownedIds.has(basket.id) ? () => setRebalanceBasket(basket) : undefined
-                }
-                onBuy={handleQuickBuy}
-                onPlannedChainSelect={selectPlannedBasket}
-                isOwned={ownedIds.has(basket.id)}
-                canPreviewSell={testnetSellEligibleIds.has(basket.id)}
-                driftStatus={
-                  ownedIds.has(basket.id) ? getDriftForBasket(basket.id)?.status : undefined
-                }
-                loading={loading && selectedBasket?.id === basket.id}
-                isSelected={
-                  selectedBasket?.id === basket.id && (showQuotePreview || showPlannedPanel)
-                }
-              />
-            ))
+            CATALOG_SECTION_ORDER.map((sectionKey) => {
+              const sectionBaskets = catalogSections[sectionKey]
+              if (sectionBaskets.length === 0) return null
+              return (
+                <section key={sectionKey}>
+                  <div className="mb-4">
+                    <h2 className="text-xl font-bold">{BASKET_SECTION_LABELS[sectionKey]}</h2>
+                    {sectionKey === 'sport-fan' && (
+                      <p className="text-sm text-portx-muted mt-1">
+                        Preview templates — Sport & Fan Token routing is planned.
+                      </p>
+                    )}
+                    {sectionKey === 'testnet' && ENABLE_TESTNET_MODE && (
+                      <p className="text-sm text-portx-muted mt-1">
+                        Live Sepolia portfolio trades when execution gates pass.
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
+                    {sectionBaskets.map((basket) => renderBasketCard(basket))}
+                  </div>
+                </section>
+              )
+            })
           )}
         </div>
 
