@@ -17,6 +17,7 @@ import {
   emptyQuoteExecutionMetadata,
   truncateExecutionAddress,
 } from '@/utils/executionMetadata'
+import { getTestnetCalldataStatus } from '@/services/bundleExecutorCalldata'
 
 let planCounter = 0
 
@@ -48,15 +49,7 @@ export function isValidCalldata(calldata: string): boolean {
 }
 
 export function getCalldataStatus(quote: QuoteResponse, isDemoPlan: boolean): CalldataStatus {
-  if (quote.provider === 'unsupported') return 'unsupported'
-  if (isDemoPlan) return 'demo'
-  if (quote.provider === '0x' && isValidCalldata(quote.calldata) && isValidRouterAddress(quote.routerAddress)) {
-    return 'available'
-  }
-  if (isValidCalldata(quote.calldata) && isValidRouterAddress(quote.routerAddress)) {
-    return 'available'
-  }
-  return 'missing'
+  return getTestnetCalldataStatus(quote, isDemoPlan)
 }
 
 export function hasUnsupportedRoute(quotes: QuoteResponse[]): boolean {

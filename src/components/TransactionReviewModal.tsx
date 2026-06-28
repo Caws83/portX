@@ -651,12 +651,13 @@ export function TransactionReviewModal({
 
                 {bundleBuildResult.swapCalls.map((swapCall, index) => {
                   const legQuote = plan.legs[index]?.quote
+                  const builtCalldata = swapCall.data
                   const calldataStatus = legQuote
                     ? getCalldataStatus(legQuote, plan.isDemo)
                     : 'missing'
                   const calldataLabel =
                     calldataStatus === 'available'
-                      ? `Available (${legQuote?.calldata.length ?? 0} chars)`
+                      ? `Built (${builtCalldata.length} chars)`
                       : calldataStatus === 'demo'
                         ? 'Preview placeholder'
                         : calldataStatus === 'unsupported'
@@ -706,10 +707,10 @@ export function TransactionReviewModal({
                           {calldataLabel}
                         </span>
                       </p>
-                      {legQuote?.calldata?.startsWith('0x') && (
+                      {builtCalldata.startsWith('0x') && builtCalldata.length > 10 && (
                         <p>
                           <span className="text-portx-muted">calldata hex: </span>
-                          {truncateCalldata(legQuote.calldata, 24)}
+                          {truncateCalldata(builtCalldata, 24)}
                         </p>
                       )}
                     </div>
