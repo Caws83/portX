@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import type { Basket } from '@/types/basket'
 import { BasketChainBadge } from '@/components/BasketChainBadge'
 import { PortfolioDriftBadge } from '@/components/PortfolioDriftBadge'
+import { PortfolioTargetControls } from '@/components/PortfolioTargetControls'
 import { formatUsd } from '@/utils/format'
 import { TESTNET_BUTTONS } from '@/config/testnetUxCopy'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
@@ -9,6 +10,7 @@ import type { DriftStatusLevel } from '@/utils/portfolioDrift'
 
 interface MyPortfolioCardProps {
   basket: Basket
+  basketId?: string
   estimatedValueUsd?: number
   estimatedValueDisplay?: string
   performanceNote?: string
@@ -18,10 +20,12 @@ interface MyPortfolioCardProps {
   onRebalance?: () => void
   canSell?: boolean
   driftStatus?: DriftStatusLevel
+  showTargets?: boolean
 }
 
 export function MyPortfolioCard({
   basket,
+  basketId,
   estimatedValueUsd,
   estimatedValueDisplay,
   performanceNote = 'Performance tracking coming soon',
@@ -31,10 +35,13 @@ export function MyPortfolioCard({
   onRebalance,
   canSell = true,
   driftStatus,
+  showTargets = true,
 }: MyPortfolioCardProps) {
   const valueLabel =
     estimatedValueDisplay ??
     (estimatedValueUsd != null ? formatUsd(estimatedValueUsd) : '—')
+
+  const resolvedBasketId = basketId ?? basket.id
 
   return (
     <div className="card-glow flex flex-col h-full min-w-0 border-portx-green/20">
@@ -68,16 +75,21 @@ export function MyPortfolioCard({
       </div>
 
       <p className="text-xs text-portx-muted mb-1">{performanceNote}</p>
-      {ownershipNote && <p className="text-xs text-zinc-500 mb-4">{ownershipNote}</p>}
+      {ownershipNote && <p className="text-xs text-zinc-500 mb-3">{ownershipNote}</p>}
 
       <div className="flex flex-col gap-2 mt-auto pt-2">
         {onBuyMore && (
           <button type="button" onClick={onBuyMore} className="btn-primary w-full text-sm py-2.5">
-            {ENABLE_TESTNET_MODE ? TESTNET_BUTTONS.previewPortfolio : 'Buy More'}
+            Buy More
           </button>
         )}
-        {canSell && onSell && (
-          <button type="button" onClick={onSell} className="btn-secondary w-full text-sm py-2.5">
+        {onSell && (
+          <button
+            type="button"
+            onClick={onSell}
+            disabled={!canSell}
+            className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
+          >
             {ENABLE_TESTNET_MODE ? TESTNET_BUTTONS.previewSell : 'Sell'}
           </button>
         )}
@@ -89,6 +101,9 @@ export function MyPortfolioCard({
           >
             Rebalance
           </button>
+        )}
+        {showTargets && ENABLE_TESTNET_MODE && (
+          <PortfolioTargetControls basketId={resolvedBasketId} compact />
         )}
         <Link
           to="/settings"

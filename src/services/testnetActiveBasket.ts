@@ -31,7 +31,7 @@ export function inferActiveTestnetBaskets(
   const hasHoldings = hasTestnetMultiTokenBasketHoldings(balancesWei)
   const hasBuyHistory = hasSuccessfulMultiTokenBuy(positions)
 
-  if (!hasHoldings) {
+  if (!hasHoldings && !hasBuyHistory) {
     return []
   }
 

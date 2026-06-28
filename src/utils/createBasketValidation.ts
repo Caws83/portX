@@ -1,5 +1,9 @@
 import { isValidAllocationTotal } from '@/utils/validation'
 
+export function isValidErc20Address(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(address.trim())
+}
+
 export interface CreateBasketValidationResult {
   isValid: boolean
   nameError?: string

@@ -27,8 +27,10 @@ const testnetLinks: NavLinkItem[] = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/discover', label: 'Discover' },
   { to: '/baskets', label: 'Baskets' },
+  { to: '/create-basket', label: 'Create' },
   { to: '/sell-all', label: 'Sell' },
   { to: '/lending', label: 'Lending', badge: 'Preview' },
+  { to: '/mint', label: 'NFT' },
   { to: '/settings', label: 'Settings' },
 ]
 

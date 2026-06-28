@@ -24,11 +24,29 @@ import {
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
 import { formatUsd } from '@/utils/format'
+import { TESTNET_MULTI_TOKEN_BASKET } from '@/data/testnetMultiTokenBasket'
 
 function TestnetSellAll() {
   const navigate = useNavigate()
-  const { portfolio, ownedIds, canSell } = useTestnetPortfolioOwnership()
-  const hasHoldings = portfolio.walletAssets.length > 0
+  const { portfolio, canSell, hasBasketHoldings } = useTestnetPortfolioOwnership()
+  const hasHoldings = portfolio.walletAssets.length > 0 || hasBasketHoldings
+
+  const sellTargets = useMemo(() => {
+    if (portfolio.activeBaskets.length > 0) return portfolio.activeBaskets
+    if (hasBasketHoldings) {
+      return [
+        {
+          basket: TESTNET_MULTI_TOKEN_BASKET,
+          basketId: TESTNET_MULTI_TOKEN_BASKET.id,
+          basketName: TESTNET_MULTI_TOKEN_BASKET.name,
+          source: 'holdings' as const,
+        },
+      ]
+    }
+    return []
+  }, [portfolio.activeBaskets, hasBasketHoldings])
+
+  const showPortfolios = sellTargets.length > 0
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -84,10 +102,10 @@ function TestnetSellAll() {
         )}
       </div>
 
-      {ownedIds.size > 0 ? (
+      {showPortfolios ? (
         <div className="space-y-4">
           <h2 className="text-lg font-bold">Sell a portfolio</h2>
-          {portfolio.activeBaskets.map(({ basket, basketId }) => (
+          {sellTargets.map(({ basket, basketId }) => (
             <div key={basketId} className="card-glow flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <p className="font-bold">{basket.name}</p>

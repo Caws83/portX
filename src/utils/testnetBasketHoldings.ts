@@ -22,19 +22,34 @@ export interface TestnetBasketSellEligibility {
   balancesWei: Record<string, bigint>
 }
 
+export interface TestnetBasketSellPreviewEligibility {
+  enableTestnetMode: boolean
+  walletConnected: boolean
+  basketId: string
+  balancesWei: Record<string, bigint>
+}
+
+/** Show Sell when wallet holds basket tokens — preview does not require live execution gates */
+export function canPreviewTestnetMultiTokenBasketSell(
+  params: TestnetBasketSellPreviewEligibility,
+): boolean {
+  return (
+    params.enableTestnetMode &&
+    params.walletConnected &&
+    params.basketId === TESTNET_MULTI_TOKEN_BASKET_ID &&
+    hasTestnetMultiTokenBasketHoldings(params.balancesWei)
+  )
+}
+
 /**
- * Sepolia Multi-Token Beta shows Preview Sell when the connected wallet holds
- * any LINK/UNI/WETH/AAVE — not only when demo portfolioStore marks it owned.
+ * Sepolia Multi-Token Beta can execute sell when live execution gates pass.
  */
 export function canShowTestnetMultiTokenBasketSell(
   params: TestnetBasketSellEligibility,
 ): boolean {
   return (
-    params.enableTestnetMode &&
+    canPreviewTestnetMultiTokenBasketSell(params) &&
     params.enableLiveExecution &&
-    params.walletConnected &&
-    params.chainId === TESTNET_SEPOLIA_CHAIN_ID &&
-    params.basketId === TESTNET_MULTI_TOKEN_BASKET_ID &&
-    hasTestnetMultiTokenBasketHoldings(params.balancesWei)
+    params.chainId === TESTNET_SEPOLIA_CHAIN_ID
   )
 }

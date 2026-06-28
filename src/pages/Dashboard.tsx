@@ -16,6 +16,7 @@ import { usePortfolio } from '@/hooks/usePortfolio'
 import { useBasket } from '@/hooks/useBasket'
 import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
 import { useTestnetDashboardPortfolio } from '@/hooks/useTestnetDashboardPortfolio'
+import { useTestnetPortfolioOwnership } from '@/hooks/useTestnetPortfolioOwnership'
 import { NOTABLE_PORTFOLIOS } from '@/data/notablePortfolios'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { TESTNET_DASHBOARD } from '@/config/testnetUxCopy'
@@ -271,6 +272,7 @@ function TestnetDashboard() {
   const navigate = useNavigate()
   const { isConnected } = useAccount()
   const testnetPortfolio = useTestnetDashboardPortfolio()
+  const { canSell } = useTestnetPortfolioOwnership()
   const { allBaskets, basketsLoading } = useBasket()
 
   const goToBasket = (basketId: string, action: 'buy' | 'sell' | 'rebalance') => {
@@ -367,8 +369,8 @@ function TestnetDashboard() {
                   key={basketId}
                   basket={basket}
                   estimatedValueUsd={estimatedValueUsd}
-                  ownershipNote={`Inferred from ${source === 'both' ? 'holdings and trade history' : 'on-chain holdings'}`}
-                  canSell={testnetPortfolio.walletAssets.length > 0}
+                  ownershipNote={`Inferred from ${source === 'both' ? 'holdings and trade history' : source === 'history' ? 'trade history' : 'on-chain holdings'}`}
+                  canSell={canSell(basketId)}
                   onBuyMore={() => goToBasket(basketId, 'buy')}
                   onSell={() => goToBasket(basketId, 'sell')}
                   onRebalance={() => goToBasket(basketId, 'rebalance')}

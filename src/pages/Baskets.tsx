@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { useAccount, useChainId } from 'wagmi'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { BasketCard } from '@/components/BasketCard'
+import { MyPortfolioCard } from '@/components/MyPortfolioCard'
 import { QuotePreviewCard } from '@/components/QuotePreviewCard'
 import { TransactionReviewModal } from '@/components/TransactionReviewModal'
 import { PortfolioRebalancePreviewModal } from '@/components/PortfolioRebalancePreviewModal'
@@ -15,8 +16,7 @@ import { usePortfolio } from '@/hooks/usePortfolio'
 import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
 import { executeDemoPlan } from '@/services/transactionBuilder'
 import { DEFAULT_BUY_AMOUNT_USD } from '@/config/constants'
-import { ENABLE_LIVE_EXECUTION, ENABLE_TESTNET_MODE } from '@/config/features'
-import { TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
 import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
 import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPortfolio'
@@ -43,6 +43,7 @@ import { useTestnetPortfolioOwnership } from '@/hooks/useTestnetPortfolioOwnersh
 import {
   BASKET_SECTION_LABELS,
   canShowBasketQuotes,
+  estimateBasketHoldingsValueUsd,
   groupBasketsBySection,
   type BasketCatalogSection,
 } from '@/utils/basketCatalog'
@@ -162,10 +163,7 @@ export function Baskets() {
     setTxMsg(null)
     const purchase = demoActiveBaskets.find((b) => b.basketId === basket.id)
     const balancesWei =
-      ENABLE_TESTNET_MODE &&
-      ENABLE_LIVE_EXECUTION &&
-      chainId === TESTNET_SEPOLIA_CHAIN_ID &&
-      isTestnetMultiTokenBasket(basket.id)
+      ENABLE_TESTNET_MODE && isTestnetMultiTokenBasket(basket.id) && isConnected
         ? Object.fromEntries(testnetBalances.assets.map((asset) => [asset.symbol, asset.balanceWei]))
         : undefined
     await previewSellBasket(basket, purchase?.amountUsd ?? 1000, balancesWei)
@@ -251,7 +249,33 @@ export function Baskets() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when deep-link state arrives
   }, [location.state, basketsLoading, allBaskets.length])
 
-  const renderBasketCard = (basket: Basket) => (
+  const renderBasketCard = (basket: Basket, sectionKey?: BasketCatalogSection) => {
+    if (ENABLE_TESTNET_MODE && sectionKey === 'my-portfolios') {
+      const estimatedValueUsd = estimateBasketHoldingsValueUsd(
+        basket,
+        testnetOwnership.portfolio.walletAssets,
+      )
+      const entry = testnetOwnership.portfolio.activeBaskets.find((e) => e.basketId === basket.id)
+      return (
+        <MyPortfolioCard
+          key={basket.id}
+          basket={basket}
+          basketId={basket.id}
+          estimatedValueUsd={estimatedValueUsd}
+          ownershipNote={
+            entry
+              ? `Inferred from ${entry.source === 'both' ? 'holdings and trade history' : entry.source === 'history' ? 'trade history' : 'on-chain holdings'}`
+              : undefined
+          }
+          canSell={testnetSellEligibleIds.has(basket.id)}
+          onBuyMore={() => void handlePreviewBuy(basket)}
+          onSell={() => void handlePreviewSell(basket)}
+          onRebalance={() => setRebalanceBasket(basket)}
+        />
+      )
+    }
+
+    return (
     <BasketCard
       key={basket.id}
       basket={basket}
@@ -263,7 +287,7 @@ export function Baskets() {
       onBuy={ENABLE_TESTNET_MODE ? undefined : handleQuickBuy}
       onPlannedChainSelect={selectPlannedBasket}
       isOwned={ownedIds.has(basket.id)}
-      canPreviewSell={testnetSellEligibleIds.has(basket.id)}
+      canPreviewSell={testnetSellEligibleIds.has(basket.id) || ownedIds.has(basket.id)}
       driftStatus={
         ownedIds.has(basket.id) ? getDriftForBasket(basket.id)?.status : undefined
       }
@@ -272,7 +296,8 @@ export function Baskets() {
         selectedBasket?.id === basket.id && (showQuotePreview || showPlannedPanel)
       }
     />
-  )
+    )
+  }
 
   const showTestnetEnvWarning = shouldShowTestnetEnvWarning(chainId, isConnected)
 
@@ -423,7 +448,7 @@ export function Baskets() {
                     )}
                   </div>
                   <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
-                    {sectionBaskets.map((basket) => renderBasketCard(basket))}
+                    {sectionBaskets.map((basket) => renderBasketCard(basket, sectionKey))}
                   </div>
                 </section>
               )
