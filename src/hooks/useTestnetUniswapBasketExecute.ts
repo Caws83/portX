@@ -17,14 +17,15 @@ import {
   assessTestnetUniswapBasketExecution,
   finalizeTestnetExecutionAssessment,
 } from '@/services/testnetExecutionSafety'
-import { executionPlanToQuotePreview } from '@/services/bundleExecutorWrite'
+import {
+  executionPlanToQuotePreview,
+  type BundleExecutionPrepareResult,
+} from '@/services/bundleExecutorWrite'
 import { useBundleExecutorExecute } from '@/hooks/useBundleExecutorExecute'
 import { useBundleExecutorHealth } from '@/hooks/useBundleExecutorHealth'
 import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
-import {
-  grossUpEthValueForBuyFee,
-} from '@/services/protocolFee'
+import { grossUpEthValueForBuyFee } from '@/services/protocolFee'
 import {
   useTestnetBundleExecutorApprovals,
   verifyTestnetSellApprovals,
@@ -32,7 +33,7 @@ import {
 } from '@/hooks/useTestnetBundleExecutorApprovals'
 import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
 import { refreshTestnetSellExecutionBundle } from '@/services/testnetSellExecution'
-import { formatTestnetExecutionError } from '@/utils/bundleExecutorErrors'
+import { formatTestnetSimulationError } from '@/utils/bundleExecutorErrors'
 import { isSepoliaTestnetTradePlan, type TestnetQuoteSource } from '@/utils/testnetPreview'
 import {
   EXECUTION_ROUTER_NAME,
@@ -48,6 +49,11 @@ export const TESTNET_UNISWAP_SELL_CONFIRMATION_MESSAGE = TESTNET_CONFIRM.sell
 export const TESTNET_UNISWAP_CONFIRMATION_MESSAGE = TESTNET_UNISWAP_BUY_CONFIRMATION_MESSAGE
 
 export type TestnetUniswapBasketExecuteStatus = 'idle' | 'pending' | 'success' | 'error'
+
+type SellPayloadReady = {
+  plan: ExecutionPlan
+  prepareResult: Extract<BundleExecutionPrepareResult, { status: 'ready' }>
+}
 
 export interface UseTestnetUniswapBasketExecuteResult {
   isTestnetUniswapPlan: boolean
@@ -68,6 +74,7 @@ export interface UseTestnetUniswapBasketExecuteResult {
 async function simulateBundleExecution(
   params: ExecuteBundleParams,
   account: `0x${string}`,
+  isSell: boolean,
 ): Promise<{ passed: boolean; message: string }> {
   try {
     await simulateContract(wagmiConfig, {
@@ -83,8 +90,20 @@ async function simulateBundleExecution(
   } catch (error) {
     return {
       passed: false,
-      message: formatTestnetExecutionError(error),
+      message: formatTestnetSimulationError(error, isSell),
     }
+  }
+}
+
+function buildExecuteParams(
+  prepareResult: Extract<BundleExecutionPrepareResult, { status: 'ready' }>,
+  isSellPlan: boolean,
+  resolveBundleMsgValue: (legEthWei: bigint) => bigint,
+): ExecuteBundleParams {
+  return {
+    basketId: prepareResult.basketId,
+    swaps: prepareResult.swapCalls,
+    value: isSellPlan ? 0n : resolveBundleMsgValue(prepareResult.totalNativeEthWei),
   }
 }
 
@@ -100,7 +119,6 @@ export function useTestnetUniswapBasketExecute(
   const contractHealth = useBundleExecutorHealth()
   const feeConfigState = useBundleExecutorFeeConfig()
   const testnetBalances = useTestnetPortfolioBalances()
-  const approvals = useTestnetBundleExecutorApprovals(plan, open, feeConfigState.config)
   const {
     status: executeStatus,
     txHash,
@@ -114,6 +132,8 @@ export function useTestnetUniswapBasketExecute(
   const [simulation, setSimulation] = useState<{ passed: boolean; message: string } | null>(null)
   const [simulating, setSimulating] = useState(false)
   const [preExecuteError, setPreExecuteError] = useState<string | null>(null)
+  const [sellPayload, setSellPayload] = useState<SellPayloadReady | null>(null)
+  const [sellPayloadLoading, setSellPayloadLoading] = useState(false)
 
   const isTestnetUniswapPlan = useMemo(
     () => (plan ? isSepoliaTestnetTradePlan(plan, quoteSource) : false),
@@ -127,14 +147,61 @@ export function useTestnetUniswapBasketExecute(
     [feeConfigState.config],
   )
 
-  const bundleQuotePreview = useMemo(
-    () => (plan && open && !plan.isDemo ? executionPlanToQuotePreview(plan) : null),
-    [plan, open],
+  const refreshSellPayload = useCallback(async (): Promise<SellPayloadReady | null> => {
+    if (!plan || !address || plan.type !== 'sell_basket') {
+      setSellPayload(null)
+      return null
+    }
+
+    setSellPayloadLoading(true)
+    try {
+      const balancesWei = Object.fromEntries(
+        testnetBalances.assets.map((asset) => [asset.symbol, asset.balanceWei]),
+      )
+      const refreshed = await refreshTestnetSellExecutionBundle({
+        plan,
+        allocations: TESTNET_MULTI_TOKEN_BASKET.allocations,
+        balancesWei,
+        walletAddress: address,
+      })
+      if (!refreshed) {
+        setSellPayload(null)
+        return null
+      }
+      setSellPayload(refreshed)
+      return refreshed
+    } catch {
+      setSellPayload(null)
+      return null
+    } finally {
+      setSellPayloadLoading(false)
+    }
+  }, [plan, address, testnetBalances.assets])
+
+  const handleApprovalSuccess = useCallback(async () => {
+    if (!isSellPlan) return
+    setSimulation(null)
+    await refreshSellPayload()
+  }, [isSellPlan, refreshSellPayload])
+
+  const effectivePlan = isSellPlan ? sellPayload?.plan ?? null : plan
+  const approvalsOpen = open && (!isSellPlan || sellPayload !== null)
+
+  const approvals = useTestnetBundleExecutorApprovals(
+    effectivePlan,
+    approvalsOpen,
+    feeConfigState.config,
+    { onApprovalSuccess: handleApprovalSuccess },
   )
 
+  const bundleQuotePreview = useMemo(() => {
+    if (!effectivePlan || !open || effectivePlan.isDemo) return null
+    return executionPlanToQuotePreview(effectivePlan)
+  }, [effectivePlan, open])
+
   const baseAssessment = useMemo(() => {
-    if (!plan || !open || !bundleQuotePreview || !isTestnetUniswapPlan) return null
-    return assessTestnetUniswapBasketExecution(plan, bundleQuotePreview, {
+    if (!effectivePlan || !open || !bundleQuotePreview || !isTestnetUniswapPlan) return null
+    return assessTestnetUniswapBasketExecution(effectivePlan, bundleQuotePreview, {
       enableTestnetMode,
       enableLiveExecution,
       walletConnected: isConnected && Boolean(address),
@@ -145,7 +212,7 @@ export function useTestnetUniswapBasketExecute(
       sellApprovalsSufficient: approvals.allApprovalsSufficient,
     })
   }, [
-    plan,
+    effectivePlan,
     open,
     bundleQuotePreview,
     isTestnetUniswapPlan,
@@ -160,13 +227,56 @@ export function useTestnetUniswapBasketExecute(
   ])
 
   useEffect(() => {
-    if (!open || !plan || !isTestnetUniswapPlan || !address || !baseAssessment?.readyForSimulation) {
+    if (!open || !isSellPlan || !isTestnetUniswapPlan || !address) {
+      if (!open) {
+        setSellPayload(null)
+        setSellPayloadLoading(false)
+      }
+      return
+    }
+    setSimulation(null)
+    void refreshSellPayload()
+  }, [
+    open,
+    isSellPlan,
+    isTestnetUniswapPlan,
+    address,
+    plan,
+    testnetBalances.assets,
+    refreshSellPayload,
+  ])
+
+  useEffect(() => {
+    if (!open || !plan || !isTestnetUniswapPlan || !address) {
       setSimulation(null)
       setSimulating(false)
       return
     }
 
-    if (baseAssessment.prepareResult?.status !== 'ready') {
+    if (isSellPlan) {
+      if (sellPayloadLoading || !sellPayload?.prepareResult) {
+        setSimulation(null)
+        setSimulating(sellPayloadLoading)
+        return
+      }
+      if (!approvals.allApprovalsSufficient) {
+        setSimulation(null)
+        setSimulating(false)
+        return
+      }
+    }
+
+    if (!baseAssessment?.readyForSimulation) {
+      setSimulation(null)
+      setSimulating(false)
+      return
+    }
+
+    const prepareResult = isSellPlan
+      ? sellPayload?.prepareResult
+      : baseAssessment.prepareResult
+
+    if (!prepareResult || prepareResult.status !== 'ready') {
       setSimulation(null)
       setSimulating(false)
       return
@@ -176,15 +286,9 @@ export function useTestnetUniswapBasketExecute(
     setSimulating(true)
     setSimulation(null)
 
-    const prepareResult = baseAssessment.prepareResult
-    void simulateBundleExecution(
-      {
-        basketId: prepareResult.basketId,
-        swaps: prepareResult.swapCalls,
-        value: resolveBundleMsgValue(prepareResult.totalNativeEthWei),
-      },
-      address,
-    ).then((result) => {
+    const executeParams = buildExecuteParams(prepareResult, isSellPlan, resolveBundleMsgValue)
+
+    void simulateBundleExecution(executeParams, address, isSellPlan).then((result) => {
       if (!cancelled) {
         setSimulation(result)
         setSimulating(false)
@@ -194,7 +298,18 @@ export function useTestnetUniswapBasketExecute(
     return () => {
       cancelled = true
     }
-  }, [open, plan, isTestnetUniswapPlan, address, baseAssessment, resolveBundleMsgValue])
+  }, [
+    open,
+    plan,
+    isTestnetUniswapPlan,
+    address,
+    isSellPlan,
+    sellPayload,
+    sellPayloadLoading,
+    baseAssessment,
+    approvals.allApprovalsSufficient,
+    resolveBundleMsgValue,
+  ])
 
   const assessment = useMemo(() => {
     if (!baseAssessment) {
@@ -216,6 +331,8 @@ export function useTestnetUniswapBasketExecute(
       setSimulation(null)
       setSimulating(false)
       setPreExecuteError(null)
+      setSellPayload(null)
+      setSellPayloadLoading(false)
     }
   }, [open, resetExecute])
 
@@ -224,17 +341,22 @@ export function useTestnetUniswapBasketExecute(
     assessment.canExecute &&
     executeStatus !== 'pending' &&
     !isWritePending &&
-    approvals.allApprovalsSufficient
+    approvals.allApprovalsSufficient &&
+    (!isSellPlan || (sellPayload !== null && !sellPayloadLoading))
 
   const disabledReason = !assessment.isTestnetUniswapPlan
     ? null
     : executeStatus === 'pending' || isWritePending
       ? 'Transaction pending…'
-      : approvals.missingUsdcFeeApproval
-        ? 'Approve USDC protocol fee before selling.'
-        : !approvals.allApprovalsSufficient
-          ? `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
-          : assessment.blockedReason
+      : isSellPlan && sellPayloadLoading
+        ? 'Refreshing sell quote…'
+        : isSellPlan && !sellPayload && !sellPayloadLoading
+          ? 'Sell simulation failed — refresh quote and try again.'
+          : approvals.missingUsdcFeeApproval
+            ? 'Approve USDC protocol fee before selling.'
+            : !approvals.allApprovalsSufficient
+              ? `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
+              : assessment.blockedReason
 
   const reset = useCallback(() => {
     resetExecute()
@@ -252,23 +374,19 @@ export function useTestnetUniswapBasketExecute(
     const confirmed = window.confirm(confirmationMessage)
     if (!confirmed) return
 
-    let prepareResult = baseAssessment?.prepareResult
-    if (prepareResult?.status !== 'ready') return
-
     setPreExecuteError(null)
 
+    let prepareResult =
+      isSellPlan && sellPayload?.prepareResult
+        ? sellPayload.prepareResult
+        : baseAssessment?.prepareResult
+
+    if (prepareResult?.status !== 'ready') return
+
     if (isSellPlan) {
-      const balancesWei = Object.fromEntries(
-        testnetBalances.assets.map((asset) => [asset.symbol, asset.balanceWei]),
-      )
-      const refreshed = await refreshTestnetSellExecutionBundle({
-        plan,
-        allocations: TESTNET_MULTI_TOKEN_BASKET.allocations,
-        balancesWei,
-        walletAddress: address,
-      })
+      const refreshed = await refreshSellPayload()
       if (!refreshed) {
-        setPreExecuteError('Could not refresh sell quote — open sell preview again.')
+        setPreExecuteError('Sell simulation failed — refresh quote and try again.')
         return
       }
       prepareResult = refreshed.prepareResult
@@ -290,20 +408,30 @@ export function useTestnetUniswapBasketExecute(
           return
         }
       }
+
+      const executeParams = buildExecuteParams(prepareResult, true, resolveBundleMsgValue)
+      const simResult = await simulateBundleExecution(executeParams, address, true)
+      setSimulation(simResult)
+      if (!simResult.passed) {
+        setPreExecuteError(simResult.message)
+        return
+      }
+
+      await executeBundle(executeParams)
+      return
     }
 
-    await executeBundle({
-      basketId: prepareResult.basketId,
-      swaps: prepareResult.swapCalls,
-      value: isSellPlan ? 0n : resolveBundleMsgValue(prepareResult.totalNativeEthWei),
-    })
+    await executeBundle(
+      buildExecuteParams(prepareResult, false, resolveBundleMsgValue),
+    )
   }, [
     canExecute,
     plan,
     address,
-    baseAssessment,
     isSellPlan,
-    testnetBalances.assets,
+    sellPayload,
+    baseAssessment,
+    refreshSellPayload,
     publicClient,
     feeConfigState.config,
     executeBundle,
@@ -317,7 +445,7 @@ export function useTestnetUniswapBasketExecute(
     gates: assessment.gates,
     canExecute,
     disabledReason,
-    simulating,
+    simulating: simulating || sellPayloadLoading,
     status: executeStatus,
     txHash,
     explorerUrl,

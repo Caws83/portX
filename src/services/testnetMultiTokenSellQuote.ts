@@ -203,7 +203,7 @@ export async function buildTestnetMultiTokenSellPreview(
 
     const amountIn = params.balancesWei[inputToken.symbol.toUpperCase()] ?? 0n
     if (amountIn <= 0n) {
-      throw new Error(`No ${inputToken.symbol} balance to sell`)
+      continue
     }
 
     legEntries.push({

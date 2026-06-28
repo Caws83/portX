@@ -56,6 +56,20 @@ export function decodeBundleExecutorRevert(data: Hex | undefined): string | null
   }
 }
 
+export function formatTestnetSimulationError(error: unknown, isSell: boolean): string {
+  const message = error instanceof Error ? error.message : String(error)
+
+  if (/RouterCallFailed|7319c696/i.test(message)) {
+    return 'One sell route failed on Sepolia. Refresh quote or increase slippage.'
+  }
+
+  if (isSell) {
+    return 'Sell simulation failed — refresh quote and try again.'
+  }
+
+  return formatTestnetExecutionError(error)
+}
+
 export function formatTestnetExecutionError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
 
@@ -66,7 +80,12 @@ export function formatTestnetExecutionError(error: unknown): string {
   const hexMatch = message.match(/0x[a-fA-F0-9]+/)
   if (hexMatch) {
     const decoded = decodeBundleExecutorRevert(hexMatch[0] as Hex)
-    if (decoded) return decoded
+    if (decoded) {
+      if (/RouterCallFailed|7319c696/i.test(decoded) || /router call failed/i.test(decoded)) {
+        return 'One sell route failed on Sepolia. Refresh quote or increase slippage.'
+      }
+      return decoded
+    }
   }
 
   if (message.includes('User rejected')) {
@@ -74,7 +93,7 @@ export function formatTestnetExecutionError(error: unknown): string {
   }
 
   if (/RouterCallFailed|7319c696/i.test(message)) {
-    return 'Swap router call failed — refresh the sell preview and confirm token approvals.'
+    return 'One sell route failed on Sepolia. Refresh quote or increase slippage.'
   }
 
   return 'Sepolia sell execution failed. Refresh the preview, approve required tokens, and try again.'

@@ -177,10 +177,15 @@ export async function verifyTestnetSellApprovals(params: {
   }
 }
 
+export interface UseTestnetBundleExecutorApprovalsOptions {
+  onApprovalSuccess?: () => void | Promise<void>
+}
+
 export function useTestnetBundleExecutorApprovals(
   plan: ExecutionPlan | null,
   open: boolean,
   feeConfig: BundleExecutorFeeConfig | null = null,
+  options: UseTestnetBundleExecutorApprovalsOptions = {},
 ): UseTestnetBundleExecutorApprovalsResult {
   const { address } = useAccount()
   const publicClient = usePublicClient({ chainId: TESTNET_SEPOLIA_CHAIN_ID })
@@ -238,7 +243,7 @@ export function useTestnetBundleExecutorApprovals(
       setApprovalError(null)
 
       try {
-        const approveAmount = leg.kind === 'protocol_fee' ? maxUint256 : leg.amountRequired
+        const approveAmount = maxUint256
         const hash = await writeContractAsync({
           address: leg.tokenAddress,
           abi: erc20Abi,
@@ -257,17 +262,18 @@ export function useTestnetBundleExecutorApprovals(
         }
 
         setRefreshNonce((value) => value + 1)
-      } catch (error) {
+        await options.onApprovalSuccess?.()
+      } catch {
         const fallback =
           leg.kind === 'protocol_fee'
             ? 'Approve USDC protocol fee before selling.'
-            : `${leg.symbol} approval failed`
-        setApprovalError(error instanceof Error ? error.message : fallback)
+            : `${leg.symbol} approval failed — try again in wallet.`
+        setApprovalError(fallback)
       } finally {
         setPendingSymbol(null)
       }
     },
-    [address, publicClient, legs, writeContractAsync],
+    [address, publicClient, legs, writeContractAsync, options],
   )
 
   const protocolFeeLeg = legs.find((leg) => leg.kind === 'protocol_fee') ?? null

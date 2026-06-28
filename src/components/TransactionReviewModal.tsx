@@ -933,9 +933,7 @@ export function TransactionReviewModal({
                 </ul>
                 {testnetExecute.approvals.approvalError ? (
                   <p className="text-xs text-portx-danger">
-                    {testnetExecute.approvals.missingUsdcFeeApproval
-                      ? 'Approve USDC protocol fee before selling.'
-                      : testnetExecute.approvals.approvalError}
+                    {testnetExecute.approvals.approvalError}
                   </p>
                 ) : testnetExecute.approvals.missingUsdcFeeApproval ? (
                   <p className="text-xs text-portx-warning">
@@ -1034,7 +1032,7 @@ export function TransactionReviewModal({
               </div>
             ) : null}
 
-            {testnetExecute.status === 'error' && testnetExecute.errorMessage ? (
+            {testnetExecute.errorMessage && testnetExecute.status !== 'success' ? (
               <div className="rounded-xl border border-portx-danger/40 bg-portx-danger/10 text-portx-danger p-3 text-sm">
                 {testnetExecute.errorMessage}
               </div>
