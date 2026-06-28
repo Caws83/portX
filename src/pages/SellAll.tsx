@@ -1,26 +1,23 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAccount } from 'wagmi'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useSellAllPreview } from '@/hooks/useSellAllPreview'
-import { useQuotePreview } from '@/hooks/useQuotePreview'
 import { useTestnetPortfolioOwnership } from '@/hooks/useTestnetPortfolioOwnership'
-import { usePortfolioStore } from '@/store/portfolioStore'
+import { useTestnetPortfolioTradeActions } from '@/hooks/useTestnetPortfolioTradeActions'
 import { SellAllButton } from '@/components/SellAllButton'
 import { TargetSellForm } from '@/components/TargetSellForm'
 import { StopLossForm } from '@/components/StopLossForm'
 import { PortfolioSummary, PortfolioCard } from '@/components/PortfolioCard'
 import { SellAllPreviewCard } from '@/components/SellAllPreviewCard'
-import { QuotePreviewCard } from '@/components/QuotePreviewCard'
 import { TransactionReviewModal } from '@/components/TransactionReviewModal'
 import { PortfolioTargetControls } from '@/components/PortfolioTargetControls'
+import { TestnetPortfolioTradeModals } from '@/components/TestnetPortfolioTradeModals'
 import { ExecutionWarning } from '@/components/ExecutionWarning'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBanner } from '@/components/ui/StatusBanner'
 import { executeDemoPlan } from '@/services/transactionBuilder'
 import { assessQuoteQuality } from '@/utils/quoteQuality'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
-import { TESTNET_BUTTONS } from '@/config/testnetUxCopy'
 import {
   BUTTON_LABELS,
   EMPTY_MESSAGES,
@@ -31,29 +28,10 @@ import {
 import { formatUsd } from '@/utils/format'
 import { TESTNET_MULTI_TOKEN_BASKET } from '@/data/testnetMultiTokenBasket'
 import { estimateBasketHoldingsValueUsd } from '@/utils/basketCatalog'
-import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPortfolio'
 
 function TestnetSellAll() {
-  const { isConnected } = useAccount()
-  const demoActiveBaskets = usePortfolioStore((s) => s.activeBaskets)
   const { portfolio, hasBasketHoldings, canSell } = useTestnetPortfolioOwnership()
-
-  const {
-    preview,
-    plan,
-    loading,
-    error,
-    quoteSource,
-    previewSellBasket,
-    retrySellQuote,
-    buildPlan,
-    clear,
-  } = useQuotePreview()
-
-  const [modalOpen, setModalOpen] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const [txMsg, setTxMsg] = useState<string | null>(null)
-  const [partialNotice, setPartialNotice] = useState<string | null>(null)
+  const trade = useTestnetPortfolioTradeActions()
 
   const ownedBasket = useMemo(() => {
     if (hasBasketHoldings) return TESTNET_MULTI_TOKEN_BASKET
@@ -71,68 +49,15 @@ function TestnetSellAll() {
     [ownedBasket, portfolio.walletAssets],
   )
 
-  const balancesWei = useMemo(
-    () =>
-      Object.fromEntries(
-        portfolio.balances.assets.map((asset) => [asset.symbol, asset.balanceWei]),
-      ),
-    [portfolio.balances.assets],
-  )
-
-  const quoteQuality = useMemo(
-    () => (preview && quoteSource ? assessQuoteQuality(preview, quoteSource) : null),
-    [preview, quoteSource],
-  )
-
   const basketHoldings = useMemo(() => {
     if (!ownedBasket) return []
     const symbols = new Set(ownedBasket.allocations.map((a) => a.token.symbol.toUpperCase()))
     return portfolio.walletAssets.filter((asset) => symbols.has(asset.symbol.toUpperCase()))
   }, [ownedBasket, portfolio.walletAssets])
 
-  const handleSell100 = async () => {
-    if (!ownedBasket || !canSell(ownedBasket.id)) return
-    setPartialNotice(null)
-    setTxMsg(null)
-    const purchase = demoActiveBaskets.find((b) => b.basketId === ownedBasket.id)
-    await previewSellBasket(
-      ownedBasket,
-      purchase?.amountUsd ?? Math.max(estimatedValueUsd, 100),
-      isConnected ? balancesWei : undefined,
-    )
-  }
-
-  const handlePartialPlaceholder = (label: string) => {
-    setPartialNotice(`${label} — partial sell coming soon`)
-  }
-
-  const handleReview = () => {
-    if (!preview || !ownedBasket) return
-    buildPlan(preview)
-    setModalOpen(true)
-  }
-
-  const handleConfirm = async () => {
-    if (!plan) return
-    setConfirming(true)
-    try {
-      const result = await executeDemoPlan(plan)
-      setTxMsg(result.message)
-      setModalOpen(false)
-      clear()
-      portfolio.refresh()
-      window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
-    } finally {
-      setConfirming(false)
-    }
-  }
-
-  const handleTestnetExecutionSuccess = () => {
-    portfolio.refresh()
-    window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
-  }
-
-  const showOwnedPortfolio = Boolean(ownedBasket && (hasBasketHoldings || portfolio.activeBaskets.length > 0))
+  const showOwnedPortfolio = Boolean(
+    ownedBasket && (hasBasketHoldings || portfolio.activeBaskets.length > 0),
+  )
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -151,6 +76,18 @@ function TestnetSellAll() {
       {portfolio.error && !portfolio.isLoading && (
         <StatusBanner variant="warning" className="mb-6" onRetry={portfolio.refresh}>
           Failed to load wallet assets ({portfolio.error.message})
+        </StatusBanner>
+      )}
+
+      {trade.error && (
+        <StatusBanner variant="error" className="mb-6">
+          {trade.error || ERROR_MESSAGES.quoteFailed}
+        </StatusBanner>
+      )}
+
+      {trade.txMsg && (
+        <StatusBanner variant="success" className="mb-6">
+          {trade.txMsg}
         </StatusBanner>
       )}
 
@@ -181,9 +118,14 @@ function TestnetSellAll() {
                 {basketHoldings.length === 1 ? '' : 's'} held
               </p>
             </div>
-            <Link to="/baskets" className="btn-secondary text-sm py-2 px-4 shrink-0">
-              Buy More
-            </Link>
+            <button
+              type="button"
+              onClick={() => void trade.openBuyPreviewAndReview(ownedBasket.id)}
+              disabled={trade.loading}
+              className="btn-secondary text-sm py-2 px-4 shrink-0 disabled:opacity-50"
+            >
+              {trade.loading && trade.selectedBasket?.id === ownedBasket.id ? 'Loading…' : 'Buy More'}
+            </button>
           </div>
 
           {basketHoldings.length > 0 && (
@@ -210,86 +152,36 @@ function TestnetSellAll() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => void handleSell100()}
-                disabled={loading || !canSell(ownedBasket.id)}
+                onClick={() => void trade.openSellPreviewAndReview(ownedBasket.id)}
+                disabled={trade.loading || !canSell(ownedBasket.id)}
                 className="btn-primary text-sm py-2.5 px-4 disabled:opacity-50"
               >
-                {loading ? BUTTON_LABELS.fetchingQuotes : 'Sell 100%'}
+                {trade.loading && trade.selectedBasket?.id === ownedBasket.id
+                  ? BUTTON_LABELS.fetchingQuotes
+                  : 'Sell 100%'}
               </button>
               <button
                 type="button"
-                onClick={() => handlePartialPlaceholder('Sell 50%')}
-                className="btn-secondary text-sm py-2.5 px-4"
+                disabled
+                title="Partial sell coming soon"
+                className="btn-secondary text-sm py-2.5 px-4 opacity-50 cursor-not-allowed"
               >
-                Sell 50%
+                Partial sell coming soon (50%)
               </button>
               <button
                 type="button"
-                onClick={() => handlePartialPlaceholder('Custom %')}
-                className="btn-secondary text-sm py-2.5 px-4"
+                disabled
+                title="Custom sell coming soon"
+                className="btn-secondary text-sm py-2.5 px-4 opacity-50 cursor-not-allowed"
               >
-                Custom %
+                Custom sell coming soon
               </button>
             </div>
-            {partialNotice && (
-              <StatusBanner variant="info" compact>
-                {partialNotice}
-              </StatusBanner>
-            )}
           </div>
 
-          {loading && (
+          {trade.loading && (
             <StatusBanner variant="loading" className="mb-4">
               {LOADING_MESSAGES.quotePreview}
-            </StatusBanner>
-          )}
-
-          {error && (
-            <StatusBanner variant="error" className="mb-4">
-              {error || ERROR_MESSAGES.quoteFailed}
-            </StatusBanner>
-          )}
-
-          {quoteSource === 'fallback' && preview && !loading && (
-            <StatusBanner variant="warning" className="mb-4" onRetry={() => void retrySellQuote()}>
-              {WARNING_MESSAGES.sellBasketFallback}
-            </StatusBanner>
-          )}
-
-          {quoteSource === 'api' && preview && !loading && quoteQuality && (
-            <StatusBanner
-              variant={quoteQuality.kind === 'live_0x' ? 'success' : 'warning'}
-              className="mb-4"
-              compact
-            >
-              {quoteQuality.bannerMessage}
-            </StatusBanner>
-          )}
-
-          {quoteSource === 'testnet' && preview && !loading && (
-            <StatusBanner variant="info" className="mb-4" compact>
-              Sepolia preview quote — wallet holdings priced to USDC via Uniswap V3.
-            </StatusBanner>
-          )}
-
-          {preview && preview.type === 'sell_basket' && (
-            <div className="mb-6">
-              <QuotePreviewCard
-                preview={preview}
-                quoteSource={quoteSource}
-                onReview={handleReview}
-                loading={loading}
-                reviewLabel={TESTNET_BUTTONS.reviewSell}
-              />
-              <button type="button" onClick={clear} className="btn-secondary w-full mt-3 text-sm">
-                {BUTTON_LABELS.clearPreview}
-              </button>
-            </div>
-          )}
-
-          {txMsg && (
-            <StatusBanner variant="success" className="mb-4">
-              {txMsg}
             </StatusBanner>
           )}
 
@@ -310,14 +202,19 @@ function TestnetSellAll() {
         )
       )}
 
-      <TransactionReviewModal
-        plan={plan}
-        quoteSource={quoteSource}
-        open={modalOpen && preview?.type === 'sell_basket'}
-        onClose={() => setModalOpen(false)}
-        onConfirm={handleConfirm}
-        confirming={confirming}
-        onTestnetExecutionSuccess={handleTestnetExecutionSuccess}
+      <TestnetPortfolioTradeModals
+        preview={trade.preview}
+        plan={trade.plan}
+        quoteSource={trade.quoteSource}
+        loading={trade.loading}
+        selectedBasket={trade.selectedBasket}
+        modalOpen={trade.modalOpen}
+        confirming={trade.confirming}
+        showQuotePreview={trade.showQuotePreview}
+        onCloseModal={() => trade.setModalOpen(false)}
+        onConfirm={() => void trade.handleConfirm()}
+        onReview={trade.openReviewModal}
+        onTestnetExecutionSuccess={trade.handleTestnetExecutionSuccess}
       />
     </div>
   )

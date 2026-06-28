@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { PortfolioSummary, PortfolioCard } from '@/components/PortfolioCard'
@@ -30,6 +30,8 @@ import {
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
 import { TestnetPortfolioSummary } from '@/components/TestnetPortfolioSummary'
+import { useTestnetPortfolioTradeActions } from '@/hooks/useTestnetPortfolioTradeActions'
+import { TestnetPortfolioTradeModals } from '@/components/TestnetPortfolioTradeModals'
 import { formatUsd, formatPercent } from '@/utils/format'
 
 import type { Basket } from '@/types/basket'
@@ -270,11 +272,11 @@ function ProductionDashboard() {
 }
 
 function TestnetDashboard() {
-  const navigate = useNavigate()
   const { isConnected } = useAccount()
   const testnetPortfolio = useTestnetDashboardPortfolio()
   const { canSell, hasBasketHoldings } = useTestnetPortfolioOwnership()
   const { allBaskets, basketsLoading } = useBasket()
+  const trade = useTestnetPortfolioTradeActions()
 
   const ownedPortfolios = useMemo(() => {
     if (testnetPortfolio.activeBaskets.length > 0) return testnetPortfolio.activeBaskets
@@ -300,10 +302,6 @@ function TestnetDashboard() {
       })),
     [testnetPortfolio.walletAssets],
   )
-
-  const goToBasket = (basketId: string, action: 'buy' | 'sell' | 'rebalance') => {
-    navigate('/baskets', { state: { basketId, action } })
-  }
 
   return (
     <>
@@ -372,9 +370,10 @@ function TestnetDashboard() {
                   tokenBalances={tokenBalances}
                   ownershipNote="Detected from on-chain Sepolia holdings"
                   canSell={canSell(basketId)}
-                  onBuyMore={() => goToBasket(basketId, 'buy')}
-                  onSell={() => goToBasket(basketId, 'sell')}
-                  onRebalance={() => goToBasket(basketId, 'rebalance')}
+                  actionLoading={trade.loading && trade.selectedBasket?.id === basketId}
+                  onBuyMore={() => void trade.openBuyPreviewAndReview(basketId)}
+                  onSell={() => void trade.openSellPreviewAndReview(basketId)}
+                  onRebalance={() => trade.openRebalancePreview(basketId)}
                 />
               )
             })}
@@ -431,6 +430,23 @@ function TestnetDashboard() {
           compact
         />
       </section>
+
+      <TestnetPortfolioTradeModals
+        preview={trade.preview}
+        plan={trade.plan}
+        quoteSource={trade.quoteSource}
+        loading={trade.loading}
+        selectedBasket={trade.selectedBasket}
+        modalOpen={trade.modalOpen}
+        confirming={trade.confirming}
+        showQuotePreview={trade.showQuotePreview}
+        rebalanceBasket={trade.rebalanceBasket}
+        onCloseModal={() => trade.setModalOpen(false)}
+        onConfirm={() => void trade.handleConfirm()}
+        onReview={trade.openReviewModal}
+        onTestnetExecutionSuccess={trade.handleTestnetExecutionSuccess}
+        onCloseRebalance={trade.closeRebalancePreview}
+      />
     </>
   )
 }

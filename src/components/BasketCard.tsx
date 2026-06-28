@@ -165,7 +165,7 @@ export function BasketCard({
             onClick={() => onPreviewRebalance!(basket)}
             className="btn-secondary w-full text-sm py-2.5 border-portx-blue/40 text-portx-blue hover:border-portx-blue/60"
           >
-            Rebalance
+            {ENABLE_TESTNET_MODE ? 'Preview Rebalance' : 'Rebalance'}
           </button>
         )}
         {onBuy && !ENABLE_TESTNET_MODE && (

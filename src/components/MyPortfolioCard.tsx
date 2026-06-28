@@ -25,6 +25,8 @@ interface MyPortfolioCardProps {
   onSell?: () => void
   onRebalance?: () => void
   canSell?: boolean
+  rebalanceLabel?: string
+  actionLoading?: boolean
   driftStatus?: DriftStatusLevel
   showTargets?: boolean
 }
@@ -41,6 +43,8 @@ export function MyPortfolioCard({
   onSell,
   onRebalance,
   canSell = true,
+  rebalanceLabel = 'Preview Rebalance',
+  actionLoading = false,
   driftStatus,
   showTargets = true,
 }: MyPortfolioCardProps) {
@@ -109,27 +113,33 @@ export function MyPortfolioCard({
 
       <div className="flex flex-col gap-2 mt-auto pt-2">
         {onBuyMore && (
-          <button type="button" onClick={onBuyMore} className="btn-primary w-full text-sm py-2.5">
-            Buy More
+          <button
+            type="button"
+            onClick={onBuyMore}
+            disabled={actionLoading}
+            className="btn-primary w-full text-sm py-2.5 disabled:opacity-50"
+          >
+            {actionLoading ? 'Loading…' : 'Buy More'}
           </button>
         )}
         {onSell && (
           <button
             type="button"
             onClick={onSell}
-            disabled={!canSell}
+            disabled={!canSell || actionLoading}
             className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
           >
-            Sell
+            {actionLoading ? 'Loading…' : 'Sell'}
           </button>
         )}
         {onRebalance && (
           <button
             type="button"
             onClick={onRebalance}
-            className="btn-secondary w-full text-sm py-2.5 border-portx-blue/40 text-portx-blue"
+            disabled={actionLoading}
+            className="btn-secondary w-full text-sm py-2.5 border-portx-blue/40 text-portx-blue disabled:opacity-50"
           >
-            Rebalance
+            {rebalanceLabel}
           </button>
         )}
         {showTargets && ENABLE_TESTNET_MODE && (

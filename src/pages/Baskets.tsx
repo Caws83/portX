@@ -12,6 +12,8 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBanner } from '@/components/ui/StatusBanner'
 import { useBasket } from '@/hooks/useBasket'
 import { useQuotePreview } from '@/hooks/useQuotePreview'
+import { useTestnetPortfolioTradeActions } from '@/hooks/useTestnetPortfolioTradeActions'
+import { TestnetPortfolioTradeModals } from '@/components/TestnetPortfolioTradeModals'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
 import { executeDemoPlan } from '@/services/transactionBuilder'
@@ -74,6 +76,17 @@ export function Baskets() {
   const testnetOwnership = useTestnetPortfolioOwnership()
   const demoActiveBaskets = usePortfolioStore((s) => s.activeBaskets)
 
+  const [buyAmount, setBuyAmount] = useState(DEFAULT_BUY_AMOUNT_USD)
+  const [localSelectedBasket, setLocalSelectedBasket] = useState<Basket | null>(null)
+  const [localRebalanceBasket, setLocalRebalanceBasket] = useState<Basket | null>(null)
+  const [localModalOpen, setLocalModalOpen] = useState(false)
+  const [localConfirming, setLocalConfirming] = useState(false)
+  const [localTxMsg, setLocalTxMsg] = useState<string | null>(null)
+
+  const testnetTrade = useTestnetPortfolioTradeActions({ buyAmountUsd: buyAmount })
+  const productionQuote = useQuotePreview()
+
+  const activeQuote = ENABLE_TESTNET_MODE ? testnetTrade : productionQuote
   const {
     preview,
     plan,
@@ -86,14 +99,33 @@ export function Baskets() {
     previewSellBasket,
     buildPlan,
     clear,
-  } = useQuotePreview()
+  } = activeQuote
 
-  const [selectedBasket, setSelectedBasket] = useState<Basket | null>(null)
-  const [rebalanceBasket, setRebalanceBasket] = useState<Basket | null>(null)
-  const [buyAmount, setBuyAmount] = useState(DEFAULT_BUY_AMOUNT_USD)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const [txMsg, setTxMsg] = useState<string | null>(null)
+  const selectedBasket = ENABLE_TESTNET_MODE ? testnetTrade.selectedBasket : localSelectedBasket
+  const rebalanceBasket = ENABLE_TESTNET_MODE ? testnetTrade.rebalanceBasket : localRebalanceBasket
+  const modalOpen = ENABLE_TESTNET_MODE ? testnetTrade.modalOpen : localModalOpen
+  const setModalOpen = ENABLE_TESTNET_MODE ? testnetTrade.setModalOpen : setLocalModalOpen
+  const confirming = ENABLE_TESTNET_MODE ? testnetTrade.confirming : localConfirming
+  const txMsg = ENABLE_TESTNET_MODE ? testnetTrade.txMsg : localTxMsg
+  const setTxMsg = ENABLE_TESTNET_MODE ? testnetTrade.setTxMsg : setLocalTxMsg
+
+  const setSelectedBasket = (basket: Basket | null) => {
+    if (ENABLE_TESTNET_MODE) {
+      if (basket === null) testnetTrade.closeTradeFlow()
+      else testnetTrade.selectBasket(basket)
+      return
+    }
+    setLocalSelectedBasket(basket)
+  }
+
+  const setRebalanceBasket = (basket: Basket | null) => {
+    if (ENABLE_TESTNET_MODE) {
+      if (basket === null) testnetTrade.closeRebalancePreview()
+      else testnetTrade.openRebalancePreview(basket)
+      return
+    }
+    setLocalRebalanceBasket(basket)
+  }
 
   const quoteQuality = useMemo(
     () => (preview && quoteSource ? assessQuoteQuality(preview, quoteSource) : null),
@@ -108,9 +140,13 @@ export function Baskets() {
   const testnetSellEligibleIds = testnetOwnership.sellEligibleIds
 
   const handleTestnetExecutionSuccess = (executedPlan: ExecutionPlan) => {
+    if (ENABLE_TESTNET_MODE) {
+      testnetTrade.handleTestnetExecutionSuccess()
+      return
+    }
     testnetBalances.refresh()
     window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
-    if (!executedPlan.basketId || ENABLE_TESTNET_MODE) return
+    if (!executedPlan.basketId) return
     if (executedPlan.type === 'sell_basket') {
       removeActiveBasket(executedPlan.basketId)
     }
@@ -153,6 +189,10 @@ export function Baskets() {
     if (!guardQuotePreview(basket)) return
     setSelectedBasket(basket)
     setTxMsg(null)
+    if (ENABLE_TESTNET_MODE) {
+      await testnetTrade.openBuyPreview(basket)
+      return
+    }
     await previewBuy(basket, buyAmount)
   }
 
@@ -160,9 +200,13 @@ export function Baskets() {
     if (!guardQuotePreview(basket)) return
     setSelectedBasket(basket)
     setTxMsg(null)
+    if (ENABLE_TESTNET_MODE) {
+      await testnetTrade.openSellPreview(basket)
+      return
+    }
     const purchase = demoActiveBaskets.find((b) => b.basketId === basket.id)
     const balancesWei =
-      ENABLE_TESTNET_MODE && isTestnetMultiTokenBasket(basket.id) && isConnected
+      isTestnetMultiTokenBasket(basket.id) && isConnected
         ? Object.fromEntries(testnetBalances.assets.map((asset) => [asset.symbol, asset.balanceWei]))
         : undefined
     await previewSellBasket(basket, purchase?.amountUsd ?? 1000, balancesWei)
@@ -170,13 +214,21 @@ export function Baskets() {
 
   const handleReview = () => {
     if (!preview || !selectedBasket || !canShowBasketQuotes(selectedBasket)) return
+    if (ENABLE_TESTNET_MODE) {
+      testnetTrade.openReviewModal()
+      return
+    }
     buildPlan(preview)
     setModalOpen(true)
   }
 
   const handleConfirm = async () => {
     if (!plan) return
-    setConfirming(true)
+    if (ENABLE_TESTNET_MODE) {
+      await testnetTrade.handleConfirm()
+      return
+    }
+    setLocalConfirming(true)
     try {
       const result = await executeDemoPlan(plan)
       if (plan.type === 'buy' && plan.basketId && selectedBasket) {
@@ -203,7 +255,7 @@ export function Baskets() {
       clear()
       setSelectedBasket(null)
     } finally {
-      setConfirming(false)
+      setLocalConfirming(false)
     }
   }
 
@@ -217,6 +269,10 @@ export function Baskets() {
   }
 
   const clearSelection = () => {
+    if (ENABLE_TESTNET_MODE) {
+      testnetTrade.closeTradeFlow()
+      return
+    }
     clear()
     setSelectedBasket(null)
     setModalOpen(false)
@@ -236,12 +292,14 @@ export function Baskets() {
     if (!basket) return
 
     if (state.action === 'sell') {
-      void handlePreviewSell(basket)
+      if (ENABLE_TESTNET_MODE) void testnetTrade.openSellPreviewAndReview(basket)
+      else void handlePreviewSell(basket)
     } else if (state.action === 'rebalance') {
       setRebalanceBasket(basket)
       setSelectedBasket(basket)
     } else {
-      void handlePreviewBuy(basket)
+      if (ENABLE_TESTNET_MODE) void testnetTrade.openBuyPreviewAndReview(basket)
+      else void handlePreviewBuy(basket)
     }
 
     window.history.replaceState({}, document.title)
@@ -267,9 +325,10 @@ export function Baskets() {
             balanceDisplay: asset.balanceDisplay,
             estimatedValueDisplay: asset.estimatedValueDisplay,
           }))}
-          onBuyMore={() => void handlePreviewBuy(basket)}
-          onSell={() => void handlePreviewSell(basket)}
-          onRebalance={() => setRebalanceBasket(basket)}
+          onBuyMore={() => void testnetTrade.openBuyPreviewAndReview(basket)}
+          onSell={() => void testnetTrade.openSellPreviewAndReview(basket)}
+          onRebalance={() => testnetTrade.openRebalancePreview(basket)}
+          actionLoading={testnetTrade.loading && testnetTrade.selectedBasket?.id === basket.id}
         />
       )
     }
@@ -520,22 +579,48 @@ export function Baskets() {
 
       <RecentTestSwaps className="mt-8" compact />
 
-      <TransactionReviewModal
-        plan={plan}
-        quoteSource={quoteSource}
-        open={modalOpen && showQuotePreview}
-        onClose={() => setModalOpen(false)}
-        onConfirm={handleConfirm}
-        confirming={confirming}
-        onTestnetExecutionSuccess={handleTestnetExecutionSuccess}
-      />
+      {ENABLE_TESTNET_MODE ? (
+        <TestnetPortfolioTradeModals
+          preview={testnetTrade.preview}
+          plan={testnetTrade.plan}
+          quoteSource={testnetTrade.quoteSource}
+          loading={testnetTrade.loading}
+          selectedBasket={testnetTrade.selectedBasket}
+          modalOpen={testnetTrade.modalOpen}
+          confirming={testnetTrade.confirming}
+          showQuotePreview={testnetTrade.showQuotePreview}
+          rebalanceBasket={testnetTrade.rebalanceBasket}
+          rebalanceDrift={
+            testnetTrade.rebalanceBasket
+              ? getDriftForBasket(testnetTrade.rebalanceBasket.id)
+              : null
+          }
+          onCloseModal={() => testnetTrade.setModalOpen(false)}
+          onConfirm={() => void testnetTrade.handleConfirm()}
+          onReview={testnetTrade.openReviewModal}
+          onTestnetExecutionSuccess={testnetTrade.handleTestnetExecutionSuccess}
+          onCloseRebalance={testnetTrade.closeRebalancePreview}
+        />
+      ) : (
+        <>
+          <TransactionReviewModal
+            plan={plan}
+            quoteSource={quoteSource}
+            open={modalOpen && showQuotePreview}
+            onClose={() => setModalOpen(false)}
+            onConfirm={handleConfirm}
+            confirming={confirming}
+            onTestnetExecutionSuccess={handleTestnetExecutionSuccess}
+          />
 
-      <PortfolioRebalancePreviewModal
-        open={rebalanceBasket !== null}
-        basket={rebalanceBasket}
-        drift={rebalanceBasket ? getDriftForBasket(rebalanceBasket.id) : null}
-        onClose={() => setRebalanceBasket(null)}
-      />
+          <PortfolioRebalancePreviewModal
+            open={rebalanceBasket !== null}
+            basket={rebalanceBasket}
+            drift={rebalanceBasket ? getDriftForBasket(rebalanceBasket.id) : null}
+            onClose={() => setRebalanceBasket(null)}
+          />
+        </>
+      )}
     </div>
   )
 }
