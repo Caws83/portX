@@ -4,7 +4,7 @@ import {
   TESTNET_MULTI_TOKEN_BASKET_ID,
 } from '@/data/testnetMultiTokenBasket'
 import type { TestnetPortfolioPosition } from '@/services/testnetPortfolio'
-import { hasTestnetMultiTokenBasketHoldings } from '@/utils/testnetBasketHoldings'
+import { hasMeaningfulTestnetBasketHoldings } from '@/utils/testnetOwnedPortfolio'
 
 export interface InferredTestnetActiveBasket {
   basketId: string
@@ -12,26 +12,15 @@ export interface InferredTestnetActiveBasket {
   source: 'holdings' | 'history' | 'both'
 }
 
-function hasSuccessfulMultiTokenBuy(positions: TestnetPortfolioPosition[]): boolean {
-  return positions.some(
-    (position) =>
-      position.status === 'success' &&
-      position.planType !== 'sell_basket' &&
-      (position.portfolioId.startsWith(`${TESTNET_MULTI_TOKEN_BASKET_ID}-`) ||
-        position.basketLabel === TESTNET_MULTI_TOKEN_BASKET.name),
-  )
-}
-
-/** Infer active Sepolia baskets from on-chain holdings (authoritative) and optional buy history */
+/** Infer active Sepolia baskets from on-chain holdings (authoritative) */
 export function inferActiveTestnetBaskets(
   balancesWei: Record<string, bigint>,
-  positions: TestnetPortfolioPosition[],
+  _positions: TestnetPortfolioPosition[],
   resolveBasket: (basketId: string) => Basket | undefined,
 ): InferredTestnetActiveBasket[] {
-  const hasHoldings = hasTestnetMultiTokenBasketHoldings(balancesWei)
-  const hasBuyHistory = hasSuccessfulMultiTokenBuy(positions)
+  const hasHoldings = hasMeaningfulTestnetBasketHoldings(balancesWei)
 
-  if (!hasHoldings && !hasBuyHistory) {
+  if (!hasHoldings) {
     return []
   }
 
@@ -41,7 +30,7 @@ export function inferActiveTestnetBaskets(
     {
       basketId: basket.id,
       basketName: basket.name,
-      source: hasHoldings && hasBuyHistory ? 'both' : hasHoldings ? 'holdings' : 'history',
+      source: 'holdings',
     },
   ]
 }

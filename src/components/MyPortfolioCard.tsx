@@ -4,15 +4,21 @@ import { BasketChainBadge } from '@/components/BasketChainBadge'
 import { PortfolioDriftBadge } from '@/components/PortfolioDriftBadge'
 import { PortfolioTargetControls } from '@/components/PortfolioTargetControls'
 import { formatUsd } from '@/utils/format'
-import { TESTNET_BUTTONS } from '@/config/testnetUxCopy'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 import type { DriftStatusLevel } from '@/utils/portfolioDrift'
+
+export interface PortfolioTokenBalance {
+  symbol: string
+  balanceDisplay: string
+  estimatedValueDisplay: string
+}
 
 interface MyPortfolioCardProps {
   basket: Basket
   basketId?: string
   estimatedValueUsd?: number
   estimatedValueDisplay?: string
+  tokenBalances?: PortfolioTokenBalance[]
   performanceNote?: string
   ownershipNote?: string
   onBuyMore?: () => void
@@ -28,6 +34,7 @@ export function MyPortfolioCard({
   basketId,
   estimatedValueUsd,
   estimatedValueDisplay,
+  tokenBalances,
   performanceNote = 'Performance tracking coming soon',
   ownershipNote,
   onBuyMore,
@@ -42,6 +49,10 @@ export function MyPortfolioCard({
     (estimatedValueUsd != null ? formatUsd(estimatedValueUsd) : '—')
 
   const resolvedBasketId = basketId ?? basket.id
+
+  const basketSymbols = new Set(basket.allocations.map((a) => a.token.symbol.toUpperCase()))
+  const holdings =
+    tokenBalances?.filter((t) => basketSymbols.has(t.symbol.toUpperCase())) ?? []
 
   return (
     <div className="card-glow flex flex-col h-full min-w-0 border-portx-green/20">
@@ -63,16 +74,35 @@ export function MyPortfolioCard({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {basket.allocations.map(({ token, weightPercent }) => (
-          <span
-            key={token.symbol}
-            className="text-xs px-2 py-1 rounded-md bg-portx-surface border border-portx-border font-mono"
-          >
-            {token.symbol} {weightPercent}%
-          </span>
-        ))}
-      </div>
+      {holdings.length > 0 ? (
+        <div className="space-y-1.5 mb-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-portx-muted">
+            Token balances
+          </p>
+          {holdings.map((token) => (
+            <div
+              key={token.symbol}
+              className="flex justify-between items-center text-xs py-1 border-b border-portx-border/60 last:border-0"
+            >
+              <span className="font-mono">{token.symbol}</span>
+              <span className="text-portx-muted tabular-nums">
+                {token.balanceDisplay} · {token.estimatedValueDisplay}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {basket.allocations.map(({ token, weightPercent }) => (
+            <span
+              key={token.symbol}
+              className="text-xs px-2 py-1 rounded-md bg-portx-surface border border-portx-border font-mono"
+            >
+              {token.symbol} {weightPercent}%
+            </span>
+          ))}
+        </div>
+      )}
 
       <p className="text-xs text-portx-muted mb-1">{performanceNote}</p>
       {ownershipNote && <p className="text-xs text-zinc-500 mb-3">{ownershipNote}</p>}
@@ -90,7 +120,7 @@ export function MyPortfolioCard({
             disabled={!canSell}
             className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
           >
-            {ENABLE_TESTNET_MODE ? TESTNET_BUTTONS.previewSell : 'Sell'}
+            Sell
           </button>
         )}
         {onRebalance && (

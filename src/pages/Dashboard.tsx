@@ -20,6 +20,7 @@ import { useTestnetPortfolioOwnership } from '@/hooks/useTestnetPortfolioOwnersh
 import { NOTABLE_PORTFOLIOS } from '@/data/notablePortfolios'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { TESTNET_DASHBOARD } from '@/config/testnetUxCopy'
+import { TESTNET_MULTI_TOKEN_BASKET } from '@/data/testnetMultiTokenBasket'
 import { estimateBasketHoldingsValueUsd } from '@/utils/basketCatalog'
 import {
   BUTTON_LABELS,
@@ -272,8 +273,33 @@ function TestnetDashboard() {
   const navigate = useNavigate()
   const { isConnected } = useAccount()
   const testnetPortfolio = useTestnetDashboardPortfolio()
-  const { canSell } = useTestnetPortfolioOwnership()
+  const { canSell, hasBasketHoldings } = useTestnetPortfolioOwnership()
   const { allBaskets, basketsLoading } = useBasket()
+
+  const ownedPortfolios = useMemo(() => {
+    if (testnetPortfolio.activeBaskets.length > 0) return testnetPortfolio.activeBaskets
+    if (hasBasketHoldings) {
+      return [
+        {
+          basket: TESTNET_MULTI_TOKEN_BASKET,
+          basketId: TESTNET_MULTI_TOKEN_BASKET.id,
+          basketName: TESTNET_MULTI_TOKEN_BASKET.name,
+          source: 'holdings' as const,
+        },
+      ]
+    }
+    return []
+  }, [testnetPortfolio.activeBaskets, hasBasketHoldings])
+
+  const tokenBalances = useMemo(
+    () =>
+      testnetPortfolio.walletAssets.map((asset) => ({
+        symbol: asset.symbol,
+        balanceDisplay: asset.balanceDisplay,
+        estimatedValueDisplay: asset.estimatedValueDisplay,
+      })),
+    [testnetPortfolio.walletAssets],
+  )
 
   const goToBasket = (basketId: string, action: 'buy' | 'sell' | 'rebalance') => {
     navigate('/baskets', { state: { basketId, action } })
@@ -290,9 +316,14 @@ function TestnetDashboard() {
               : TESTNET_DASHBOARD.subtitleDisconnected}
           </p>
         </div>
-        <Link to="/baskets" className="btn-primary text-sm w-fit shrink-0">
-          {TESTNET_DASHBOARD.tradeBasketsCta}
-        </Link>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Link to="/sell-all" className="btn-secondary text-sm">
+            Sell Portfolio
+          </Link>
+          <Link to="/baskets" className="btn-primary text-sm">
+            {TESTNET_DASHBOARD.tradeBasketsCta}
+          </Link>
+        </div>
       </div>
 
       {testnetPortfolio.isLoading && (
@@ -306,6 +337,50 @@ function TestnetDashboard() {
           Failed to load on-chain wallet assets ({testnetPortfolio.error.message})
         </StatusBanner>
       )}
+
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold">{TESTNET_DASHBOARD.myPortfoliosTitle}</h2>
+          <Link to="/baskets" className="text-sm text-portx-green hover:underline">
+            Browse baskets →
+          </Link>
+        </div>
+        {basketsLoading || testnetPortfolio.isLoading ? (
+          <StatusBanner variant="loading">{LOADING_MESSAGES.basketDetails}</StatusBanner>
+        ) : ownedPortfolios.length === 0 ? (
+          <EmptyState
+            title={TESTNET_DASHBOARD.myPortfoliosEmptyTitle}
+            description={TESTNET_DASHBOARD.myPortfoliosEmptyDescription}
+            action={
+              <Link to="/baskets" className="btn-primary">
+                {BUTTON_LABELS.exploreBaskets}
+              </Link>
+            }
+          />
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
+            {ownedPortfolios.map(({ basket, basketId }) => {
+              const estimatedValueUsd = estimateBasketHoldingsValueUsd(
+                basket,
+                testnetPortfolio.walletAssets,
+              )
+              return (
+                <MyPortfolioCard
+                  key={basketId}
+                  basket={basket}
+                  estimatedValueUsd={estimatedValueUsd}
+                  tokenBalances={tokenBalances}
+                  ownershipNote="Detected from on-chain Sepolia holdings"
+                  canSell={canSell(basketId)}
+                  onBuyMore={() => goToBasket(basketId, 'buy')}
+                  onSell={() => goToBasket(basketId, 'sell')}
+                  onRebalance={() => goToBasket(basketId, 'rebalance')}
+                />
+              )
+            })}
+          </div>
+        )}
+      </section>
 
       {!testnetPortfolio.isLoading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -328,58 +403,13 @@ function TestnetDashboard() {
           />
           <PortfolioCard
             label={TESTNET_DASHBOARD.activeBasketsLabel}
-            value={String(testnetPortfolio.activeBasketsCount)}
+            value={String(ownedPortfolios.length)}
             subValue={
-              testnetPortfolio.activeBasketsCount === 1
-                ? '1 portfolio'
-                : `${testnetPortfolio.activeBasketsCount} portfolios`
+              ownedPortfolios.length === 1 ? '1 portfolio' : `${ownedPortfolios.length} portfolios`
             }
           />
         </div>
       )}
-
-      <section className="mt-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">{TESTNET_DASHBOARD.myPortfoliosTitle}</h2>
-          <Link to="/baskets" className="text-sm text-portx-green hover:underline">
-            Browse baskets →
-          </Link>
-        </div>
-        {basketsLoading || testnetPortfolio.isLoading ? (
-          <StatusBanner variant="loading">{LOADING_MESSAGES.basketDetails}</StatusBanner>
-        ) : testnetPortfolio.activeBaskets.length === 0 ? (
-          <EmptyState
-            title={TESTNET_DASHBOARD.myPortfoliosEmptyTitle}
-            description={TESTNET_DASHBOARD.myPortfoliosEmptyDescription}
-            action={
-              <Link to="/baskets" className="btn-primary">
-                {BUTTON_LABELS.exploreBaskets}
-              </Link>
-            }
-          />
-        ) : (
-          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
-            {testnetPortfolio.activeBaskets.map(({ basket, basketId, source }) => {
-              const estimatedValueUsd = estimateBasketHoldingsValueUsd(
-                basket,
-                testnetPortfolio.walletAssets,
-              )
-              return (
-                <MyPortfolioCard
-                  key={basketId}
-                  basket={basket}
-                  estimatedValueUsd={estimatedValueUsd}
-                  ownershipNote={`Inferred from ${source === 'both' ? 'holdings and trade history' : source === 'history' ? 'trade history' : 'on-chain holdings'}`}
-                  canSell={canSell(basketId)}
-                  onBuyMore={() => goToBasket(basketId, 'buy')}
-                  onSell={() => goToBasket(basketId, 'sell')}
-                  onRebalance={() => goToBasket(basketId, 'rebalance')}
-                />
-              )
-            })}
-          </div>
-        )}
-      </section>
 
       <section className="mt-10">
         <h2 className="text-xl font-bold mb-4">{TESTNET_DASHBOARD.recentTradesTitle}</h2>

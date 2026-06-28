@@ -1,11 +1,14 @@
 import { useMemo } from 'react'
 import { useAccount } from 'wagmi'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
+import { TESTNET_MULTI_TOKEN_BASKET_ID } from '@/data/testnetMultiTokenBasket'
 import { useTestnetDashboardPortfolio } from '@/hooks/useTestnetDashboardPortfolio'
 import {
-  canPreviewTestnetMultiTokenBasketSell,
-  hasTestnetMultiTokenBasketHoldings,
-} from '@/utils/testnetBasketHoldings'
+  getTestnetOwnedBasketIds,
+  getTestnetSellableBasketIds,
+  hasMeaningfulTestnetBasketHoldings,
+  isTestnetMultiTokenBasketOwned,
+} from '@/utils/testnetOwnedPortfolio'
 
 export function useTestnetPortfolioOwnership() {
   const portfolio = useTestnetDashboardPortfolio()
@@ -13,39 +16,35 @@ export function useTestnetPortfolioOwnership() {
 
   const balancesWei = portfolio.balances.balancesWei
 
-  const ownedIds = useMemo(
-    () => new Set(portfolio.activeBaskets.map((entry) => entry.basketId)),
-    [portfolio.activeBaskets],
-  )
-
   const hasBasketHoldings = useMemo(
-    () => hasTestnetMultiTokenBasketHoldings(balancesWei),
+    () => hasMeaningfulTestnetBasketHoldings(balancesWei),
     [balancesWei],
   )
 
-  const sellEligibleIds = useMemo(() => {
-    if (!ENABLE_TESTNET_MODE || !isConnected) {
-      return new Set<string>()
+  const ownedIds = useMemo(() => {
+    const fromHoldings = getTestnetOwnedBasketIds(balancesWei)
+    for (const entry of portfolio.activeBaskets) {
+      fromHoldings.add(entry.basketId)
     }
-    const eligible = portfolio.activeBaskets
-      .filter(({ basketId }) =>
-        canPreviewTestnetMultiTokenBasketSell({
-          enableTestnetMode: ENABLE_TESTNET_MODE,
-          walletConnected: isConnected,
-          basketId,
-          balancesWei,
-        }),
-      )
-      .map(({ basketId }) => basketId)
-    return new Set(eligible)
-  }, [portfolio.activeBaskets, balancesWei, isConnected])
+    return fromHoldings
+  }, [balancesWei, portfolio.activeBaskets])
+
+  const sellEligibleIds = useMemo(
+    () => getTestnetSellableBasketIds(balancesWei),
+    [balancesWei],
+  )
 
   return {
     portfolio,
     ownedIds,
     sellEligibleIds,
     hasBasketHoldings,
-    isOwned: (basketId: string) => ownedIds.has(basketId),
-    canSell: (basketId: string) => sellEligibleIds.has(basketId),
+    isOwned: (basketId: string) =>
+      ownedIds.has(basketId) || isTestnetMultiTokenBasketOwned(basketId, balancesWei),
+    canSell: (basketId: string) =>
+      ENABLE_TESTNET_MODE &&
+      basketId === TESTNET_MULTI_TOKEN_BASKET_ID &&
+      hasMeaningfulTestnetBasketHoldings(balancesWei),
+    walletConnected: isConnected,
   }
 }

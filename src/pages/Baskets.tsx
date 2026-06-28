@@ -58,7 +58,6 @@ interface BasketsLocationState {
 const CATALOG_SECTION_ORDER: BasketCatalogSection[] = [
   'my-portfolios',
   'featured',
-  'testnet',
   'sport-fan',
   'community',
 ]
@@ -255,19 +254,19 @@ export function Baskets() {
         basket,
         testnetOwnership.portfolio.walletAssets,
       )
-      const entry = testnetOwnership.portfolio.activeBaskets.find((e) => e.basketId === basket.id)
       return (
         <MyPortfolioCard
           key={basket.id}
           basket={basket}
           basketId={basket.id}
           estimatedValueUsd={estimatedValueUsd}
-          ownershipNote={
-            entry
-              ? `Inferred from ${entry.source === 'both' ? 'holdings and trade history' : entry.source === 'history' ? 'trade history' : 'on-chain holdings'}`
-              : undefined
-          }
-          canSell={testnetSellEligibleIds.has(basket.id)}
+          ownershipNote="Detected from on-chain Sepolia holdings"
+          canSell={testnetOwnership.canSell(basket.id)}
+          tokenBalances={testnetOwnership.portfolio.walletAssets.map((asset) => ({
+            symbol: asset.symbol,
+            balanceDisplay: asset.balanceDisplay,
+            estimatedValueDisplay: asset.estimatedValueDisplay,
+          }))}
           onBuyMore={() => void handlePreviewBuy(basket)}
           onSell={() => void handlePreviewSell(basket)}
           onRebalance={() => setRebalanceBasket(basket)}
@@ -282,8 +281,11 @@ export function Baskets() {
       onPreviewBuy={handlePreviewBuy}
       onPreviewSell={handlePreviewSell}
       onPreviewRebalance={
-        ownedIds.has(basket.id) ? () => setRebalanceBasket(basket) : undefined
+        ownedIds.has(basket.id) || testnetSellEligibleIds.has(basket.id)
+          ? () => setRebalanceBasket(basket)
+          : undefined
       }
+      canRebalance={ownedIds.has(basket.id) || testnetSellEligibleIds.has(basket.id)}
       onBuy={ENABLE_TESTNET_MODE ? undefined : handleQuickBuy}
       onPlannedChainSelect={selectPlannedBasket}
       isOwned={ownedIds.has(basket.id)}
@@ -318,8 +320,8 @@ export function Baskets() {
 
       {ENABLE_TESTNET_MODE && ownedIds.size > 0 ? (
         <StatusBanner variant="info" className="mb-6" compact>
-          You own {ownedIds.size} portfolio{ownedIds.size === 1 ? '' : 's'} — inferred from Sepolia
-          wallet holdings and trade history.
+          You own {ownedIds.size} portfolio{ownedIds.size === 1 ? '' : 's'} — detected from Sepolia
+          wallet holdings.
         </StatusBanner>
       ) : null}
 

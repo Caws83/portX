@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { useAccount } from 'wagmi'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useSellAllPreview } from '@/hooks/useSellAllPreview'
+import { useQuotePreview } from '@/hooks/useQuotePreview'
 import { useTestnetPortfolioOwnership } from '@/hooks/useTestnetPortfolioOwnership'
+import { usePortfolioStore } from '@/store/portfolioStore'
 import { SellAllButton } from '@/components/SellAllButton'
 import { TargetSellForm } from '@/components/TargetSellForm'
 import { StopLossForm } from '@/components/StopLossForm'
 import { PortfolioSummary, PortfolioCard } from '@/components/PortfolioCard'
 import { SellAllPreviewCard } from '@/components/SellAllPreviewCard'
+import { QuotePreviewCard } from '@/components/QuotePreviewCard'
 import { TransactionReviewModal } from '@/components/TransactionReviewModal'
+import { PortfolioTargetControls } from '@/components/PortfolioTargetControls'
 import { ExecutionWarning } from '@/components/ExecutionWarning'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBanner } from '@/components/ui/StatusBanner'
@@ -25,40 +30,127 @@ import {
 } from '@/config/uiCopy'
 import { formatUsd } from '@/utils/format'
 import { TESTNET_MULTI_TOKEN_BASKET } from '@/data/testnetMultiTokenBasket'
+import { estimateBasketHoldingsValueUsd } from '@/utils/basketCatalog'
+import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPortfolio'
 
 function TestnetSellAll() {
-  const navigate = useNavigate()
-  const { portfolio, canSell, hasBasketHoldings } = useTestnetPortfolioOwnership()
-  const hasHoldings = portfolio.walletAssets.length > 0 || hasBasketHoldings
+  const { isConnected } = useAccount()
+  const demoActiveBaskets = usePortfolioStore((s) => s.activeBaskets)
+  const { portfolio, hasBasketHoldings, canSell } = useTestnetPortfolioOwnership()
 
-  const sellTargets = useMemo(() => {
-    if (portfolio.activeBaskets.length > 0) return portfolio.activeBaskets
-    if (hasBasketHoldings) {
-      return [
-        {
-          basket: TESTNET_MULTI_TOKEN_BASKET,
-          basketId: TESTNET_MULTI_TOKEN_BASKET.id,
-          basketName: TESTNET_MULTI_TOKEN_BASKET.name,
-          source: 'holdings' as const,
-        },
-      ]
+  const {
+    preview,
+    plan,
+    loading,
+    error,
+    quoteSource,
+    previewSellBasket,
+    retrySellQuote,
+    buildPlan,
+    clear,
+  } = useQuotePreview()
+
+  const [modalOpen, setModalOpen] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [txMsg, setTxMsg] = useState<string | null>(null)
+  const [partialNotice, setPartialNotice] = useState<string | null>(null)
+
+  const ownedBasket = useMemo(() => {
+    if (hasBasketHoldings) return TESTNET_MULTI_TOKEN_BASKET
+    const entry = portfolio.activeBaskets.find(
+      (b) => b.basketId === TESTNET_MULTI_TOKEN_BASKET.id,
+    )
+    return entry?.basket ?? null
+  }, [hasBasketHoldings, portfolio.activeBaskets])
+
+  const estimatedValueUsd = useMemo(
+    () =>
+      ownedBasket
+        ? estimateBasketHoldingsValueUsd(ownedBasket, portfolio.walletAssets)
+        : 0,
+    [ownedBasket, portfolio.walletAssets],
+  )
+
+  const balancesWei = useMemo(
+    () =>
+      Object.fromEntries(
+        portfolio.balances.assets.map((asset) => [asset.symbol, asset.balanceWei]),
+      ),
+    [portfolio.balances.assets],
+  )
+
+  const quoteQuality = useMemo(
+    () => (preview && quoteSource ? assessQuoteQuality(preview, quoteSource) : null),
+    [preview, quoteSource],
+  )
+
+  const basketHoldings = useMemo(() => {
+    if (!ownedBasket) return []
+    const symbols = new Set(ownedBasket.allocations.map((a) => a.token.symbol.toUpperCase()))
+    return portfolio.walletAssets.filter((asset) => symbols.has(asset.symbol.toUpperCase()))
+  }, [ownedBasket, portfolio.walletAssets])
+
+  const handleSell100 = async () => {
+    if (!ownedBasket || !canSell(ownedBasket.id)) return
+    setPartialNotice(null)
+    setTxMsg(null)
+    const purchase = demoActiveBaskets.find((b) => b.basketId === ownedBasket.id)
+    await previewSellBasket(
+      ownedBasket,
+      purchase?.amountUsd ?? Math.max(estimatedValueUsd, 100),
+      isConnected ? balancesWei : undefined,
+    )
+  }
+
+  const handlePartialPlaceholder = (label: string) => {
+    setPartialNotice(`${label} — partial sell coming soon`)
+  }
+
+  const handleReview = () => {
+    if (!preview || !ownedBasket) return
+    buildPlan(preview)
+    setModalOpen(true)
+  }
+
+  const handleConfirm = async () => {
+    if (!plan) return
+    setConfirming(true)
+    try {
+      const result = await executeDemoPlan(plan)
+      setTxMsg(result.message)
+      setModalOpen(false)
+      clear()
+      portfolio.refresh()
+      window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
+    } finally {
+      setConfirming(false)
     }
-    return []
-  }, [portfolio.activeBaskets, hasBasketHoldings])
+  }
 
-  const showPortfolios = sellTargets.length > 0
+  const handleTestnetExecutionSuccess = () => {
+    portfolio.refresh()
+    window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
+  }
+
+  const showOwnedPortfolio = Boolean(ownedBasket && (hasBasketHoldings || portfolio.activeBaskets.length > 0))
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
       <h1 className="section-title mb-2">Sell Portfolio</h1>
       <p className="text-portx-muted mb-8">
-        Sell from your Sepolia wallet holdings. Portfolio detection uses on-chain balances, not
-        demo data.
+        Sell from your Sepolia wallet holdings. Ownership is detected from on-chain LINK, UNI, WETH,
+        and AAVE balances.
       </p>
 
       {portfolio.isLoading && (
         <StatusBanner variant="loading" className="mb-6">
           Loading Sepolia wallet assets…
+        </StatusBanner>
+      )}
+
+      {portfolio.error && !portfolio.isLoading && (
+        <StatusBanner variant="warning" className="mb-6" onRetry={portfolio.refresh}>
+          Failed to load wallet assets ({portfolio.error.message})
         </StatusBanner>
       )}
 
@@ -70,71 +162,163 @@ function TestnetSellAll() {
           highlight
         />
         <PortfolioCard
-          label="My Portfolios"
-          value={String(portfolio.activeBasketsCount)}
+          label="Owned portfolios"
+          value={showOwnedPortfolio ? '1' : '0'}
           subValue={`${portfolio.assetCount} on-chain asset(s)`}
         />
       </div>
 
-      <div className="card min-w-0 mb-8">
-        <h2 className="text-lg font-bold mb-4">Wallet Assets</h2>
-        {!hasHoldings && !portfolio.isLoading ? (
-          <EmptyState
-            title="No Sepolia holdings"
-            description="Buy a portfolio from Baskets to build on-chain holdings first."
-            action={
-              <Link to="/baskets" className="btn-primary">
-                Explore baskets
-              </Link>
-            }
-            className="border-0 py-6"
-          />
-        ) : (
-          portfolio.walletAssets.map((asset) => (
-            <div
-              key={asset.symbol}
-              className="flex justify-between items-center py-3 border-b border-portx-border last:border-0 text-sm"
-            >
-              <span className="font-mono">{asset.symbol}</span>
-              <span className="text-portx-muted tabular-nums">{asset.estimatedValueDisplay}</span>
+      {showOwnedPortfolio && ownedBasket ? (
+        <div className="card-glow mb-8 border-portx-green/25">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-portx-green mb-1">
+                My Portfolio
+              </p>
+              <h2 className="text-xl font-bold">{ownedBasket.name}</h2>
+              <p className="text-sm text-portx-muted mt-1">
+                Est. value {formatUsd(estimatedValueUsd)} · {basketHoldings.length} token
+                {basketHoldings.length === 1 ? '' : 's'} held
+              </p>
             </div>
-          ))
-        )}
-      </div>
+            <Link to="/baskets" className="btn-secondary text-sm py-2 px-4 shrink-0">
+              Buy More
+            </Link>
+          </div>
 
-      {showPortfolios ? (
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold">Sell a portfolio</h2>
-          {sellTargets.map(({ basket, basketId }) => (
-            <div key={basketId} className="card-glow flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <p className="font-bold">{basket.name}</p>
-                <p className="text-sm text-portx-muted">{basket.allocations.length} tokens in basket</p>
-              </div>
+          {basketHoldings.length > 0 && (
+            <div className="mb-6 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+                Token balances
+              </p>
+              {basketHoldings.map((asset) => (
+                <div
+                  key={asset.symbol}
+                  className="flex justify-between items-center text-sm py-2 border-b border-portx-border last:border-0"
+                >
+                  <span className="font-mono">{asset.symbol}</span>
+                  <span className="text-portx-muted tabular-nums">
+                    {asset.balanceDisplay} · {asset.estimatedValueDisplay}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-3 mb-6">
+            <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">Sell</p>
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!canSell(basketId)}
-                onClick={() => navigate('/baskets', { state: { basketId, action: 'sell' } })}
-                className="btn-secondary text-sm py-2.5 px-6 disabled:opacity-50"
+                onClick={() => void handleSell100()}
+                disabled={loading || !canSell(ownedBasket.id)}
+                className="btn-primary text-sm py-2.5 px-4 disabled:opacity-50"
               >
-                {canSell(basketId) ? TESTNET_BUTTONS.previewSell : 'No sellable holdings'}
+                {loading ? BUTTON_LABELS.fetchingQuotes : 'Sell 100%'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePartialPlaceholder('Sell 50%')}
+                className="btn-secondary text-sm py-2.5 px-4"
+              >
+                Sell 50%
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePartialPlaceholder('Custom %')}
+                className="btn-secondary text-sm py-2.5 px-4"
+              >
+                Custom %
               </button>
             </div>
-          ))}
+            {partialNotice && (
+              <StatusBanner variant="info" compact>
+                {partialNotice}
+              </StatusBanner>
+            )}
+          </div>
+
+          {loading && (
+            <StatusBanner variant="loading" className="mb-4">
+              {LOADING_MESSAGES.quotePreview}
+            </StatusBanner>
+          )}
+
+          {error && (
+            <StatusBanner variant="error" className="mb-4">
+              {error || ERROR_MESSAGES.quoteFailed}
+            </StatusBanner>
+          )}
+
+          {quoteSource === 'fallback' && preview && !loading && (
+            <StatusBanner variant="warning" className="mb-4" onRetry={() => void retrySellQuote()}>
+              {WARNING_MESSAGES.sellBasketFallback}
+            </StatusBanner>
+          )}
+
+          {quoteSource === 'api' && preview && !loading && quoteQuality && (
+            <StatusBanner
+              variant={quoteQuality.kind === 'live_0x' ? 'success' : 'warning'}
+              className="mb-4"
+              compact
+            >
+              {quoteQuality.bannerMessage}
+            </StatusBanner>
+          )}
+
+          {quoteSource === 'testnet' && preview && !loading && (
+            <StatusBanner variant="info" className="mb-4" compact>
+              Sepolia preview quote — wallet holdings priced to USDC via Uniswap V3.
+            </StatusBanner>
+          )}
+
+          {preview && preview.type === 'sell_basket' && (
+            <div className="mb-6">
+              <QuotePreviewCard
+                preview={preview}
+                quoteSource={quoteSource}
+                onReview={handleReview}
+                loading={loading}
+                reviewLabel={TESTNET_BUTTONS.reviewSell}
+              />
+              <button type="button" onClick={clear} className="btn-secondary w-full mt-3 text-sm">
+                {BUTTON_LABELS.clearPreview}
+              </button>
+            </div>
+          )}
+
+          {txMsg && (
+            <StatusBanner variant="success" className="mb-4">
+              {txMsg}
+            </StatusBanner>
+          )}
+
+          <PortfolioTargetControls basketId={ownedBasket.id} />
         </div>
       ) : (
         !portfolio.isLoading && (
           <EmptyState
             title="No owned portfolios"
-            description="Execute a Sepolia portfolio buy — your basket will appear here for selling."
+            description="Buy Sepolia Multi-Token Beta from Baskets — it will appear here when your wallet holds basket tokens."
             action={
               <Link to="/baskets" className="btn-primary">
                 Go to Baskets
               </Link>
             }
+            className="mb-8"
           />
         )
       )}
+
+      <TransactionReviewModal
+        plan={plan}
+        quoteSource={quoteSource}
+        open={modalOpen && preview?.type === 'sell_basket'}
+        onClose={() => setModalOpen(false)}
+        onConfirm={handleConfirm}
+        confirming={confirming}
+        onTestnetExecutionSuccess={handleTestnetExecutionSuccess}
+      />
     </div>
   )
 }

@@ -79,7 +79,7 @@ export function resolveBasketSection(
   ownedIds: Set<string>,
 ): BasketCatalogSection | null {
   if (ownedIds.has(basket.id)) return 'my-portfolios'
-  if (isTestnetMultiTokenBasket(basket.id) || basket.category === 'testnet') return 'testnet'
+  if (isTestnetMultiTokenBasket(basket.id)) return 'featured'
   if (basket.category === 'sport-fan' || basket.templateOnly) return 'sport-fan'
   if (basket.isCustom) return 'community'
   return 'featured'
@@ -105,6 +105,12 @@ export function groupBasketsBySection(
       assigned.add(basket.id)
     }
   }
+
+  sections['my-portfolios'].sort((a, b) => {
+    if (a.id === TESTNET_MULTI_TOKEN_BASKET_ID) return -1
+    if (b.id === TESTNET_MULTI_TOKEN_BASKET_ID) return 1
+    return 0
+  })
 
   for (const basket of baskets) {
     if (assigned.has(basket.id)) continue

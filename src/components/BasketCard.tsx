@@ -5,7 +5,6 @@ import { TokenLogo } from '@/components/TokenLogo'
 import { formatUsd } from '@/utils/format'
 import { BUTTON_LABELS } from '@/config/uiCopy'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
-import { TESTNET_BUTTONS } from '@/config/testnetUxCopy'
 import { canShowBasketQuotes } from '@/utils/basketCatalog'
 import { SPORT_FAN_ROUTING_MESSAGE } from '@/data/sportFanBaskets'
 import { getPlannedChainMessage } from '@/utils/chainRouting'
@@ -21,6 +20,7 @@ interface BasketCardProps {
   isOwned?: boolean
   /** Sepolia testnet: show sell when wallet holds basket tokens on-chain */
   canPreviewSell?: boolean
+  canRebalance?: boolean
   driftStatus?: DriftStatusLevel
   loading?: boolean
   isSelected?: boolean
@@ -35,6 +35,7 @@ export function BasketCard({
   onPlannedChainSelect,
   isOwned,
   canPreviewSell,
+  canRebalance,
   driftStatus,
   loading,
   isSelected,
@@ -46,7 +47,13 @@ export function BasketCard({
     ? SPORT_FAN_ROUTING_MESSAGE
     : getPlannedChainMessage(basket)
 
-  const showSellButton = Boolean(onPreviewSell && (isOwned || canPreviewSell))
+  const showSellButton = Boolean(onPreviewSell && (canPreviewSell || isOwned))
+  const showRebalanceButton = Boolean(
+    onPreviewRebalance && (canRebalance ?? (isOwned || canPreviewSell)),
+  )
+
+  const buyLabel = ENABLE_TESTNET_MODE ? 'Buy Portfolio' : BUTTON_LABELS.previewQuote
+  const sellLabel = ENABLE_TESTNET_MODE ? 'Sell Portfolio' : BUTTON_LABELS.previewSellQuote
 
   return (
     <div
@@ -118,13 +125,7 @@ export function BasketCard({
             disabled={quotesAvailable && loading}
             aria-busy={quotesAvailable && loading}
             aria-disabled={quotesAvailable && loading}
-            title={
-              quotesAvailable
-                ? ENABLE_TESTNET_MODE
-                  ? TESTNET_BUTTONS.previewPortfolio
-                  : BUTTON_LABELS.previewQuote
-                : plannedMessage
-            }
+            title={quotesAvailable ? buyLabel : plannedMessage}
             className={
               quotesAvailable
                 ? 'btn-primary w-full text-sm py-2.5 disabled:opacity-50'
@@ -134,9 +135,7 @@ export function BasketCard({
             {loading && quotesAvailable
               ? BUTTON_LABELS.fetchingQuotes
               : quotesAvailable
-                ? ENABLE_TESTNET_MODE
-                  ? TESTNET_BUTTONS.previewPortfolio
-                  : BUTTON_LABELS.previewQuote
+                ? buyLabel
                 : isTemplate
                   ? 'Coming soon'
                   : BUTTON_LABELS.quotesUnavailable}
@@ -150,28 +149,20 @@ export function BasketCard({
             }
             disabled={quotesAvailable && loading}
             aria-busy={quotesAvailable && loading}
-            title={
-              quotesAvailable
-                ? ENABLE_TESTNET_MODE
-                  ? TESTNET_BUTTONS.previewSell
-                  : BUTTON_LABELS.previewSellQuote
-                : plannedMessage
-            }
+            title={quotesAvailable ? sellLabel : plannedMessage}
             className="btn-secondary w-full text-sm py-2.5 disabled:opacity-50"
           >
             {loading && quotesAvailable
               ? BUTTON_LABELS.fetchingQuotes
               : quotesAvailable
-                ? ENABLE_TESTNET_MODE
-                  ? TESTNET_BUTTONS.previewSell
-                  : BUTTON_LABELS.previewSellQuote
+                ? sellLabel
                 : BUTTON_LABELS.quotesUnavailable}
           </button>
         )}
-        {isOwned && onPreviewRebalance && (
+        {showRebalanceButton && (
           <button
             type="button"
-            onClick={() => onPreviewRebalance(basket)}
+            onClick={() => onPreviewRebalance!(basket)}
             className="btn-secondary w-full text-sm py-2.5 border-portx-blue/40 text-portx-blue hover:border-portx-blue/60"
           >
             Rebalance

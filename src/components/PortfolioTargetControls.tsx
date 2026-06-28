@@ -89,12 +89,12 @@ export function PortfolioTargetControls({ basketId, compact = false }: Portfolio
   return (
     <div className={`rounded-xl border border-portx-border bg-black/20 ${compact ? 'p-3' : 'p-4'} space-y-4`}>
       <TargetButtonGroup
-        label="Take Profit target"
+        label="Take Profit"
         active={targets?.takeProfit}
         onSelect={handleTakeProfit}
       />
       <TargetButtonGroup
-        label="Stop Loss target"
+        label="Stop Loss"
         active={targets?.stopLoss}
         onSelect={handleStopLoss}
       />

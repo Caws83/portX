@@ -79,4 +79,4 @@ export function formatTargetRule(rule: PortfolioTargetRule): string {
 }
 
 export const PORTFOLIO_TARGET_AUTOMATION_NOTE =
-  'Automation coming soon — target alerts are local only.'
+  'Automation coming soon — local alert only.'
