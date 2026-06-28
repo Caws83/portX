@@ -40,6 +40,27 @@ export interface BundleExecutorFeeConfig {
   feesEnabled: boolean
 }
 
+/** Custom errors from BundleExecutor.sol — for revert decoding in the UI */
+export const BUNDLE_EXECUTOR_ERROR_ABI = [
+  { type: 'error', name: 'NotOwner', inputs: [] },
+  {
+    type: 'error',
+    name: 'FeeExceedsMax',
+    inputs: [
+      { name: 'requested', type: 'uint16' },
+      { name: 'max', type: 'uint16' },
+    ],
+  },
+  { type: 'error', name: 'InvalidFeeRecipient', inputs: [] },
+  { type: 'error', name: 'ReentrancyGuardActive', inputs: [] },
+  { type: 'error', name: 'EmptyBasket', inputs: [] },
+  { type: 'error', name: 'RouterCallFailed', inputs: [{ name: 'legIndex', type: 'uint256' }] },
+  { type: 'error', name: 'EthTransferFailed', inputs: [] },
+  { type: 'error', name: 'InvalidRecipient', inputs: [] },
+  { type: 'error', name: 'SlippageExceeded', inputs: [] },
+  { type: 'error', name: 'RouterNotAllowed', inputs: [{ name: 'router', type: 'address' }] },
+] as const
+
 /** Matches BundleExecutor.SwapCall — used for executeBasket writes */
 export interface BundleExecutorSwapCall {
   router: `0x${string}`

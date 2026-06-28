@@ -4,6 +4,7 @@ import { simulateContract, waitForTransactionReceipt } from 'wagmi/actions'
 import { sepolia } from 'viem/chains'
 import type { Hex } from 'viem'
 import { getExplorerTxUrl } from '@/config/networks'
+import { formatTestnetExecutionError } from '@/utils/bundleExecutorErrors'
 import { wagmiConfig } from '@/config/wagmi'
 import {
   BUNDLE_EXECUTOR_EXECUTE_ABI,
@@ -82,7 +83,7 @@ export function useBundleExecutorExecute(): UseBundleExecutorExecuteResult {
         setStatus('success')
       } catch (error) {
         setStatus('error')
-        setErrorMessage(error instanceof Error ? error.message : 'Transaction failed')
+        setErrorMessage(formatTestnetExecutionError(error))
       }
     },
     [address, sepoliaChainId, writeContractAsync],

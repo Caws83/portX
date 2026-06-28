@@ -853,12 +853,13 @@ export function TransactionReviewModal({
                   {TESTNET_BUTTONS.approveTokens}
                 </p>
                 <p className="text-xs text-portx-muted">
-                  Approve each token so {EXECUTION_ROUTER_NAME} can complete your sell.
+                  Approve portfolio tokens for {EXECUTION_ROUTER_NAME}. When protocol fees are
+                  enabled, also approve USDC for the sell fee.
                 </p>
                 <ul className="space-y-2">
-                  {testnetExecute.approvals.legs.map((leg) => (
+                  {testnetExecute.approvals.inputLegs.map((leg) => (
                     <li
-                      key={leg.symbol}
+                      key={leg.id}
                       className="rounded-lg border border-portx-border bg-black/20 px-3 py-2 text-xs space-y-2"
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -873,7 +874,7 @@ export function TransactionReviewModal({
                         {!leg.sufficient ? (
                           <button
                             type="button"
-                            onClick={() => void testnetExecute.approvals.approveToken(leg.symbol)}
+                            onClick={() => void testnetExecute.approvals.approveToken(leg.id)}
                             disabled={
                               testnetExecute.approvals.isApproving ||
                               testnetExecute.approvals.pendingSymbol === leg.symbol
@@ -890,17 +891,56 @@ export function TransactionReviewModal({
                         <span className="text-portx-muted">Amount: </span>
                         <span className="font-mono">{leg.amountDisplay} {leg.symbol}</span>
                       </p>
-                      <p>
-                        <span className="text-portx-muted">Allowance: </span>
-                        <span className="font-mono">
-                          {leg.sufficient ? 'Sufficient' : `${leg.allowance.toString()} (need ${leg.amountRequired.toString()})`}
-                        </span>
-                      </p>
                     </li>
                   ))}
+                  {testnetExecute.approvals.protocolFeeLeg ? (
+                    <li className="rounded-lg border border-portx-warning/30 bg-portx-warning/5 px-3 py-2 text-xs space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium">
+                          USDC protocol fee
+                          {testnetExecute.approvals.protocolFeeLeg.sufficient ? (
+                            <span className="ml-2 text-portx-green">Approved</span>
+                          ) : (
+                            <span className="ml-2 text-portx-warning">Approval required</span>
+                          )}
+                        </p>
+                        {!testnetExecute.approvals.protocolFeeLeg.sufficient ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void testnetExecute.approvals.approveToken(
+                                testnetExecute.approvals.protocolFeeLeg!.id,
+                              )
+                            }
+                            disabled={testnetExecute.approvals.isApproving}
+                            className="btn-secondary text-xs px-3 py-1 disabled:opacity-50"
+                          >
+                            Approve USDC fee
+                          </button>
+                        ) : null}
+                      </div>
+                      <p>
+                        <span className="text-portx-muted">Est. fee: </span>
+                        <span className="font-mono">
+                          {testnetExecute.approvals.protocolFeeLeg.amountDisplay} USDC
+                        </span>
+                      </p>
+                      <p className="text-[10px] text-portx-muted">
+                        Required when sell protocol fees are enabled on Sepolia.
+                      </p>
+                    </li>
+                  ) : null}
                 </ul>
                 {testnetExecute.approvals.approvalError ? (
-                  <p className="text-xs text-portx-danger">{testnetExecute.approvals.approvalError}</p>
+                  <p className="text-xs text-portx-danger">
+                    {testnetExecute.approvals.missingUsdcFeeApproval
+                      ? 'Approve USDC protocol fee before selling.'
+                      : testnetExecute.approvals.approvalError}
+                  </p>
+                ) : testnetExecute.approvals.missingUsdcFeeApproval ? (
+                  <p className="text-xs text-portx-warning">
+                    Approve USDC protocol fee before selling.
+                  </p>
                 ) : null}
                 {testnetExecute.approvals.allApprovalsSufficient ? (
                   <p className="text-xs text-portx-green">

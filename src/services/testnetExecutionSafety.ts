@@ -414,9 +414,11 @@ export function assessTestnetUniswapBasketExecution(
       ),
       gate(
         'bundle-approvals',
-        'BundleExecutor ERC20 approvals',
+        'Portfolio token + USDC fee approvals',
         sellApprovalsSufficient,
-        sellApprovalsSufficient ? 'All allowances sufficient' : 'Approve each token before execute',
+        sellApprovalsSufficient
+          ? 'All allowances sufficient'
+          : 'Approve portfolio tokens and USDC protocol fee before execute',
       ),
     )
   }

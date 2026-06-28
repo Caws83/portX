@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useAccount, useChainId } from 'wagmi'
+import { useAccount, useChainId, usePublicClient } from 'wagmi'
 import { simulateContract } from 'wagmi/actions'
 import type { Hex } from 'viem'
 import { formatEther } from 'viem'
 import { sepolia } from 'viem/chains'
 import { wagmiConfig } from '@/config/wagmi'
-import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI } from '@/config/testnetExecution'
+import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI, TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
+import { TESTNET_MULTI_TOKEN_BASKET } from '@/data/testnetMultiTokenBasket'
 import type { ExecutionPlan } from '@/types/execution'
 import {
   BUNDLE_EXECUTOR_EXECUTE_ABI,
@@ -26,8 +27,12 @@ import {
 } from '@/services/protocolFee'
 import {
   useTestnetBundleExecutorApprovals,
+  verifyTestnetSellApprovals,
   type UseTestnetBundleExecutorApprovalsResult,
 } from '@/hooks/useTestnetBundleExecutorApprovals'
+import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
+import { refreshTestnetSellExecutionBundle } from '@/services/testnetSellExecution'
+import { formatTestnetExecutionError } from '@/utils/bundleExecutorErrors'
 import { isSepoliaTestnetTradePlan, type TestnetQuoteSource } from '@/utils/testnetPreview'
 import {
   EXECUTION_ROUTER_NAME,
@@ -78,7 +83,7 @@ async function simulateBundleExecution(
   } catch (error) {
     return {
       passed: false,
-      message: error instanceof Error ? error.message : 'Static simulation failed',
+      message: formatTestnetExecutionError(error),
     }
   }
 }
@@ -90,9 +95,11 @@ export function useTestnetUniswapBasketExecute(
 ): UseTestnetUniswapBasketExecuteResult {
   const { isConnected, address } = useAccount()
   const chainId = useChainId()
+  const publicClient = usePublicClient({ chainId: TESTNET_SEPOLIA_CHAIN_ID })
   const { enableLiveExecution, enableTestnetMode } = useFeatureFlags()
   const contractHealth = useBundleExecutorHealth()
   const feeConfigState = useBundleExecutorFeeConfig()
+  const testnetBalances = useTestnetPortfolioBalances()
   const approvals = useTestnetBundleExecutorApprovals(plan, open, feeConfigState.config)
   const {
     status: executeStatus,
@@ -106,6 +113,7 @@ export function useTestnetUniswapBasketExecute(
 
   const [simulation, setSimulation] = useState<{ passed: boolean; message: string } | null>(null)
   const [simulating, setSimulating] = useState(false)
+  const [preExecuteError, setPreExecuteError] = useState<string | null>(null)
 
   const isTestnetUniswapPlan = useMemo(
     () => (plan ? isSepoliaTestnetTradePlan(plan, quoteSource) : false),
@@ -207,6 +215,7 @@ export function useTestnetUniswapBasketExecute(
       resetExecute()
       setSimulation(null)
       setSimulating(false)
+      setPreExecuteError(null)
     }
   }, [open, resetExecute])
 
@@ -221,18 +230,21 @@ export function useTestnetUniswapBasketExecute(
     ? null
     : executeStatus === 'pending' || isWritePending
       ? 'Transaction pending…'
-      : !approvals.allApprovalsSufficient
-        ? `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
-        : assessment.blockedReason
+      : approvals.missingUsdcFeeApproval
+        ? 'Approve USDC protocol fee before selling.'
+        : !approvals.allApprovalsSufficient
+          ? `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
+          : assessment.blockedReason
 
   const reset = useCallback(() => {
     resetExecute()
     setSimulation(null)
     setSimulating(false)
+    setPreExecuteError(null)
   }, [resetExecute])
 
   const execute = useCallback(async () => {
-    if (!canExecute || !plan || baseAssessment?.prepareResult?.status !== 'ready') return
+    if (!canExecute || !plan || !address) return
 
     const confirmationMessage = isSellPlan
       ? TESTNET_UNISWAP_SELL_CONFIRMATION_MESSAGE
@@ -240,13 +252,64 @@ export function useTestnetUniswapBasketExecute(
     const confirmed = window.confirm(confirmationMessage)
     if (!confirmed) return
 
-    const prepareResult = baseAssessment.prepareResult
+    let prepareResult = baseAssessment?.prepareResult
+    if (prepareResult?.status !== 'ready') return
+
+    setPreExecuteError(null)
+
+    if (isSellPlan) {
+      const balancesWei = Object.fromEntries(
+        testnetBalances.assets.map((asset) => [asset.symbol, asset.balanceWei]),
+      )
+      const refreshed = await refreshTestnetSellExecutionBundle({
+        plan,
+        allocations: TESTNET_MULTI_TOKEN_BASKET.allocations,
+        balancesWei,
+        walletAddress: address,
+      })
+      if (!refreshed) {
+        setPreExecuteError('Could not refresh sell quote — open sell preview again.')
+        return
+      }
+      prepareResult = refreshed.prepareResult
+
+      if (publicClient) {
+        const approvalCheck = await verifyTestnetSellApprovals({
+          plan: refreshed.plan,
+          feeConfig: feeConfigState.config,
+          owner: address,
+          publicClient,
+        })
+        if (!approvalCheck.sufficient) {
+          await approvals.refetchAllowances()
+          setPreExecuteError(
+            approvalCheck.missingUsdcFee
+              ? 'Approve USDC protocol fee before selling.'
+              : 'Approve each portfolio token before selling.',
+          )
+          return
+        }
+      }
+    }
+
     await executeBundle({
       basketId: prepareResult.basketId,
       swaps: prepareResult.swapCalls,
-      value: resolveBundleMsgValue(prepareResult.totalNativeEthWei),
+      value: isSellPlan ? 0n : resolveBundleMsgValue(prepareResult.totalNativeEthWei),
     })
-  }, [canExecute, plan, baseAssessment, executeBundle, isSellPlan, resolveBundleMsgValue])
+  }, [
+    canExecute,
+    plan,
+    address,
+    baseAssessment,
+    isSellPlan,
+    testnetBalances.assets,
+    publicClient,
+    feeConfigState.config,
+    executeBundle,
+    resolveBundleMsgValue,
+    approvals,
+  ])
 
   return {
     isTestnetUniswapPlan: assessment.isTestnetUniswapPlan,
@@ -258,7 +321,7 @@ export function useTestnetUniswapBasketExecute(
     status: executeStatus,
     txHash,
     explorerUrl,
-    errorMessage,
+    errorMessage: preExecuteError ?? errorMessage,
     execute,
     reset,
     approvals,
