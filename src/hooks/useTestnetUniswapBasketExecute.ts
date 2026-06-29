@@ -5,9 +5,13 @@ import type { Hex } from 'viem'
 import { formatEther } from 'viem'
 import { sepolia } from 'viem/chains'
 import { wagmiConfig } from '@/config/wagmi'
-import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI, TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
-import { TESTNET_MULTI_TOKEN_BASKET } from '@/data/testnetMultiTokenBasket'
+import {
+  TESTNET_DEFAULT_SWAP_AMOUNT_WEI,
+  TESTNET_SEPOLIA_CHAIN_ID,
+} from '@/config/testnetExecution'
 import type { ExecutionPlan } from '@/types/execution'
+import { sumTestnetPlanInputWei } from '@/utils/testnetPreview'
+import { TESTNET_MULTI_TOKEN_BASKET } from '@/data/testnetMultiTokenBasket'
 import {
   BUNDLE_EXECUTOR_EXECUTE_ABI,
   getBundleExecutorAddress,
@@ -537,7 +541,10 @@ export function useTestnetUniswapBasketExecute(
   }
 }
 
-export function getTestnetUniswapExecuteAmountLabel(): string {
+export function getTestnetUniswapExecuteAmountLabel(plan?: ExecutionPlan | null): string {
+  if (plan?.type === 'buy') {
+    return `${formatEther(sumTestnetPlanInputWei(plan))} Sepolia ETH`
+  }
   return `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} Sepolia ETH`
 }
 

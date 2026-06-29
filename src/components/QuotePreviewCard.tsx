@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { formatEther, formatUnits } from 'viem'
 import type { BasketQuotePreview } from '@/types/quote'
 import { BUTTON_LABELS } from '@/config/uiCopy'
-import { TESTNET_DEFAULT_SWAP_AMOUNT_WEI, TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
+import { TESTNET_SEPOLIA_CHAIN_ID } from '@/config/testnetExecution'
 import { SEPOLIA_PORTFOLIO_TRADE, TESTNET_TRADE_NOTE } from '@/config/testnetUxCopy'
 import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
 import { TestnetProtocolFeeSummary } from '@/components/TestnetProtocolFeeSummary'
@@ -100,7 +100,11 @@ export function QuotePreviewCard({
         rateLabel: `${(feeConfigState.config.sellFeeBps / 100).toFixed(2)}%`,
       }
     }
-    const fee = estimateBuyProtocolFee(TESTNET_DEFAULT_SWAP_AMOUNT_WEI, feeConfigState.config)
+    const totalInputEthWei = preview.legs.reduce(
+      (sum, leg) => sum + BigInt(leg.bestQuote.inputAmount),
+      0n,
+    )
+    const fee = estimateBuyProtocolFee(totalInputEthWei, feeConfigState.config)
     if (fee <= 0n) return null
     return {
       amount: fee,
@@ -110,6 +114,11 @@ export function QuotePreviewCard({
       rateLabel: `${(feeConfigState.config.buyFeeBps / 100).toFixed(2)}%`,
     }
   }, [isTestnetPreview, isTestnetSell, preview.legs, feeConfigState.config])
+  const testnetBuyInputEthWei = useMemo(
+    () =>
+      preview.legs.reduce((sum, leg) => sum + BigInt(leg.bestQuote.inputAmount), 0n),
+    [preview.legs],
+  )
   const netUsdcAfterFee = useMemo(() => {
     if (!isTestnetSell || !estimatedProtocolFee || estimatedProtocolFee.isBuy) return undefined
     const totalUsdc = preview.legs.reduce(
@@ -269,13 +278,21 @@ export function QuotePreviewCard({
       ) : null}
 
       {preview.type === 'buy' && (
-        <div className="p-3 rounded-xl bg-portx-surface border border-portx-border text-sm">
-          <span className="text-portx-muted">Input: </span>
-          <span className="font-mono font-semibold text-portx-green">
-            {isTestnetPreview
-              ? `${formatEther(TESTNET_DEFAULT_SWAP_AMOUNT_WEI)} ETH`
-              : `${formatUsd(preview.totalInputUsd)} USDC`}
-          </span>
+        <div className="p-3 rounded-xl bg-portx-surface border border-portx-border text-sm space-y-1">
+          {isTestnetPreview && preview.totalInputUsd > 0 ? (
+            <p>
+              <span className="text-portx-muted">Total buy: </span>
+              <span className="font-mono font-semibold">{formatUsd(preview.totalInputUsd)}</span>
+            </p>
+          ) : null}
+          <p>
+            <span className="text-portx-muted">Input: </span>
+            <span className="font-mono font-semibold text-portx-green">
+              {isTestnetPreview
+                ? `${formatEther(testnetBuyInputEthWei)} ETH`
+                : `${formatUsd(preview.totalInputUsd)} USDC`}
+            </span>
+          </p>
         </div>
       )}
 

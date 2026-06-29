@@ -28,7 +28,10 @@ function PortfolioTradeProviderActive({ children }: { children: ReactNode }) {
   const [buyAmountUsd, setBuyAmountUsd] = useState(DEFAULT_BUY_AMOUNT_USD)
   const { portfolio } = useTestnetPortfolioOwnership()
   const tradeOptions = useMemo(
-    (): UseTestnetPortfolioTradeActionsOptions => ({ buyAmountUsd }),
+    (): UseTestnetPortfolioTradeActionsOptions => ({
+      buyAmountUsd,
+      onBuyAmountUsdChange: setBuyAmountUsd,
+    }),
     [buyAmountUsd],
   )
   const trade = useTestnetPortfolioTradeActions(tradeOptions)

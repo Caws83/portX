@@ -12,6 +12,7 @@ import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPort
 
 export interface UseTestnetPortfolioTradeActionsOptions {
   buyAmountUsd?: number
+  onBuyAmountUsdChange?: (amount: number) => void
 }
 
 export function useTestnetPortfolioTradeActions(
@@ -24,9 +25,12 @@ export function useTestnetPortfolioTradeActions(
   const sellBasket = usePortfolioStore((s) => s.sellBasket)
 
   const buyAmount = options.buyAmountUsd ?? DEFAULT_BUY_AMOUNT_USD
+  const onBuyAmountUsdChange = options.onBuyAmountUsdChange
 
   const quote = useQuotePreview()
   const [selectedBasket, setSelectedBasket] = useState<Basket | null>(null)
+  const [pendingBuyBasket, setPendingBuyBasket] = useState<Basket | null>(null)
+  const [buyAmountModalOpen, setBuyAmountModalOpen] = useState(false)
   const [rebalanceBasket, setRebalanceBasket] = useState<Basket | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -59,15 +63,45 @@ export function useTestnetPortfolioTradeActions(
     return canShowBasketQuotes(basket)
   }, [])
 
-  const openBuyPreview = useCallback(
-    async (basketOrId: Basket | string) => {
+  const openBuyAmountSelector = useCallback(
+    (basketOrId: Basket | string) => {
       const basket = typeof basketOrId === 'string' ? resolveBasket(basketOrId) : basketOrId
       if (!basket || !guardQuotePreview(basket)) return
       setSelectedBasket(basket)
+      setPendingBuyBasket(basket)
       setTxMsg(null)
-      await quote.previewBuy(basket, buyAmount)
+      setBuyAmountModalOpen(true)
     },
-    [resolveBasket, guardQuotePreview, quote, buyAmount],
+    [resolveBasket, guardQuotePreview],
+  )
+
+  const closeBuyAmountSelector = useCallback(() => {
+    setBuyAmountModalOpen(false)
+    setPendingBuyBasket(null)
+  }, [])
+
+  const confirmBuyAmountAndReview = useCallback(
+    async (amountUsd: number) => {
+      const basket = pendingBuyBasket
+      if (!basket) return
+      onBuyAmountUsdChange?.(amountUsd)
+      setBuyAmountModalOpen(false)
+      setPendingBuyBasket(null)
+      setSelectedBasket(basket)
+      setTxMsg(null)
+      const preview = await quote.previewBuy(basket, amountUsd)
+      if (!preview) return
+      quote.buildPlan(preview)
+      setModalOpen(true)
+    },
+    [pendingBuyBasket, onBuyAmountUsdChange, quote],
+  )
+
+  const openBuyPreview = useCallback(
+    async (basketOrId: Basket | string) => {
+      openBuyAmountSelector(basketOrId)
+    },
+    [openBuyAmountSelector],
   )
 
   const openSellPreview = useCallback(
@@ -84,16 +118,9 @@ export function useTestnetPortfolioTradeActions(
 
   const openBuyPreviewAndReview = useCallback(
     async (basketOrId: Basket | string) => {
-      const basket = typeof basketOrId === 'string' ? resolveBasket(basketOrId) : basketOrId
-      if (!basket || !guardQuotePreview(basket)) return
-      setSelectedBasket(basket)
-      setTxMsg(null)
-      const preview = await quote.previewBuy(basket, buyAmount)
-      if (!preview) return
-      quote.buildPlan(preview)
-      setModalOpen(true)
+      openBuyAmountSelector(basketOrId)
     },
-    [resolveBasket, guardQuotePreview, quote, buyAmount],
+    [openBuyAmountSelector],
   )
 
   const openSellPreviewAndReview = useCallback(
@@ -135,6 +162,8 @@ export function useTestnetPortfolioTradeActions(
     quote.clear()
     setSelectedBasket(null)
     setModalOpen(false)
+    setBuyAmountModalOpen(false)
+    setPendingBuyBasket(null)
   }, [quote])
 
   const selectBasket = useCallback((basket: Basket | null) => {
@@ -202,11 +231,17 @@ export function useTestnetPortfolioTradeActions(
     txMsg,
     setTxMsg,
     showQuotePreview,
+    buyAmountModalOpen,
+    pendingBuyBasket,
+    buyAmountUsd: buyAmount,
     resolveBasket,
     getBalancesWei,
     openBuyPreview,
     openSellPreview,
     openBuyPreviewAndReview,
+    openBuyAmountSelector,
+    closeBuyAmountSelector,
+    confirmBuyAmountAndReview,
     openSellPreviewAndReview,
     openRebalancePreview,
     openReviewModal,

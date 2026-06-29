@@ -337,6 +337,7 @@ export function resolveAllocationOutputToken(allocation: TokenAllocation): Testn
 export interface TestnetMultiTokenBasketParams {
   basketId?: string
   basketName?: string
+  amountUsd?: number
   amountInWei?: bigint
   slippageBps?: number
   allocations: TokenAllocation[]
@@ -348,6 +349,7 @@ export async function buildTestnetMultiTokenBasketPreview(
   recipient?: Address,
 ): Promise<BasketQuotePreview> {
   const totalAmountWei = params.amountInWei ?? TESTNET_DEFAULT_SWAP_AMOUNT_WEI
+  const totalInputUsd = params.amountUsd ?? 0
   const slippageBps = params.slippageBps ?? TESTNET_DEFAULT_SLIPPAGE_BPS
   assertTestnetSwapAmount(totalAmountWei)
 
@@ -384,7 +386,9 @@ export async function buildTestnetMultiTokenBasketPreview(
     allocation: {
       token: quote.outputToken,
       weightPercent: selectedAllocations[index].weightPercent,
-      inputAmountUsd: 0,
+      inputAmountUsd: totalInputUsd
+        ? (totalInputUsd * selectedAllocations[index].weightPercent) / 100
+        : 0,
       inputAmount: quote.inputAmount,
     },
     bestQuote: quote,
@@ -402,7 +406,7 @@ export async function buildTestnetMultiTokenBasketPreview(
     type: 'buy',
     basketId: params.basketId,
     basketName: params.basketName,
-    totalInputUsd: 0,
+    totalInputUsd,
     totalOutputUsd,
     totalGasUsd,
     slippageBps,

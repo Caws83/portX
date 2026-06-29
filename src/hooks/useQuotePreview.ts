@@ -26,6 +26,7 @@ import {
 } from '@/services/testnetMultiTokenQuote'
 import { buildTestnetMultiTokenSellPreview } from '@/services/testnetMultiTokenSellQuote'
 import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
+import { usdToTestnetEthWei } from '@/utils/testnetBuyAmount'
 import { buildExecutionPlan } from '@/services/transactionBuilder'
 import { canPreviewQuoteForBasket } from '@/utils/chainRouting'
 import {
@@ -101,6 +102,8 @@ export function useQuotePreview() {
             basketName: basket.name,
             slippageBps: params.slippageBps,
             allocations: basket.allocations,
+            amountUsd,
+            amountInWei: usdToTestnetEthWei(amountUsd),
           }
 
           const result = await buildTestnetMultiTokenBasketPreview(
@@ -128,6 +131,8 @@ export function useQuotePreview() {
             basketName: basket.name,
             slippageBps: params.slippageBps,
             allocations: basket.allocations,
+            amountUsd,
+            amountInWei: usdToTestnetEthWei(amountUsd),
           }
 
           const result = shouldUseMultiTokenTestnetQuote(basket.allocations)

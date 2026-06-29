@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
+import { formatEther } from 'viem'
 import type { ExecutionPlan } from '@/types/execution'
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
 import { formatUsd, formatTokenAmount, truncateAddress } from '@/utils/format'
@@ -44,10 +45,12 @@ import {
   formatTestnetPlanTotalInput,
   formatTestnetPlanTotalOutput,
   isSepoliaTestnetTradePlan,
+  sumTestnetPlanInputWei,
 } from '@/utils/testnetPreview'
 import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
 import {
   estimateBuyProtocolFee,
+  grossUpEthValueForBuyFee,
   estimateSellProtocolFee,
   formatProtocolFeeBps,
   isFeeCollectionActive,
@@ -379,6 +382,20 @@ export function TransactionReviewModal({
 
     return null
   }, [plan, feeConfigState.config, testnetExecute.isSellPlan, bundlePrepareResult])
+
+  const testnetBuyEthSummary = useMemo(() => {
+    if (!plan || plan.type !== 'buy' || testnetExecute.isSellPlan) return null
+    const swapEthWei = sumTestnetPlanInputWei(plan)
+    const nativeLegEthWei =
+      bundlePrepareResult?.status === 'ready'
+        ? bundlePrepareResult.totalNativeEthWei
+        : swapEthWei
+    const finalEthWei = grossUpEthValueForBuyFee(nativeLegEthWei, feeConfigState.config)
+    return {
+      swapEthWei,
+      finalEthWei,
+    }
+  }, [plan, testnetExecute.isSellPlan, bundlePrepareResult, feeConfigState.config])
 
   if (!open || !plan) return null
   const quoteQuality = assessQuoteQualityFromPlan(plan, quoteSource ?? null)
@@ -847,15 +864,62 @@ export function TransactionReviewModal({
                     ]
                   : [
                       TESTNET_TRADE_NOTE,
-                      `Buys your portfolio allocation with ${getTestnetUniswapExecuteAmountLabel()} on Sepolia.`,
+                      `Buys your portfolio allocation with ${getTestnetUniswapExecuteAmountLabel(plan)} on Sepolia.`,
                     ]
               }
             />
 
             <div className="rounded-xl border border-portx-border bg-black/20 p-3 space-y-3 text-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-                Multi-leg basket breakdown
+                {testnetExecute.isSellPlan ? 'Multi-leg basket breakdown' : 'Buy summary'}
               </p>
+              {!testnetExecute.isSellPlan ? (
+                <dl className="grid grid-cols-2 gap-3 mb-2">
+                  <div>
+                    <dt className="text-xs text-portx-muted">Total buy amount</dt>
+                    <dd className="font-mono font-semibold">{formatUsd(plan.totalInputUsd)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-portx-muted">Swap ETH (legs)</dt>
+                    <dd className="font-mono font-semibold text-portx-green">
+                      {testnetBuyEthSummary
+                        ? `${formatEther(testnetBuyEthSummary.swapEthWei)} ETH`
+                        : formatTestnetPlanTotalInput(plan)}
+                    </dd>
+                  </div>
+                  {testnetBuyEthSummary &&
+                  testnetBuyEthSummary.finalEthWei > testnetBuyEthSummary.swapEthWei ? (
+                    <div className="col-span-2">
+                      <dt className="text-xs text-portx-muted">Final ETH required (incl. protocol fee)</dt>
+                      <dd className="font-mono font-semibold">
+                        {formatEther(testnetBuyEthSummary.finalEthWei)} ETH
+                      </dd>
+                    </div>
+                  ) : null}
+                  <div className="col-span-2">
+                    <dt className="text-xs text-portx-muted mb-1">Expected tokens received</dt>
+                    <dd className="font-mono font-semibold">{formatTestnetPlanTotalOutput(plan)}</dd>
+                  </div>
+                </dl>
+              ) : null}
+              {!testnetExecute.isSellPlan && plan.legs.length > 0 ? (
+                <ul className="space-y-1 text-xs border-t border-portx-border pt-2">
+                  {plan.legs.map((leg, index) => {
+                    const quotePreviewLeg = bundleQuotePreview?.legs[index]
+                    const weight = quotePreviewLeg?.allocation.weightPercent ?? 0
+                    const usd = quotePreviewLeg?.allocation.inputAmountUsd ?? 0
+                    return (
+                      <li key={leg.index} className="flex justify-between gap-2">
+                        <span>
+                          {leg.quote.outputToken.symbol}{' '}
+                          <span className="text-portx-muted">({weight}%)</span>
+                        </span>
+                        <span className="font-mono">{formatUsd(usd)}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : null}
               <dl className="grid grid-cols-2 gap-3">
                 <div>
                   <dt className="text-xs text-portx-muted">Leg count</dt>

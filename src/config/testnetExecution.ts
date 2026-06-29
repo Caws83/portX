@@ -20,9 +20,11 @@ export const TESTNET_USDC_ADDRESS =
 
 export const TESTNET_UNISWAP_POOL_FEE = 3000 as const
 
+/** Fallback when no buy amount is selected — prefer user-chosen notional */
 export const TESTNET_DEFAULT_SWAP_AMOUNT_WEI = parseEther('0.0001')
 
-export const TESTNET_MAX_SWAP_AMOUNT_WEI = parseEther('0.01')
+/** Caps single-basket Sepolia ETH notional (~$1,250 at $2,500/ETH reference) */
+export const TESTNET_MAX_SWAP_AMOUNT_WEI = parseEther('0.5')
 
 export const TESTNET_DEFAULT_SLIPPAGE_BPS = 300 as const
 

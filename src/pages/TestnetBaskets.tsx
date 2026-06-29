@@ -190,8 +190,8 @@ export function TestnetBaskets() {
           />
         </div>
         <p className="text-xs text-portx-muted sm:max-w-md">
-          Example: ${trade.buyAmountUsd.toLocaleString()} USDC into an Ethereum basket splits across
-          allocation legs, each quoted independently. Planned-chain baskets do not request quotes.
+          Default amount for the next buy: ${trade.buyAmountUsd.toLocaleString()}. You choose the
+          exact amount in the buy step before review.
         </p>
       </div>
 
