@@ -127,10 +127,15 @@ function buildExecuteParams(
   }
 }
 
+export interface UseTestnetUniswapBasketExecuteOptions {
+  preferMaxApproval?: boolean
+}
+
 export function useTestnetUniswapBasketExecute(
   plan: ExecutionPlan | null,
   open: boolean,
   quoteSource: TestnetQuoteSource = null,
+  options: UseTestnetUniswapBasketExecuteOptions = {},
 ): UseTestnetUniswapBasketExecuteResult {
   const { isConnected, address } = useAccount()
   const chainId = useChainId()
@@ -219,7 +224,10 @@ export function useTestnetUniswapBasketExecute(
     effectivePlan,
     approvalsOpen,
     feeConfigState.config,
-    { onApprovalSuccess: handleApprovalSuccess },
+    {
+      onApprovalSuccess: handleApprovalSuccess,
+      preferMaxApproval: options.preferMaxApproval,
+    },
   )
 
   const bundleQuotePreview = useMemo(() => {
@@ -423,7 +431,10 @@ export function useTestnetUniswapBasketExecute(
             : approvals.missingUsdcFeeApproval
               ? 'Approve USDC protocol fee before selling.'
               : !approvals.allApprovalsSufficient
-                ? `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
+                ? approvals.missingInputApprovals.some((leg) => leg.needsAdditionalApproval) ||
+                    approvals.protocolFeeLeg?.needsAdditionalApproval
+                  ? 'Quote updated — approve the new amount required for this sell.'
+                  : `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
                 : assessment.blockedReason
 
   const reset = useCallback(() => {

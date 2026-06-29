@@ -117,12 +117,14 @@ function ApprovalRow({
   onApprove,
   isApproving,
   pendingSymbol,
+  preferMaxApproval,
   compact = false,
 }: {
   leg: TestnetApprovalRequirement
   onApprove: () => void
   isApproving: boolean
   pendingSymbol: string | null
+  preferMaxApproval: boolean
   compact?: boolean
 }) {
   const statusTone =
@@ -131,6 +133,12 @@ function ApprovalRow({
       : leg.status === 'pending'
         ? 'text-portx-muted'
         : 'text-portx-warning'
+
+  const tokenLabel = leg.kind === 'protocol_fee' ? 'USDC' : leg.symbol
+  const approvalTypeLabel = preferMaxApproval ? 'Unlimited' : 'Exact amount'
+  const amountToApproveLabel = preferMaxApproval
+    ? 'Unlimited'
+    : `${leg.approvalAmountDisplay} ${tokenLabel}`
 
   return (
     <li
@@ -158,13 +166,30 @@ function ApprovalRow({
           <span className="text-xs text-portx-muted">Approving…</span>
         ) : null}
       </div>
-      {!compact && leg.kind === 'input' ? (
-        <p>
-          <span className="text-portx-muted">Amount: </span>
-          <span className="font-mono">
-            {leg.amountDisplay} {leg.symbol}
-          </span>
-        </p>
+      {!compact ? (
+        <div className="space-y-1 text-portx-muted">
+          <p>
+            <span>Token: </span>
+            <span className="font-medium text-portx-foreground">{tokenLabel}</span>
+          </p>
+          <p>
+            <span>Amount to approve: </span>
+            <span className="font-mono text-portx-foreground">{amountToApproveLabel}</span>
+          </p>
+          <p>
+            <span>Spender: </span>
+            <span className="text-portx-foreground">{EXECUTION_ROUTER_NAME}</span>
+          </p>
+          <p>
+            <span>Approval type: </span>
+            <span className="text-portx-foreground">{approvalTypeLabel}</span>
+          </p>
+          {leg.needsAdditionalApproval ? (
+            <p className="text-portx-warning">
+              Quote updated — approve the new amount required for this sell.
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </li>
   )
@@ -213,7 +238,10 @@ export function TransactionReviewModal({
   const { enableLiveExecution } = useFeatureFlags()
   const [simulation, setSimulation] = useState<SimulationResult | null>(null)
   const [simulating, setSimulating] = useState(false)
-  const testnetExecute = useTestnetUniswapBasketExecute(plan, open, quoteSource ?? null)
+  const [preferMaxApproval, setPreferMaxApproval] = useState(false)
+  const testnetExecute = useTestnetUniswapBasketExecute(plan, open, quoteSource ?? null, {
+    preferMaxApproval,
+  })
   const testnetBalances = useTestnetPortfolioBalances()
   const feeConfigState = useBundleExecutorFeeConfig()
   const mainnetPilot = useMainnetSwapExecute(plan, open, quoteSource ?? null)
@@ -237,6 +265,7 @@ export function TransactionReviewModal({
   useEffect(() => {
     if (!open) {
       savedHistoryTxRef.current = null
+      setPreferMaxApproval(false)
     }
   }, [open])
 
@@ -912,6 +941,10 @@ export function TransactionReviewModal({
                   Sell approvals — complete in order
                 </p>
 
+                <p className="text-xs text-portx-muted">
+                  PortX only requests approval for the amount needed for this sell.
+                </p>
+
                 {testnetExecute.isSellPlan && testnetExecute.sellPayloadRefreshing ? (
                   <p className="text-xs text-portx-muted">
                     Refreshing sell quote before execution…
@@ -959,6 +992,7 @@ export function TransactionReviewModal({
                       <ApprovalRow
                         key={leg.id}
                         leg={leg}
+                        preferMaxApproval={preferMaxApproval}
                         onApprove={() => void testnetExecute.approvals.approveToken(leg.id)}
                         isApproving={testnetExecute.approvals.isApproving}
                         pendingSymbol={testnetExecute.approvals.pendingSymbol}
@@ -975,6 +1009,10 @@ export function TransactionReviewModal({
                         <p className="text-xs text-portx-muted">
                           Protocol sell fee — est.{' '}
                           {testnetExecute.approvals.protocolFeeLeg.amountDisplay} USDC
+                          {testnetExecute.approvals.protocolFeeLeg.approvalAmountDisplay !==
+                          testnetExecute.approvals.protocolFeeLeg.amountDisplay
+                            ? ` (approve ${testnetExecute.approvals.protocolFeeLeg.approvalAmountDisplay} USDC with buffer)`
+                            : null}
                         </p>
                       </div>
                       {testnetExecute.approvals.protocolFeeLeg.sufficient ? (
@@ -998,6 +1036,7 @@ export function TransactionReviewModal({
                     </div>
                     <ApprovalRow
                       leg={testnetExecute.approvals.protocolFeeLeg}
+                      preferMaxApproval={preferMaxApproval}
                       onApprove={() =>
                         void testnetExecute.approvals.approveToken(
                           testnetExecute.approvals.protocolFeeLeg!.id,
@@ -1005,7 +1044,6 @@ export function TransactionReviewModal({
                       }
                       isApproving={testnetExecute.approvals.isApproving}
                       pendingSymbol={testnetExecute.approvals.pendingSymbol}
-                      compact
                     />
                   </div>
                 ) : (
@@ -1017,6 +1055,25 @@ export function TransactionReviewModal({
                 <p className="text-xs text-portx-muted">
                   3. Execute Sell — enabled after approvals and a fresh simulation pass.
                 </p>
+
+                <AdvancedDisclosure title="Advanced — approval options">
+                  <label className="flex items-start gap-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={preferMaxApproval}
+                      onChange={(event) => setPreferMaxApproval(event.target.checked)}
+                      disabled={testnetExecute.approvals.isApproving}
+                    />
+                    <span>Approve once for faster future sells</span>
+                  </label>
+                  {preferMaxApproval ? (
+                    <p className="text-xs text-portx-warning mt-2">
+                      Unlimited approval gives the PortX Execution Router permission to move future
+                      balances of this token until revoked.
+                    </p>
+                  ) : null}
+                </AdvancedDisclosure>
 
                 {testnetExecute.approvals.approvalError ? (
                   <p className="text-xs text-portx-danger">{testnetExecute.approvals.approvalError}</p>

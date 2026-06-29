@@ -14,7 +14,12 @@ import { isTestnetSepoliaUniswapPlan } from '@/utils/testnetPreview'
 
 export const USDC_PROTOCOL_FEE_APPROVAL_ID = 'usdc-protocol-fee'
 
+/** Small buffer on USDC fee approvals so minor quote drift does not require re-approval. */
+export const PROTOCOL_FEE_APPROVAL_BUFFER_BPS = 100n
+
 export type TestnetApprovalStatus = 'approved' | 'needs_approval' | 'pending'
+
+export type TestnetApprovalMode = 'exact' | 'unlimited'
 
 export interface TestnetApprovalRequirement {
   id: string
@@ -22,14 +27,29 @@ export interface TestnetApprovalRequirement {
   tokenAddress: Address
   amountRequired: bigint
   amountDisplay: string
+  approvalAmount: bigint
+  approvalAmountDisplay: string
   allowance: bigint
   sufficient: boolean
+  needsAdditionalApproval: boolean
   kind: 'input' | 'protocol_fee'
   status: TestnetApprovalStatus
 }
 
+export interface TestnetApprovalLegDef {
+  id: string
+  symbol: string
+  tokenAddress: Address
+  amountRequired: bigint
+  amountDisplay: string
+  approvalAmount: bigint
+  approvalAmountDisplay: string
+  kind: 'input' | 'protocol_fee'
+}
+
 export interface UseTestnetBundleExecutorApprovalsResult {
   requiresApprovals: boolean
+  approvalMode: TestnetApprovalMode
   legs: TestnetApprovalRequirement[]
   inputLegs: TestnetApprovalRequirement[]
   protocolFeeLeg: TestnetApprovalRequirement | null
@@ -53,13 +73,21 @@ function isErc20SellLeg(leg: ExecutionPlan['legs'][number]): boolean {
   return true
 }
 
-function buildInputApprovalLegs(
-  plan: ExecutionPlan,
-): Omit<TestnetApprovalRequirement, 'allowance' | 'sufficient' | 'status'>[] {
-  const byToken = new Map<
-    string,
-    Omit<TestnetApprovalRequirement, 'allowance' | 'sufficient' | 'status'>
-  >()
+export function applyProtocolFeeApprovalBuffer(feeAmount: bigint): bigint {
+  if (feeAmount <= 0n) return 0n
+  const buffer = (feeAmount * PROTOCOL_FEE_APPROVAL_BUFFER_BPS) / 10_000n
+  return feeAmount + (buffer > 0n ? buffer : 1n)
+}
+
+export function resolveSellApprovalAmount(
+  leg: Pick<TestnetApprovalLegDef, 'approvalAmount'>,
+  preferMaxApproval: boolean,
+): bigint {
+  return preferMaxApproval ? maxUint256 : leg.approvalAmount
+}
+
+function buildInputApprovalLegs(plan: ExecutionPlan): TestnetApprovalLegDef[] {
+  const byToken = new Map<string, TestnetApprovalLegDef>()
 
   for (const leg of plan.legs) {
     if (!isErc20SellLeg(leg)) continue
@@ -73,7 +101,9 @@ function buildInputApprovalLegs(
       byToken.set(symbol, {
         ...existing,
         amountRequired: combined,
+        approvalAmount: combined,
         amountDisplay: formatUnits(combined, leg.quote.inputToken.decimals),
+        approvalAmountDisplay: formatUnits(combined, leg.quote.inputToken.decimals),
       })
       continue
     }
@@ -83,7 +113,9 @@ function buildInputApprovalLegs(
       symbol: leg.quote.inputToken.symbol,
       tokenAddress: leg.quote.inputToken.address as Address,
       amountRequired,
+      approvalAmount: amountRequired,
       amountDisplay: formatUnits(amountRequired, leg.quote.inputToken.decimals),
+      approvalAmountDisplay: formatUnits(amountRequired, leg.quote.inputToken.decimals),
       kind: 'input',
     })
   }
@@ -94,7 +126,7 @@ function buildInputApprovalLegs(
 function buildSellFeeApprovalLeg(
   plan: ExecutionPlan,
   feeConfig: BundleExecutorFeeConfig | null,
-): Omit<TestnetApprovalRequirement, 'allowance' | 'sufficient' | 'status'> | null {
+): TestnetApprovalLegDef | null {
   if (plan.type !== 'sell_basket') return null
   if (!feeConfig?.feesEnabled || feeConfig.sellFeeBps <= 0) return null
 
@@ -109,12 +141,16 @@ function buildSellFeeApprovalLeg(
   if (!outputToken || isZeroAddress(outputToken.address)) return null
   if (outputToken.address.toLowerCase() !== TESTNET_USDC_ADDRESS.toLowerCase()) return null
 
+  const approvalAmount = applyProtocolFeeApprovalBuffer(feeAmount)
+
   return {
     id: USDC_PROTOCOL_FEE_APPROVAL_ID,
     symbol: 'USDC',
     tokenAddress: outputToken.address as Address,
     amountRequired: feeAmount,
+    approvalAmount,
     amountDisplay: formatUnits(feeAmount, outputToken.decimals),
+    approvalAmountDisplay: formatUnits(approvalAmount, outputToken.decimals),
     kind: 'protocol_fee',
   }
 }
@@ -122,7 +158,7 @@ function buildSellFeeApprovalLeg(
 export function mergeSellApprovalLegDefs(
   plan: ExecutionPlan,
   feeConfig: BundleExecutorFeeConfig | null,
-): Omit<TestnetApprovalRequirement, 'allowance' | 'sufficient' | 'status'>[] {
+): TestnetApprovalLegDef[] {
   const legs = buildInputApprovalLegs(plan)
   const feeLeg = buildSellFeeApprovalLeg(plan, feeConfig)
   if (!feeLeg) return legs
@@ -132,7 +168,7 @@ export function mergeSellApprovalLegDefs(
 async function readAllowances(
   publicClient: PublicClient,
   owner: Address,
-  legs: Omit<TestnetApprovalRequirement, 'allowance' | 'sufficient' | 'status'>[],
+  legs: TestnetApprovalLegDef[],
   pendingSymbol: string | null,
 ): Promise<TestnetApprovalRequirement[]> {
   const spender = getBundleExecutorAddress()
@@ -147,6 +183,7 @@ async function readAllowances(
       })
 
       const sufficient = allowance >= leg.amountRequired
+      const needsAdditionalApproval = allowance > 0n && !sufficient
       const status: TestnetApprovalStatus = pendingSymbol === leg.symbol
         ? 'pending'
         : sufficient
@@ -157,6 +194,7 @@ async function readAllowances(
         ...leg,
         allowance,
         sufficient,
+        needsAdditionalApproval,
         status,
       }
     }),
@@ -198,6 +236,7 @@ export async function verifyTestnetSellApprovals(params: {
 
 export interface UseTestnetBundleExecutorApprovalsOptions {
   onApprovalSuccess?: () => void | Promise<void>
+  preferMaxApproval?: boolean
 }
 
 export function useTestnetBundleExecutorApprovals(
@@ -209,6 +248,8 @@ export function useTestnetBundleExecutorApprovals(
   const { address } = useAccount()
   const publicClient = usePublicClient({ chainId: TESTNET_SEPOLIA_CHAIN_ID })
   const { writeContractAsync, isPending: isWritePending } = useWriteContract()
+  const preferMaxApproval = options.preferMaxApproval === true
+  const approvalMode: TestnetApprovalMode = preferMaxApproval ? 'unlimited' : 'exact'
 
   const [legs, setLegs] = useState<TestnetApprovalRequirement[]>([])
   const [pendingSymbol, setPendingSymbol] = useState<string | null>(null)
@@ -246,7 +287,7 @@ export function useTestnetBundleExecutorApprovals(
   }, [open, refetchAllowances, refreshNonce])
 
   const submitApproval = useCallback(
-    async (leg: Omit<TestnetApprovalRequirement, 'allowance' | 'sufficient' | 'status'>) => {
+    async (leg: TestnetApprovalLegDef) => {
       if (!address || !publicClient) {
         setApprovalError('Connect wallet on Sepolia to approve tokens')
         return false
@@ -256,11 +297,12 @@ export function useTestnetBundleExecutorApprovals(
       setApprovalError(null)
 
       try {
+        const approveAmount = resolveSellApprovalAmount(leg, preferMaxApproval)
         const hash = await writeContractAsync({
           address: leg.tokenAddress,
           abi: erc20Abi,
           functionName: 'approve',
-          args: [getBundleExecutorAddress(), maxUint256],
+          args: [getBundleExecutorAddress(), approveAmount],
           chainId: sepolia.id,
         })
 
@@ -301,6 +343,7 @@ export function useTestnetBundleExecutorApprovals(
       requiresApprovals,
       approvalLegDefs,
       options,
+      preferMaxApproval,
     ],
   )
 
@@ -356,6 +399,7 @@ export function useTestnetBundleExecutorApprovals(
 
   return {
     requiresApprovals,
+    approvalMode,
     legs,
     inputLegs,
     protocolFeeLeg,
