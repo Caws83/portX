@@ -912,6 +912,12 @@ export function TransactionReviewModal({
                   Sell approvals — complete in order
                 </p>
 
+                {testnetExecute.isSellPlan && testnetExecute.sellPayloadRefreshing ? (
+                  <p className="text-xs text-portx-muted">
+                    Refreshing sell quote before execution…
+                  </p>
+                ) : null}
+
                 <div className="rounded-lg border border-portx-border bg-black/20 p-3 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>

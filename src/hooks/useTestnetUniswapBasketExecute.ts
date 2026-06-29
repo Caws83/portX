@@ -62,6 +62,7 @@ export interface UseTestnetUniswapBasketExecuteResult {
   canExecute: boolean
   disabledReason: string | null
   simulating: boolean
+  sellPayloadRefreshing: boolean
   status: TestnetUniswapBasketExecuteStatus
   txHash?: Hex
   explorerUrl?: string
@@ -184,8 +185,8 @@ export function useTestnetUniswapBasketExecute(
     await refreshSellPayload()
   }, [isSellPlan, refreshSellPayload])
 
-  const effectivePlan = isSellPlan ? sellPayload?.plan ?? null : plan
-  const approvalsOpen = open && (!isSellPlan || sellPayload !== null)
+  const effectivePlan = isSellPlan ? (sellPayload?.plan ?? plan) : plan
+  const approvalsOpen = open
 
   const approvals = useTestnetBundleExecutorApprovals(
     effectivePlan,
@@ -446,6 +447,7 @@ export function useTestnetUniswapBasketExecute(
     canExecute,
     disabledReason,
     simulating: simulating || sellPayloadLoading,
+    sellPayloadRefreshing: isSellPlan && (sellPayloadLoading || (open && sellPayload === null)),
     status: executeStatus,
     txHash,
     explorerUrl,
