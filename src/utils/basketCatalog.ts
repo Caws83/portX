@@ -1,9 +1,13 @@
 import type { Basket, BasketCategory } from '@/types/basket'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
-import { TESTNET_MULTI_TOKEN_BASKET_ID } from '@/data/testnetMultiTokenBasket'
+import {
+  TESTNET_MULTI_TOKEN_BASKET,
+  TESTNET_MULTI_TOKEN_BASKET_ID,
+  isTestnetMultiTokenBasket,
+} from '@/data/testnetMultiTokenBasket'
 import { SPORT_FAN_BASKETS } from '@/data/sportFanBaskets'
+import { canExecuteSepoliaBasket } from '@/services/sepoliaBasketExecutionTier'
 import { canPreviewQuoteForBasket } from '@/utils/chainRouting'
-import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
 
 export type BasketCatalogSection =
   | 'my-portfolios'
@@ -49,6 +53,13 @@ export function mergeCatalogBaskets(base: Basket[]): Basket[] {
   return merged
 }
 
+/** Always surface the canonical Sepolia multi-token basket first in testnet catalog. */
+export function injectTestnetCanonicalBasket(baskets: Basket[]): Basket[] {
+  if (!ENABLE_TESTNET_MODE) return baskets
+  const withoutCanonical = baskets.filter((b) => b.id !== TESTNET_MULTI_TOKEN_BASKET_ID)
+  return [TESTNET_MULTI_TOKEN_BASKET, ...withoutCanonical]
+}
+
 /** Hide pilot fixtures and duplicate/invalid entries in testnet product mode */
 export function filterBasketsForAppMode(baskets: Basket[]): Basket[] {
   const deduped = dedupeBaskets(baskets)
@@ -70,7 +81,8 @@ export function filterBasketsForAppMode(baskets: Basket[]): Basket[] {
 
 export function canShowBasketQuotes(basket: Basket): boolean {
   if (basket.templateOnly) return false
-  if (ENABLE_TESTNET_MODE && isTestnetMultiTokenBasket(basket.id)) return true
+  if (ENABLE_TESTNET_MODE) return canExecuteSepoliaBasket(basket)
+  if (isTestnetMultiTokenBasket(basket.id)) return true
   return canPreviewQuoteForBasket(basket)
 }
 
@@ -119,6 +131,12 @@ export function groupBasketsBySection(
     sections[section].push(basket)
     assigned.add(basket.id)
   }
+
+  sections.featured.sort((a, b) => {
+    if (a.id === TESTNET_MULTI_TOKEN_BASKET_ID) return -1
+    if (b.id === TESTNET_MULTI_TOKEN_BASKET_ID) return 1
+    return 0
+  })
 
   return sections
 }

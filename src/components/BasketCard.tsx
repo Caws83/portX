@@ -2,12 +2,20 @@ import type { Basket } from '@/types/basket'
 import { BasketChainBadge } from '@/components/BasketChainBadge'
 import { PortfolioDriftBadge } from '@/components/PortfolioDriftBadge'
 import { TokenLogo } from '@/components/TokenLogo'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatUsd } from '@/utils/format'
 import { BUTTON_LABELS } from '@/config/uiCopy'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { canShowBasketQuotes } from '@/utils/basketCatalog'
 import { SPORT_FAN_ROUTING_MESSAGE } from '@/data/sportFanBaskets'
 import { getPlannedChainMessage } from '@/utils/chainRouting'
+import {
+  getSepoliaBasketExecutionTier,
+  getSepoliaBasketTierLabel,
+  SEPOLIA_STUB_BUTTON_LABEL,
+  SEPOLIA_STUB_NOTICE,
+  SEPOLIA_TEMPLATE_NOTICE,
+} from '@/services/sepoliaBasketExecutionTier'
 import type { DriftStatusLevel } from '@/utils/portfolioDrift'
 
 interface BasketCardProps {
@@ -41,11 +49,18 @@ export function BasketCard({
   isSelected,
 }: BasketCardProps) {
   const tokenCount = basket.allocations.length
+  const sepoliaTier = ENABLE_TESTNET_MODE ? getSepoliaBasketExecutionTier(basket) : null
   const quotesAvailable = canShowBasketQuotes(basket)
-  const isTemplate = basket.templateOnly === true
+  const isTemplate = basket.templateOnly === true || sepoliaTier === 'template'
   const plannedMessage = isTemplate
     ? SPORT_FAN_ROUTING_MESSAGE
     : getPlannedChainMessage(basket)
+  const tierNotice =
+    sepoliaTier === 'stub'
+      ? SEPOLIA_STUB_NOTICE
+      : sepoliaTier === 'template'
+        ? SEPOLIA_TEMPLATE_NOTICE
+        : null
 
   const showSellButton = Boolean(onPreviewSell && (canPreviewSell || isOwned))
   const showRebalanceButton = Boolean(
@@ -71,7 +86,10 @@ export function BasketCard({
                 {tag}
               </span>
             ))}
-            <BasketChainBadge chainLabel={basket.chainLabel} chainStatus={basket.chainStatus} />
+            <BasketChainBadgeOrSepoliaTier
+              basket={basket}
+              sepoliaTier={sepoliaTier}
+            />
             {isOwned && driftStatus && <PortfolioDriftBadge status={driftStatus} />}
             {isOwned && !driftStatus && (
               <span className="text-[10px] font-semibold uppercase tracking-wide text-portx-green">
@@ -100,18 +118,20 @@ export function BasketCard({
 
       <div className="text-sm text-portx-muted mb-4">
         {tokenCount} tokens
-        {ENABLE_TESTNET_MODE
-          ? isTemplate
-            ? ' · Preview template'
-            : isOwned
-              ? ' · In your wallet'
-              : ''
-          : ` · Demo TVL ${formatUsd(basket.totalValueUsd ?? 0, true)}`}
+        {ENABLE_TESTNET_MODE && sepoliaTier
+          ? ` · ${getSepoliaBasketTierLabel(sepoliaTier)}`
+          : ENABLE_TESTNET_MODE
+            ? isTemplate
+              ? ' · Preview template'
+              : isOwned
+                ? ' · In your wallet'
+                : ''
+            : ` · Demo TVL ${formatUsd(basket.totalValueUsd ?? 0, true)}`}
       </div>
 
-      {!quotesAvailable && (
+      {(tierNotice || (!quotesAvailable && !ENABLE_TESTNET_MODE)) && (
         <div className="mb-4 p-3 rounded-xl border border-portx-warning/40 bg-portx-warning/10 text-xs text-portx-warning leading-relaxed">
-          {plannedMessage}
+          {tierNotice ?? plannedMessage}
         </div>
       )}
 
@@ -125,20 +145,28 @@ export function BasketCard({
             disabled={quotesAvailable && loading}
             aria-busy={quotesAvailable && loading}
             aria-disabled={quotesAvailable && loading}
-            title={quotesAvailable ? buyLabel : plannedMessage}
+            title={
+              quotesAvailable
+                ? buyLabel
+                : sepoliaTier === 'stub'
+                  ? SEPOLIA_STUB_BUTTON_LABEL
+                  : plannedMessage
+            }
             className={
               quotesAvailable
                 ? 'btn-primary w-full text-sm py-2.5 disabled:opacity-50'
-                : 'btn-secondary w-full text-sm py-2.5 opacity-80'
+                : 'btn-secondary w-full text-sm py-2.5 opacity-80 cursor-not-allowed'
             }
           >
             {loading && quotesAvailable
               ? BUTTON_LABELS.fetchingQuotes
               : quotesAvailable
                 ? buyLabel
-                : isTemplate
-                  ? 'Coming soon'
-                  : BUTTON_LABELS.quotesUnavailable}
+                : sepoliaTier === 'stub'
+                  ? SEPOLIA_STUB_BUTTON_LABEL
+                  : isTemplate
+                    ? 'Coming soon'
+                    : BUTTON_LABELS.quotesUnavailable}
           </button>
         )}
         {showSellButton && (
@@ -181,5 +209,27 @@ export function BasketCard({
         )}
       </div>
     </div>
+  )
+}
+
+function BasketChainBadgeOrSepoliaTier({
+  basket,
+  sepoliaTier,
+}: {
+  basket: Basket
+  sepoliaTier: ReturnType<typeof getSepoliaBasketExecutionTier> | null
+}) {
+  if (ENABLE_TESTNET_MODE && sepoliaTier) {
+    return (
+      <StatusBadge
+        variant={sepoliaTier === 'executable' ? 'live-quote' : 'planned'}
+        label={getSepoliaBasketTierLabel(sepoliaTier)}
+        size="sm"
+      />
+    )
+  }
+
+  return (
+    <BasketChainBadge chainLabel={basket.chainLabel} chainStatus={basket.chainStatus} />
   )
 }

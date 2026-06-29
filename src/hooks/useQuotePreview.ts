@@ -28,6 +28,7 @@ import { buildTestnetMultiTokenSellPreview } from '@/services/testnetMultiTokenS
 import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
 import { usdToTestnetEthWei } from '@/utils/testnetBuyAmount'
 import { buildExecutionPlan } from '@/services/transactionBuilder'
+import { canExecuteSepoliaBasket } from '@/services/sepoliaBasketExecutionTier'
 import { canPreviewQuoteForBasket } from '@/utils/chainRouting'
 import {
   getTestnetQuoteBlockMessage,
@@ -86,6 +87,11 @@ export function useQuotePreview() {
       const params = getParams()
 
       try {
+        if (ENABLE_TESTNET_MODE && !canExecuteSepoliaBasket(basket)) {
+          setError('This basket cannot be executed on Sepolia — displayed tokens are not acquired.')
+          return null
+        }
+
         if (isTestnetRoutingBasket(basket.id)) {
           if (!shouldUseTestnetUniswapQuote(params.chainId)) {
             setError(getTestnetQuoteBlockMessage(params.chainId))

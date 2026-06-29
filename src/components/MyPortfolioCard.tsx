@@ -3,8 +3,13 @@ import type { Basket } from '@/types/basket'
 import { BasketChainBadge } from '@/components/BasketChainBadge'
 import { PortfolioDriftBadge } from '@/components/PortfolioDriftBadge'
 import { PortfolioTargetControls } from '@/components/PortfolioTargetControls'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatUsd } from '@/utils/format'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
+import {
+  getSepoliaBasketExecutionTier,
+  getSepoliaBasketTierLabel,
+} from '@/services/sepoliaBasketExecutionTier'
 import type { DriftStatusLevel } from '@/utils/portfolioDrift'
 
 export interface PortfolioTokenBalance {
@@ -53,6 +58,7 @@ export function MyPortfolioCard({
     (estimatedValueUsd != null ? formatUsd(estimatedValueUsd) : '—')
 
   const resolvedBasketId = basketId ?? basket.id
+  const sepoliaTier = ENABLE_TESTNET_MODE ? getSepoliaBasketExecutionTier(basket) : null
 
   const basketSymbols = new Set(basket.allocations.map((a) => a.token.symbol.toUpperCase()))
   const holdings =
@@ -68,7 +74,15 @@ export function MyPortfolioCard({
           <h3 className="text-lg font-bold">{basket.name}</h3>
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
             <span className="badge">{basket.tag}</span>
-            <BasketChainBadge chainLabel={basket.chainLabel} chainStatus={basket.chainStatus} />
+            {ENABLE_TESTNET_MODE && sepoliaTier ? (
+              <StatusBadge
+                variant={sepoliaTier === 'executable' ? 'live-quote' : 'planned'}
+                label={getSepoliaBasketTierLabel(sepoliaTier)}
+                size="sm"
+              />
+            ) : (
+              <BasketChainBadge chainLabel={basket.chainLabel} chainStatus={basket.chainStatus} />
+            )}
             {driftStatus && <PortfolioDriftBadge status={driftStatus} />}
           </div>
         </div>
