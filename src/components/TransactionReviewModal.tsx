@@ -31,6 +31,7 @@ import {
   getTestnetUniswapSellExecuteLabel,
   useTestnetUniswapBasketExecute,
 } from '@/hooks/useTestnetUniswapBasketExecute'
+import { approvalStatusLabel, type TestnetApprovalRequirement } from '@/hooks/useTestnetBundleExecutorApprovals'
 import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
 import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPortfolio'
 import { useMainnetSwapExecute } from '@/hooks/useMainnetSwapExecute'
@@ -109,6 +110,64 @@ function getAlphaExecutionDisabledLabel(plan: ExecutionPlan): string {
     return 'Sell execution disabled in Alpha'
   }
   return 'Execution disabled in Alpha'
+}
+
+function ApprovalRow({
+  leg,
+  onApprove,
+  isApproving,
+  pendingSymbol,
+  compact = false,
+}: {
+  leg: TestnetApprovalRequirement
+  onApprove: () => void
+  isApproving: boolean
+  pendingSymbol: string | null
+  compact?: boolean
+}) {
+  const statusTone =
+    leg.status === 'approved'
+      ? 'text-portx-green'
+      : leg.status === 'pending'
+        ? 'text-portx-muted'
+        : 'text-portx-warning'
+
+  return (
+    <li
+      className={`rounded-lg border border-portx-border bg-black/20 px-3 py-2 text-xs ${
+        compact ? 'border-transparent bg-transparent px-0 py-0' : 'space-y-2'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium">
+          {leg.kind === 'protocol_fee' ? 'USDC fee' : `${leg.symbol} → USDC`}
+          <span className={`ml-2 font-normal ${statusTone}`}>
+            {approvalStatusLabel(leg.status)}
+          </span>
+        </p>
+        {!leg.sufficient && leg.status !== 'pending' ? (
+          <button
+            type="button"
+            onClick={onApprove}
+            disabled={isApproving}
+            className="btn-secondary text-xs px-3 py-1 disabled:opacity-50"
+          >
+            {leg.kind === 'protocol_fee' ? 'Approve USDC Fee' : `Approve ${leg.symbol}`}
+          </button>
+        ) : leg.status === 'pending' || pendingSymbol === leg.symbol ? (
+          <span className="text-xs text-portx-muted">Approving…</span>
+        ) : null}
+      </div>
+      {!compact && leg.kind === 'input' ? (
+        <p>
+          <span className="text-portx-muted">Amount: </span>
+          <span className="font-mono">
+            {leg.amountDisplay} {leg.symbol}
+          </span>
+        </p>
+      ) : null}
+    </li>
+  )
 }
 
 function ChecklistRow({
@@ -848,101 +907,106 @@ export function TransactionReviewModal({
             </div>
 
             {testnetExecute.approvals.requiresApprovals ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-                  {TESTNET_BUTTONS.approveTokens}
+                  Sell approvals — complete in order
                 </p>
-                <p className="text-xs text-portx-muted">
-                  Approve portfolio tokens for {EXECUTION_ROUTER_NAME}. When protocol fees are
-                  enabled, also approve USDC for the sell fee.
-                </p>
-                <ul className="space-y-2">
-                  {testnetExecute.approvals.inputLegs.map((leg) => (
-                    <li
-                      key={leg.id}
-                      className="rounded-lg border border-portx-border bg-black/20 px-3 py-2 text-xs space-y-2"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium">
-                          {leg.symbol} → USDC
-                          {leg.sufficient ? (
-                            <span className="ml-2 text-portx-green">Approved</span>
-                          ) : (
-                            <span className="ml-2 text-portx-warning">Approval required</span>
-                          )}
-                        </p>
-                        {!leg.sufficient ? (
-                          <button
-                            type="button"
-                            onClick={() => void testnetExecute.approvals.approveToken(leg.id)}
-                            disabled={
-                              testnetExecute.approvals.isApproving ||
-                              testnetExecute.approvals.pendingSymbol === leg.symbol
-                            }
-                            className="btn-secondary text-xs px-3 py-1 disabled:opacity-50"
-                          >
-                            {testnetExecute.approvals.pendingSymbol === leg.symbol
-                              ? 'Approving…'
-                              : `Approve ${leg.symbol}`}
-                          </button>
-                        ) : null}
-                      </div>
-                      <p>
-                        <span className="text-portx-muted">Amount: </span>
-                        <span className="font-mono">{leg.amountDisplay} {leg.symbol}</span>
+
+                <div className="rounded-lg border border-portx-border bg-black/20 p-3 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold">1. Approve portfolio tokens</p>
+                      <p className="text-xs text-portx-muted">
+                        LINK, UNI, WETH, AAVE → {EXECUTION_ROUTER_NAME}
                       </p>
-                    </li>
-                  ))}
-                  {testnetExecute.approvals.protocolFeeLeg ? (
-                    <li className="rounded-lg border border-portx-warning/30 bg-portx-warning/5 px-3 py-2 text-xs space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium">
-                          USDC protocol fee
-                          {testnetExecute.approvals.protocolFeeLeg.sufficient ? (
-                            <span className="ml-2 text-portx-green">Approved</span>
-                          ) : (
-                            <span className="ml-2 text-portx-warning">Approval required</span>
-                          )}
-                        </p>
-                        {!testnetExecute.approvals.protocolFeeLeg.sufficient ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void testnetExecute.approvals.approveToken(
-                                testnetExecute.approvals.protocolFeeLeg!.id,
-                              )
-                            }
-                            disabled={testnetExecute.approvals.isApproving}
-                            className="btn-secondary text-xs px-3 py-1 disabled:opacity-50"
-                          >
-                            Approve USDC fee
-                          </button>
-                        ) : null}
-                      </div>
-                      <p>
-                        <span className="text-portx-muted">Est. fee: </span>
-                        <span className="font-mono">
+                    </div>
+                    {testnetExecute.approvals.portfolioApprovalsSufficient ? (
+                      <span className="text-xs font-semibold text-portx-green shrink-0">Approved</span>
+                    ) : testnetExecute.approvals.missingInputApprovals.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void testnetExecute.approvals.approveMissingPortfolioTokens()
+                        }
+                        disabled={testnetExecute.approvals.isApproving}
+                        className="btn-secondary text-xs px-3 py-1.5 shrink-0 disabled:opacity-50"
+                      >
+                        {testnetExecute.approvals.isApproving
+                          ? 'Approving…'
+                          : 'Approve Required Tokens'}
+                      </button>
+                    ) : null}
+                  </div>
+                  <ul className="space-y-2">
+                    {testnetExecute.approvals.inputLegs.map((leg) => (
+                      <ApprovalRow
+                        key={leg.id}
+                        leg={leg}
+                        onApprove={() => void testnetExecute.approvals.approveToken(leg.id)}
+                        isApproving={testnetExecute.approvals.isApproving}
+                        pendingSymbol={testnetExecute.approvals.pendingSymbol}
+                      />
+                    ))}
+                  </ul>
+                </div>
+
+                {testnetExecute.approvals.protocolFeeLeg ? (
+                  <div className="rounded-lg border border-portx-warning/30 bg-portx-warning/5 p-3 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold">2. Approve USDC fee</p>
+                        <p className="text-xs text-portx-muted">
+                          Protocol sell fee — est.{' '}
                           {testnetExecute.approvals.protocolFeeLeg.amountDisplay} USDC
+                        </p>
+                      </div>
+                      {testnetExecute.approvals.protocolFeeLeg.sufficient ? (
+                        <span className="text-xs font-semibold text-portx-green shrink-0">
+                          Approved
                         </span>
-                      </p>
-                      <p className="text-[10px] text-portx-muted">
-                        Required when sell protocol fees are enabled on Sepolia.
-                      </p>
-                    </li>
-                  ) : null}
-                </ul>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void testnetExecute.approvals.approveToken(
+                              testnetExecute.approvals.protocolFeeLeg!.id,
+                            )
+                          }
+                          disabled={testnetExecute.approvals.isApproving}
+                          className="btn-secondary text-xs px-3 py-1.5 shrink-0 disabled:opacity-50"
+                        >
+                          Approve USDC Fee
+                        </button>
+                      )}
+                    </div>
+                    <ApprovalRow
+                      leg={testnetExecute.approvals.protocolFeeLeg}
+                      onApprove={() =>
+                        void testnetExecute.approvals.approveToken(
+                          testnetExecute.approvals.protocolFeeLeg!.id,
+                        )
+                      }
+                      isApproving={testnetExecute.approvals.isApproving}
+                      pendingSymbol={testnetExecute.approvals.pendingSymbol}
+                      compact
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-portx-muted">
+                    2. USDC protocol fee — not required (fees disabled on Sepolia executor).
+                  </p>
+                )}
+
+                <p className="text-xs text-portx-muted">
+                  3. Execute Sell — enabled after approvals and a fresh simulation pass.
+                </p>
+
                 {testnetExecute.approvals.approvalError ? (
-                  <p className="text-xs text-portx-danger">
-                    {testnetExecute.approvals.approvalError}
-                  </p>
-                ) : testnetExecute.approvals.missingUsdcFeeApproval ? (
-                  <p className="text-xs text-portx-warning">
-                    Approve USDC protocol fee before selling.
-                  </p>
+                  <p className="text-xs text-portx-danger">{testnetExecute.approvals.approvalError}</p>
                 ) : null}
                 {testnetExecute.approvals.allApprovalsSufficient ? (
                   <p className="text-xs text-portx-green">
-                    All approvals complete — ready to execute when checks pass.
+                    All approvals complete — ready to execute when simulation passes.
                   </p>
                 ) : null}
               </div>

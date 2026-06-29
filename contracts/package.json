@@ -15,6 +15,7 @@
     "testnet:multi-token-basket": "hardhat run scripts/testnet/executeMultiTokenBasket.ts --network sepolia",
     "testnet:multi-token-sell": "hardhat run scripts/testnet/executeMultiTokenSellBasket.ts --network sepolia",
     "testnet:configure-executor": "hardhat run scripts/testnet/configureBundleExecutor.ts --network sepolia",
+    "testnet:set-fees": "hardhat run scripts/testnet/setBundleExecutorFees.ts --network sepolia",
     "testnet:deploy-nft": "hardhat ignition deploy ignition/modules/PortXGenesisNFT.ts --network sepolia --deployment-id portx-sepolia-genesis-nft"
   },
   "dependencies": {

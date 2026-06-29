@@ -132,6 +132,16 @@ async function main() {
     )
   }
 
+  const feeConfig = await executor.getFeeConfig()
+  const feeRecipient = feeConfig.feeRecipient as string
+  let feeRecipientUsdcBefore = 0n
+  if (feeConfig.feesEnabled && feeConfig.sellFeeBps > 0n) {
+    feeRecipientUsdcBefore = (await usdc.balanceOf(feeRecipient)) as bigint
+    const maxApproval = 2n ** 256n - 1n
+    await ensureApproval(usdc, deployer.address, BUNDLE_EXECUTOR_ADDRESS, maxApproval)
+    console.log('Approved USDC (max) for protocol sell fee collection')
+  }
+
   const inputBalancesBefore: Record<string, bigint> = {}
   for (const token of TOKENS) {
     const erc20 = new ethers.Contract(token.address, ERC20_ABI, ethers.provider)
@@ -149,6 +159,13 @@ async function main() {
   console.log('User USDC balance (after):', ethers.formatUnits(usdcAfter, 6))
   console.log('USDC received:', ethers.formatUnits(usdcReceived, 6))
   if (usdcReceived <= 0n) throw new Error('Expected USDC balance to increase')
+
+  if (feeConfig.feesEnabled && feeConfig.sellFeeBps > 0n) {
+    const feeRecipientUsdcAfter = (await usdc.balanceOf(feeRecipient)) as bigint
+    const feeCollected = feeRecipientUsdcAfter - feeRecipientUsdcBefore
+    console.log('Fee recipient USDC collected:', ethers.formatUnits(feeCollected, 6))
+    if (feeCollected <= 0n) throw new Error('Expected fee recipient to receive USDC sell fee')
+  }
 
   for (const token of TOKENS) {
     const erc20 = new ethers.Contract(token.address, ERC20_ABI, ethers.provider)
