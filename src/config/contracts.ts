@@ -1,6 +1,9 @@
 import { SEPOLIA_TESTNET } from '@/config/networks'
 
-/** Sepolia BundleExecutor — C-3 fee collection; update address after redeploy */
+/**
+ * Legacy deployed contract addresses — prefer src/config/chainsRegistry.ts for new lookups.
+ * Kept until execution hooks migrate (CHAIN-3+).
+ */
 export const BUNDLE_EXECUTOR_SEPOLIA = {
   name: 'BundleExecutor',
   address: '0x9A0D2318EE444a3Eee64714E60b0fB3C5261C2e2' as const,

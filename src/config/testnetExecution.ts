@@ -1,7 +1,10 @@
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
 import { parseEther } from 'viem'
 
-/** Sepolia testnet execution constants — mirrors executeUniswapEthToUsdcBasket.ts */
+/**
+ * Legacy Sepolia execution constants — prefer src/config/chainsRegistry.ts for chain IDs,
+ * explorers, and contract addresses. Kept until quote/execution hooks migrate (CHAIN-3+).
+ */
 export const TESTNET_SEPOLIA_CHAIN_ID = 11155111 as const
 
 export const TESTNET_BUNDLE_EXECUTOR_ADDRESS = BUNDLE_EXECUTOR_SEPOLIA.address
