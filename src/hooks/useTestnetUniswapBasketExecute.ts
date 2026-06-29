@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount, useChainId, usePublicClient } from 'wagmi'
 import { simulateContract } from 'wagmi/actions'
 import type { Hex } from 'viem'
@@ -50,6 +50,8 @@ export const TESTNET_UNISWAP_CONFIRMATION_MESSAGE = TESTNET_UNISWAP_BUY_CONFIRMA
 
 export type TestnetUniswapBasketExecuteStatus = 'idle' | 'pending' | 'success' | 'error'
 
+const SIMULATION_TIMEOUT_MS = 30_000
+
 type SellPayloadReady = {
   plan: ExecutionPlan
   prepareResult: Extract<BundleExecutionPrepareResult, { status: 'ready' }>
@@ -68,6 +70,7 @@ export interface UseTestnetUniswapBasketExecuteResult {
   explorerUrl?: string
   errorMessage?: string
   execute: () => Promise<void>
+  refreshSellQuote: () => void
   reset: () => void
   approvals: UseTestnetBundleExecutorApprovalsResult
 }
@@ -77,23 +80,39 @@ async function simulateBundleExecution(
   account: `0x${string}`,
   isSell: boolean,
 ): Promise<{ passed: boolean; message: string }> {
-  try {
-    await simulateContract(wagmiConfig, {
-      address: getBundleExecutorAddress(),
-      abi: BUNDLE_EXECUTOR_EXECUTE_ABI,
-      functionName: 'executeBasket',
-      args: [params.basketId, params.swaps],
-      value: params.value,
-      account,
-      chainId: sepolia.id,
-    })
-    return { passed: true, message: 'Static simulation succeeded' }
-  } catch (error) {
-    return {
-      passed: false,
+  const simulationPromise = simulateContract(wagmiConfig, {
+    address: getBundleExecutorAddress(),
+    abi: BUNDLE_EXECUTOR_EXECUTE_ABI,
+    functionName: 'executeBasket',
+    args: [params.basketId, params.swaps],
+    value: params.value,
+    account,
+    chainId: sepolia.id,
+  })
+    .then(() => ({ passed: true as const, message: 'Static simulation succeeded' }))
+    .catch((error) => ({
+      passed: false as const,
       message: formatTestnetSimulationError(error, isSell),
-    }
-  }
+    }))
+
+  const timeoutPromise = new Promise<{ passed: false; message: string }>((resolve) => {
+    setTimeout(
+      () =>
+        resolve({
+          passed: false,
+          message: 'Simulation timed out. Refresh quote and try again.',
+        }),
+      SIMULATION_TIMEOUT_MS,
+    )
+  })
+
+  return Promise.race([simulationPromise, timeoutPromise])
+}
+
+function sellPayloadSimulationKey(payload: SellPayloadReady | null): string | null {
+  if (!payload) return null
+  const { prepareResult } = payload
+  return `${prepareResult.basketId}:${prepareResult.swapCalls.length}:${prepareResult.totalNativeEthWei.toString()}`
 }
 
 function buildExecuteParams(
@@ -135,6 +154,14 @@ export function useTestnetUniswapBasketExecute(
   const [preExecuteError, setPreExecuteError] = useState<string | null>(null)
   const [sellPayload, setSellPayload] = useState<SellPayloadReady | null>(null)
   const [sellPayloadLoading, setSellPayloadLoading] = useState(false)
+  const [sellRefreshGeneration, setSellRefreshGeneration] = useState(0)
+
+  const planRef = useRef(plan)
+  planRef.current = plan
+  const sellPayloadRef = useRef(sellPayload)
+  sellPayloadRef.current = sellPayload
+  const balancesWeiRef = useRef(testnetBalances.balancesWei)
+  balancesWeiRef.current = testnetBalances.balancesWei
 
   const isTestnetUniswapPlan = useMemo(
     () => (plan ? isSepoliaTestnetTradePlan(plan, quoteSource) : false),
@@ -149,41 +176,41 @@ export function useTestnetUniswapBasketExecute(
   )
 
   const refreshSellPayload = useCallback(async (): Promise<SellPayloadReady | null> => {
-    if (!plan || !address || plan.type !== 'sell_basket') {
-      setSellPayload(null)
-      return null
+    const currentPlan = planRef.current
+    if (!currentPlan || !address || currentPlan.type !== 'sell_basket') {
+      return sellPayloadRef.current
     }
 
     setSellPayloadLoading(true)
     try {
-      const balancesWei = Object.fromEntries(
-        testnetBalances.assets.map((asset) => [asset.symbol, asset.balanceWei]),
-      )
       const refreshed = await refreshTestnetSellExecutionBundle({
-        plan,
+        plan: currentPlan,
         allocations: TESTNET_MULTI_TOKEN_BASKET.allocations,
-        balancesWei,
+        balancesWei: balancesWeiRef.current,
         walletAddress: address,
       })
-      if (!refreshed) {
-        setSellPayload(null)
-        return null
+      if (refreshed) {
+        setSellPayload(refreshed)
+        return refreshed
       }
-      setSellPayload(refreshed)
-      return refreshed
+      return sellPayloadRef.current
     } catch {
-      setSellPayload(null)
-      return null
+      return sellPayloadRef.current
     } finally {
       setSellPayloadLoading(false)
     }
-  }, [plan, address, testnetBalances.assets])
+  }, [address])
 
-  const handleApprovalSuccess = useCallback(async () => {
-    if (!isSellPlan) return
+  const requestSellPayloadRefresh = useCallback(() => {
     setSimulation(null)
-    await refreshSellPayload()
-  }, [isSellPlan, refreshSellPayload])
+    setPreExecuteError(null)
+    setSellRefreshGeneration((generation) => generation + 1)
+  }, [])
+
+  const handleApprovalSuccess = useCallback(() => {
+    if (!isSellPlan) return
+    requestSellPayloadRefresh()
+  }, [isSellPlan, requestSellPayloadRefresh])
 
   const effectivePlan = isSellPlan ? (sellPayload?.plan ?? plan) : plan
   const approvalsOpen = open
@@ -228,24 +255,48 @@ export function useTestnetUniswapBasketExecute(
   ])
 
   useEffect(() => {
-    if (!open || !isSellPlan || !isTestnetUniswapPlan || !address) {
+    if (!open || !isSellPlan || !isTestnetUniswapPlan || !address || !plan) {
       if (!open) {
         setSellPayload(null)
         setSellPayloadLoading(false)
       }
       return
     }
-    setSimulation(null)
-    void refreshSellPayload()
+
+    let cancelled = false
+    setSellPayloadLoading(true)
+
+    void refreshTestnetSellExecutionBundle({
+      plan: planRef.current!,
+      allocations: TESTNET_MULTI_TOKEN_BASKET.allocations,
+      balancesWei: balancesWeiRef.current,
+      walletAddress: address,
+    })
+      .then((refreshed) => {
+        if (!cancelled && refreshed) {
+          setSellPayload(refreshed)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSellPayloadLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [
     open,
     isSellPlan,
     isTestnetUniswapPlan,
     address,
-    plan,
-    testnetBalances.assets,
-    refreshSellPayload,
+    plan?.id,
+    plan?.slippageBps,
+    sellRefreshGeneration,
   ])
+
+  const sellPayloadSimKey = sellPayloadSimulationKey(sellPayload)
 
   useEffect(() => {
     if (!open || !plan || !isTestnetUniswapPlan || !address) {
@@ -255,9 +306,13 @@ export function useTestnetUniswapBasketExecute(
     }
 
     if (isSellPlan) {
-      if (sellPayloadLoading || !sellPayload?.prepareResult) {
+      if (sellPayloadLoading) {
+        setSimulating(false)
+        return
+      }
+      if (!sellPayload?.prepareResult) {
         setSimulation(null)
-        setSimulating(sellPayloadLoading)
+        setSimulating(false)
         return
       }
       if (!approvals.allApprovalsSufficient) {
@@ -301,13 +356,14 @@ export function useTestnetUniswapBasketExecute(
     }
   }, [
     open,
-    plan,
+    plan?.id,
     isTestnetUniswapPlan,
     address,
     isSellPlan,
-    sellPayload,
+    sellPayloadSimKey,
     sellPayloadLoading,
-    baseAssessment,
+    baseAssessment?.readyForSimulation,
+    baseAssessment?.prepareResult?.status,
     approvals.allApprovalsSufficient,
     resolveBundleMsgValue,
   ])
@@ -337,13 +393,20 @@ export function useTestnetUniswapBasketExecute(
     }
   }, [open, resetExecute])
 
+  const sellExecuteReady =
+    !isSellPlan ||
+    (sellPayload !== null &&
+      sellPayload.prepareResult.status === 'ready' &&
+      simulation?.passed === true &&
+      !sellPayloadLoading &&
+      !simulating)
+
   const canExecute =
     assessment.isTestnetUniswapPlan &&
-    assessment.canExecute &&
     executeStatus !== 'pending' &&
     !isWritePending &&
     approvals.allApprovalsSufficient &&
-    (!isSellPlan || (sellPayload !== null && !sellPayloadLoading))
+    (isSellPlan ? sellExecuteReady : assessment.canExecute)
 
   const disabledReason = !assessment.isTestnetUniswapPlan
     ? null
@@ -352,12 +415,16 @@ export function useTestnetUniswapBasketExecute(
       : isSellPlan && sellPayloadLoading
         ? 'Refreshing sell quote…'
         : isSellPlan && !sellPayload && !sellPayloadLoading
-          ? 'Sell simulation failed — refresh quote and try again.'
-          : approvals.missingUsdcFeeApproval
-            ? 'Approve USDC protocol fee before selling.'
-            : !approvals.allApprovalsSufficient
-              ? `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
-              : assessment.blockedReason
+          ? 'Sell quote unavailable — refresh quote and try again.'
+          : isSellPlan && sellPayload && simulation?.passed !== true
+            ? simulating
+              ? 'Simulating sell transaction…'
+              : simulation?.message ?? 'Simulation required before execute.'
+            : approvals.missingUsdcFeeApproval
+              ? 'Approve USDC protocol fee before selling.'
+              : !approvals.allApprovalsSufficient
+                ? `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
+                : assessment.blockedReason
 
   const reset = useCallback(() => {
     resetExecute()
@@ -446,13 +513,14 @@ export function useTestnetUniswapBasketExecute(
     gates: assessment.gates,
     canExecute,
     disabledReason,
-    simulating: simulating || sellPayloadLoading,
-    sellPayloadRefreshing: isSellPlan && (sellPayloadLoading || (open && sellPayload === null)),
+    simulating,
+    sellPayloadRefreshing: isSellPlan && sellPayloadLoading,
     status: executeStatus,
     txHash,
     explorerUrl,
     errorMessage: preExecuteError ?? errorMessage,
     execute,
+    refreshSellQuote: requestSellPayloadRefresh,
     reset,
     approvals,
   }

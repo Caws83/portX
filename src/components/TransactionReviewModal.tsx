@@ -918,6 +918,17 @@ export function TransactionReviewModal({
                   </p>
                 ) : null}
 
+                {testnetExecute.isSellPlan ? (
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-portx-accent hover:underline disabled:opacity-50 disabled:no-underline"
+                    disabled={testnetExecute.sellPayloadRefreshing}
+                    onClick={() => testnetExecute.refreshSellQuote()}
+                  >
+                    Refresh quote
+                  </button>
+                ) : null}
+
                 <div className="rounded-lg border border-portx-border bg-black/20 p-3 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
