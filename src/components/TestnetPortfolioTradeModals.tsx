@@ -68,7 +68,7 @@ export function TestnetPortfolioTradeModals({
         plan={trade.plan}
         quoteSource={trade.quoteSource}
         open={trade.modalOpen && trade.showQuotePreview}
-        onClose={() => trade.setModalOpen(false)}
+        onClose={() => trade.closeTradeFlow()}
         onConfirm={() => void trade.handleConfirm()}
         confirming={trade.confirming}
         onTestnetExecutionSuccess={trade.handleTestnetExecutionSuccess}

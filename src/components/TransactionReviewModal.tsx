@@ -904,6 +904,31 @@ export function TransactionReviewModal({
                       </dd>
                     </div>
                   ) : null}
+                  {testnetExecute.buyFundsSummary ? (
+                    <>
+                      <div>
+                        <dt className="text-xs text-portx-muted">Wallet Sepolia ETH</dt>
+                        <dd className="font-mono font-semibold">
+                          {testnetExecute.buyFundsSummary.walletEthBalanceWei != null
+                            ? `${formatEther(testnetExecute.buyFundsSummary.walletEthBalanceWei)} ETH`
+                            : 'Loading…'}
+                        </dd>
+                      </div>
+                      {testnetExecute.buyFundsSummary.protocolFeeWei > 0n ? (
+                        <div>
+                          <dt className="text-xs text-portx-muted">Protocol fee (est.)</dt>
+                          <dd className="font-mono font-semibold">
+                            {formatEther(testnetExecute.buyFundsSummary.protocolFeeWei)} ETH
+                          </dd>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {testnetExecute.buyFundsBlockedReason ? (
+                    <div className="col-span-2">
+                      <p className="text-xs text-portx-warning">{testnetExecute.buyFundsBlockedReason}</p>
+                    </div>
+                  ) : null}
                   <div className="col-span-2">
                     <dt className="text-xs text-portx-muted mb-1">Expected tokens received</dt>
                     <dd className="font-mono font-semibold">{formatTestnetPlanTotalOutput(plan)}</dd>

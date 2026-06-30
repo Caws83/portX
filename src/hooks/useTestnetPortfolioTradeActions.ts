@@ -103,7 +103,8 @@ export function useTestnetPortfolioTradeActions(
     (basketOrId: Basket | string) => {
       const basket = typeof basketOrId === 'string' ? resolveBasket(basketOrId) : basketOrId
       if (!basket || !guardQuotePreview(basket)) return
-      const startBuyFlow = () => {
+  const startBuyFlow = () => {
+        quote.clear()
         setSelectedBasket(basket)
         setPendingBuyBasket(basket)
         setTxMsg(null)
@@ -125,6 +126,7 @@ export function useTestnetPortfolioTradeActions(
       const basket = pendingBuyBasket
       if (!basket) return
       const runPreview = async () => {
+        quote.clear()
         onBuyAmountUsdChange?.(amountUsd)
         setBuyAmountModalOpen(false)
         setPendingBuyBasket(null)
@@ -229,8 +231,13 @@ export function useTestnetPortfolioTradeActions(
   const handleTestnetExecutionSuccess = useCallback(() => {
     portfolio.refresh()
     window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
-    closeTradeFlow()
-  }, [portfolio, closeTradeFlow])
+    quote.clear()
+    setSelectedBasket(null)
+    setModalOpen(false)
+    setBuyAmountModalOpen(false)
+    setPendingBuyBasket(null)
+    setTxMsg(null)
+  }, [portfolio, quote])
 
   const handleConfirm = useCallback(async () => {
     if (!quote.plan) return
