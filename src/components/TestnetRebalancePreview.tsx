@@ -4,7 +4,7 @@ import type { TestnetPortfolioBalancesResult } from '@/hooks/useTestnetPortfolio
 import type { TestnetPortfolioPosition } from '@/services/testnetPortfolio'
 import {
   computeTestnetRebalancePreview,
-  resolveRebalanceTargetBasket,
+  resolveTestnetRebalanceTargetBasket,
   TESTNET_REBALANCE_PREVIEW_NOTE,
   type TestnetRebalanceAction,
   type TestnetRebalancePreviewResult,
@@ -46,7 +46,7 @@ export function TestnetRebalancePreview({
   compact = false,
 }: TestnetRebalancePreviewProps) {
   const preview = useMemo<TestnetRebalancePreviewResult>(() => {
-    const targetBasket = resolveRebalanceTargetBasket(latestPosition, baskets)
+    const targetBasket = resolveTestnetRebalanceTargetBasket(latestPosition, baskets)
     return computeTestnetRebalancePreview({
       valuedAssets: balances.valuation.valuedAssets,
       targetBasket,
@@ -88,7 +88,7 @@ export function TestnetRebalancePreview({
         <span className="text-portx-muted">Target basket: </span>
         <span className="font-medium">{preview.targetBasketName}</span>
         {preview.usesDefaultTarget ? (
-          <span className="text-xs text-portx-muted"> · no linked basket from latest execution</span>
+          <span className="text-xs text-portx-muted"> · default Sepolia Multi-Token Beta weights</span>
         ) : null}
       </p>
 

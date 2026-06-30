@@ -3,6 +3,7 @@ import { formatUsd, formatPercent } from '@/utils/format'
 import { BasketChainBadge } from './BasketChainBadge'
 import { PortfolioSourceBadge } from './PortfolioSourceBadge'
 import { CopyPortfolioButton } from './CopyPortfolioButton'
+import { TokenLogo, ChainLogo } from './TokenLogo'
 import { withDefaultChainMetadata } from '@/types/basketChain'
 
 const RISK_COLORS: Record<RiskLevel, string> = {
@@ -31,7 +32,8 @@ export function WhalePortfolioCard({ portfolio, compact = false }: WhalePortfoli
         <div>
           <h3 className={`font-bold ${compact ? 'text-base' : 'text-lg'}`}>{portfolio.name}</h3>
           <p className="text-xs text-portx-muted mt-0.5">{portfolio.category}</p>
-          <div className="mt-1">
+          <div className="mt-1 flex items-center gap-2">
+            <ChainLogo chain={chainMeta.chain} label={chainMeta.chainLabel} />
             <BasketChainBadge
               chainLabel={chainMeta.chainLabel}
               chainStatus={chainMeta.chainStatus}
@@ -67,8 +69,9 @@ export function WhalePortfolioCard({ portfolio, compact = false }: WhalePortfoli
         {portfolio.tokens.map((t) => (
           <span
             key={t.symbol}
-            className="text-xs px-2 py-1 rounded-md bg-portx-surface border border-portx-border font-mono"
+            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-portx-surface border border-portx-border font-mono"
           >
+            <TokenLogo symbol={t.symbol} size="sm" />
             {t.symbol} {t.allocationPercent}%
           </span>
         ))}

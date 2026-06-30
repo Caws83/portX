@@ -1,6 +1,10 @@
 import { IS_TESTNET_MODE } from '@/config/appMode'
+import { getExplorerTxUrl as getRegistryExplorerTxUrl } from '@/config/chainsRegistry'
 
-/** Scaffold network identifiers — wiring to wagmi/RPC is future work */
+/**
+ * Legacy network scaffold — prefer src/config/chainsRegistry.ts for new code.
+ * Kept for gradual migration; do not add new chain constants here.
+ */
 export type NetworkKey = 'ethereum-mainnet' | 'sepolia'
 
 export interface NetworkConfig {
@@ -49,7 +53,5 @@ export function getNetworkByChainId(chainId: number): NetworkConfig | undefined 
 }
 
 export function getExplorerTxUrl(chainId: number, txHash: string): string | undefined {
-  const network = getNetworkByChainId(chainId)
-  if (!network) return undefined
-  return `${network.explorerBaseUrl}/tx/${txHash}`
+  return getRegistryExplorerTxUrl(chainId, txHash)
 }

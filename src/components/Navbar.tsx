@@ -1,7 +1,9 @@
 import { NavLink } from 'react-router-dom'
+import { BUTTON_LABELS } from '@/config/uiCopy'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { AppModeBadge } from './AppModeIndicator'
 import { Logo } from './Logo'
-import { WalletButton } from './WalletButton'
+import { WalletChainControl } from './WalletChainControl'
 
 type NavLinkItem = {
   to: string
@@ -9,19 +11,31 @@ type NavLinkItem = {
   badge?: string
 }
 
-const links: NavLinkItem[] = [
+const productionLinks: NavLinkItem[] = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/discover', label: 'Discover' },
   { to: '/baskets', label: 'Baskets' },
-  // { to: '/lending', label: 'Lending', badge: '🚧' },
-  // { to: '/create-basket', label: 'Create' },
+  { to: '/create-basket', label: 'Create' },
+  { to: '/sell-all', label: BUTTON_LABELS.sellAllNav },
+  { to: '/agents', label: 'Agents' },
+  { to: '/lending', label: 'Lending', badge: 'Preview' },
   { to: '/mint', label: 'NFT' },
-  // { to: '/sell-all', label: BUTTON_LABELS.sellAllNav },
-  // { to: '/agents', label: 'Agents' },
-  // { to: '/settings', label: 'Settings' },
+  { to: '/settings', label: 'Settings' },
+]
+
+const testnetLinks: NavLinkItem[] = [
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/discover', label: 'Discover' },
+  { to: '/baskets', label: 'Baskets' },
+  { to: '/create-basket', label: 'Create' },
+  { to: '/sell-all', label: 'Sell' },
+  { to: '/lending', label: 'Lending', badge: 'Preview' },
+  { to: '/mint', label: 'NFT' },
+  { to: '/settings', label: 'Settings' },
 ]
 
 export function Navbar() {
+  const links = ENABLE_TESTNET_MODE ? testnetLinks : productionLinks
   return (
     <header className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 lg:px-8 pt-2.5 pb-1.5 pointer-events-none">
       <div className="glass-nav max-w-7xl mx-auto rounded-xl pointer-events-auto">
@@ -31,7 +45,7 @@ export function Navbar() {
               <Logo variant="header" height="sm" className="max-w-[min(36vw,120px)] sm:max-w-[130px]" />
             </div>
 
-            <nav className="hidden lg:flex items-center gap-0.5">
+            <nav className="hidden xl:flex items-center gap-0.5">
               {links.map(({ to, label, badge }) => (
                 <NavLink
                   key={to}
@@ -56,11 +70,11 @@ export function Navbar() {
 
             <div className="flex items-center gap-2 shrink-0">
               <AppModeBadge className="hidden md:inline-flex" />
-              <WalletButton />
+              <WalletChainControl />
             </div>
           </div>
 
-          <nav className="lg:hidden flex gap-1 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+          <nav className="xl:hidden flex gap-1 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
             {links.map(({ to, label, badge }) => (
               <NavLink
                 key={to}

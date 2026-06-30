@@ -28,6 +28,10 @@ function isQuoteProvider(value: string): value is QuoteProvider {
   return ['0x', '1inch', 'uniswap', 'uniswap-sepolia', 'unsupported'].includes(value)
 }
 
+function formatDirectionLabel(direction: TestnetSwapHistoryRecord['direction']): string {
+  return direction === 'sell' ? 'Sell' : 'Buy'
+}
+
 export function RecentTestSwaps({ className = '', compact = false }: RecentTestSwapsProps) {
   const [records, setRecords] = useState<TestnetSwapHistoryRecord[]>(() => loadTestnetSwapHistory())
 
@@ -57,9 +61,9 @@ export function RecentTestSwaps({ className = '', compact = false }: RecentTestS
     <div className={`card space-y-4 ${className}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-bold">Recent Test Swaps</h2>
+          <h2 className="font-bold">Recent Trades</h2>
           <p className="text-xs text-portx-muted mt-1">
-            Local browser history only — last {records.length || 0} Sepolia test swap(s).
+            Your Sepolia portfolio trade history in this browser.
           </p>
         </div>
         {records.length > 0 ? (
@@ -71,8 +75,7 @@ export function RecentTestSwaps({ className = '', compact = false }: RecentTestS
 
       {records.length === 0 ? (
         <p className="text-sm text-portx-muted">
-          No test swaps saved yet. Successful Sepolia basket swaps from Review &amp; Execute will
-          appear here.
+          No trades saved yet. Successful Sepolia portfolio trades will appear here.
         </p>
       ) : (
         <ul className="space-y-3">
@@ -87,6 +90,15 @@ export function RecentTestSwaps({ className = '', compact = false }: RecentTestS
                   <p className="text-xs text-portx-muted truncate">{record.routeLabel}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${
+                      record.direction === 'sell'
+                        ? 'bg-portx-warning/15 text-portx-warning border border-portx-warning/30'
+                        : 'bg-portx-green/15 text-portx-green border border-portx-green/30'
+                    }`}
+                  >
+                    {formatDirectionLabel(record.direction)}
+                  </span>
                   {isQuoteProvider(record.provider) ? (
                     <RouteProviderBadge provider={record.provider} size="sm" />
                   ) : (
@@ -103,6 +115,19 @@ export function RecentTestSwaps({ className = '', compact = false }: RecentTestS
                   </span>
                 </div>
               </div>
+
+              {record.direction === 'sell' && record.legRoutes.length > 0 ? (
+                <ul className="flex flex-wrap gap-1.5">
+                  {record.legRoutes.map((route) => (
+                    <li
+                      key={route}
+                      className="text-[10px] font-mono px-2 py-0.5 rounded bg-black/20 border border-portx-border"
+                    >
+                      {route}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
 
               <div
                 className={`grid gap-2 text-xs ${

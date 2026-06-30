@@ -9,9 +9,16 @@ import {
   getBundleExecutorChainId,
   type BundleExecutorSwapCall,
 } from '@/services/bundleExecutorContract'
-import { encodeUniswapExactInputSingleCalldata } from '@/services/testnetUniswapQuote'
-import { encodeTestnetExactInputSingleCalldata } from '@/services/testnetMultiTokenQuote'
-import { isValidCalldata, isValidRouterAddress } from '@/services/transactionBuilder'
+import { encodeTestnetExactInputSingleCalldata, encodeTestnetWethDepositCalldata } from '@/services/testnetMultiTokenQuote'
+import { encodeTestnetTokenToUsdcCalldata } from '@/services/testnetMultiTokenSellQuote'
+import {
+  isQuoteCalldataReadyForBundle,
+  isTestnetErc20SellQuote,
+  isTestnetWethWrapQuote,
+  isValidBundleSwapCalldata,
+  logBundleSwapCallsDebug,
+} from '@/services/bundleExecutorCalldata'
+import { isValidRouterAddress } from '@/services/transactionBuilder'
 import { isZeroAddress, ZERO_ADDRESS } from '@/utils/addresses'
 
 /** @deprecated alias — prefer BundleExecutorSwapCall from bundleExecutorContract */
@@ -130,6 +137,10 @@ function resolveSwapCalldata(
   recipient?: Address,
 ): `0x${string}` | BundleExecutionValidationError {
   if (quote.provider === 'uniswap-sepolia') {
+    if (isTestnetWethWrapQuote(quote)) {
+      return encodeTestnetWethDepositCalldata()
+    }
+
     if (!recipient) {
       return {
         code: 'RECIPIENT_REQUIRED',
@@ -138,20 +149,28 @@ function resolveSwapCalldata(
       }
     }
 
-    if (quote.testnetSwap) {
-      return encodeTestnetExactInputSingleCalldata({
-        tokenOut: quote.testnetSwap.tokenOut as Address,
-        amountInWei: amountIn,
+    if (isTestnetErc20SellQuote(quote)) {
+      const tokenIn = (quote.testnetSwap?.tokenIn ?? quote.inputToken.address) as Address
+      return encodeTestnetTokenToUsdcCalldata({
+        tokenIn,
+        amountIn,
         minAmountOut,
         recipient,
-        poolFee: quote.testnetSwap.poolFee,
+        poolFee: quote.testnetSwap?.poolFee ?? 3000,
       })
     }
 
-    return encodeUniswapExactInputSingleCalldata(amountIn, minAmountOut, recipient)
+    const tokenOut = (quote.testnetSwap?.tokenOut ?? quote.outputToken.address) as Address
+    return encodeTestnetExactInputSingleCalldata({
+      tokenOut,
+      amountInWei: amountIn,
+      minAmountOut,
+      recipient,
+      poolFee: quote.testnetSwap?.poolFee ?? 3000,
+    })
   }
 
-  if (!isValidCalldata(quote.calldata)) {
+  if (!isValidBundleSwapCalldata(quote.calldata)) {
     return {
       code: 'INVALID_QUOTE',
       message: 'calldata is missing or invalid',
@@ -169,7 +188,7 @@ function validateSwapCallShape(swapCall: BundleSwapCall, legIndex: number): Bund
   if (!isValidRouterAddress(swapCall.router)) {
     errors.push({ code: 'INVALID_SWAP_CALL', message: 'router must be a non-zero address', field: `${prefix}.router` })
   }
-  if (!isValidCalldata(swapCall.data)) {
+  if (!isValidBundleSwapCalldata(swapCall.data)) {
     errors.push({ code: 'INVALID_SWAP_CALL', message: 'data must be valid hex calldata', field: `${prefix}.data` })
   }
   if (!isValidAddress(swapCall.tokenIn) && swapCall.tokenIn !== ZERO_ADDRESS) {
@@ -198,7 +217,7 @@ function validateQuoteStructure(quote: QuoteResponse, legIndex: number): BundleE
   if (!isValidRouterAddress(quote.routerAddress)) {
     errors.push({ code: 'INVALID_QUOTE', message: 'routerAddress is missing or invalid', field: `${prefix}.routerAddress` })
   }
-  if (!isValidCalldata(quote.calldata)) {
+  if (!isQuoteCalldataReadyForBundle(quote)) {
     errors.push({ code: 'INVALID_QUOTE', message: 'calldata is missing or invalid', field: `${prefix}.calldata` })
   }
   if (!isValidAddress(quote.inputToken.address) && quote.inputToken.symbol.toUpperCase() !== 'ETH') {
@@ -342,7 +361,9 @@ export function buildSwapCalls(
 ): BundleExecutionPrepareResult {
   const quoteErrors = validateQuotePreviewStructure(preview)
   if (quoteErrors.length > 0) {
-    return { status: 'validation_errors', errors: quoteErrors }
+    const failed: BundleExecutionPrepareResult = { status: 'validation_errors', errors: quoteErrors }
+    logBundleSwapCallsDebug(preview, failed, { recipient })
+    return failed
   }
 
   const swapCalls: BundleSwapCall[] = []
@@ -382,7 +403,9 @@ export function buildSwapCalls(
   }
 
   if (shapeErrors.length > 0) {
-    return { status: 'validation_errors', errors: shapeErrors }
+    const failed: BundleExecutionPrepareResult = { status: 'validation_errors', errors: shapeErrors }
+    logBundleSwapCallsDebug(preview, failed, { recipient })
+    return failed
   }
 
   const basketId = deriveBasketId(preview)
@@ -391,7 +414,7 @@ export function buildSwapCalls(
     0n,
   )
 
-  return {
+  const ready: BundleExecutionPrepareResult = {
     status: 'ready',
     contractAddress: getBundleExecutorAddress(),
     chainId: SEPOLIA_CHAIN_ID,
@@ -400,6 +423,9 @@ export function buildSwapCalls(
     legCount: swapCalls.length,
     totalNativeEthWei,
   }
+
+  logBundleSwapCallsDebug(preview, ready, { recipient })
+  return ready
 }
 
 /** Validate context and optionally build SwapCall[] — returns ready or validation errors; never sends transactions */

@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
+import { useAccount, useChainId } from 'wagmi'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { BasketCard } from '@/components/BasketCard'
 import { QuotePreviewCard } from '@/components/QuotePreviewCard'
@@ -13,6 +15,10 @@ import { usePortfolio } from '@/hooks/usePortfolio'
 import { usePortfolioDrift } from '@/hooks/usePortfolioDrift'
 import { executeDemoPlan } from '@/services/transactionBuilder'
 import { DEFAULT_BUY_AMOUNT_USD } from '@/config/constants'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
+import { isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
+import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
+import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPortfolio'
 import { assessQuoteQuality } from '@/utils/quoteQuality'
 import {
   BUTTON_LABELS,
@@ -24,14 +30,57 @@ import {
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
 import type { Basket } from '@/types/basket'
+import type { ExecutionPlan } from '@/types/execution'
 import { RecentTestSwaps } from '@/components/RecentTestSwaps'
-import { canPreviewQuoteForBasket, getPlannedChainMessage } from '@/utils/chainRouting'
+import {
+  shouldShowTestnetEnvWarning,
+  TESTNET_EXECUTION_ENV_MESSAGE,
+} from '@/utils/testnetQuoteRouting'
+import {
+  BASKET_SECTION_LABELS,
+  canShowBasketQuotes,
+  groupBasketsBySection,
+  type BasketCatalogSection,
+} from '@/utils/basketCatalog'
+import { getPlannedChainMessage } from '@/utils/chainRouting'
+import { TestnetBaskets } from '@/pages/TestnetBaskets'
+
+interface BasketsLocationState {
+  basketId?: string
+  action?: 'buy' | 'sell' | 'rebalance'
+}
+
+const CATALOG_SECTION_ORDER: BasketCatalogSection[] = [
+  'my-portfolios',
+  'featured',
+  'sport-fan',
+  'community',
+]
 
 export function Baskets() {
+  if (ENABLE_TESTNET_MODE) {
+    return <TestnetBaskets />
+  }
+  return <ProductionBaskets />
+}
+
+function ProductionBaskets() {
+  const location = useLocation()
+  const chainId = useChainId()
+  const { isConnected } = useAccount()
+  const testnetBalances = useTestnetPortfolioBalances()
   const { allBaskets, basketsLoading, basketsError, basketsSource } = useBasket()
   const buyBasket = usePortfolioStore((s) => s.buyBasket)
   const sellBasket = usePortfolioStore((s) => s.sellBasket)
-  const activeBaskets = usePortfolioStore((s) => s.activeBaskets)
+  const removeActiveBasket = usePortfolioStore((s) => s.removeActiveBasket)
+  const demoActiveBaskets = usePortfolioStore((s) => s.activeBaskets)
+
+  const [buyAmount, setBuyAmount] = useState(DEFAULT_BUY_AMOUNT_USD)
+  const [selectedBasket, setSelectedBasket] = useState<Basket | null>(null)
+  const [rebalanceBasket, setRebalanceBasket] = useState<Basket | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [txMsg, setTxMsg] = useState<string | null>(null)
 
   const {
     preview,
@@ -47,31 +96,41 @@ export function Baskets() {
     clear,
   } = useQuotePreview()
 
-  const [selectedBasket, setSelectedBasket] = useState<Basket | null>(null)
-  const [rebalanceBasket, setRebalanceBasket] = useState<Basket | null>(null)
-  const [buyAmount, setBuyAmount] = useState(DEFAULT_BUY_AMOUNT_USD)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [confirming, setConfirming] = useState(false)
-  const [txMsg, setTxMsg] = useState<string | null>(null)
-
   const quoteQuality = useMemo(
     () => (preview && quoteSource ? assessQuoteQuality(preview, quoteSource) : null),
-    [preview, quoteSource]
+    [preview, quoteSource],
   )
 
-  const ownedIds = new Set(activeBaskets.map((b) => b.basketId))
+  const ownedIds = useMemo(
+    () => new Set(demoActiveBaskets.map((b) => b.basketId)),
+    [demoActiveBaskets],
+  )
+
+  const handleTestnetExecutionSuccess = (executedPlan: ExecutionPlan) => {
+    testnetBalances.refresh()
+    window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
+    if (!executedPlan.basketId) return
+    if (executedPlan.type === 'sell_basket') {
+      removeActiveBasket(executedPlan.basketId)
+    }
+  }
 
   const portfolio = usePortfolio()
 
+  const catalogSections = useMemo(
+    () => groupBasketsBySection(allBaskets, ownedIds),
+    [allBaskets, ownedIds],
+  )
+
   const ownedBasketInputs = useMemo(
     () =>
-      activeBaskets
-        .map((purchase) => {
-          const basket = allBaskets.find((b) => b.id === purchase.basketId)
-          return basket ? { basket, basketId: purchase.basketId } : null
+      [...ownedIds]
+        .map((basketId) => {
+          const basket = allBaskets.find((b) => b.id === basketId)
+          return basket ? { basket, basketId } : null
         })
         .filter((entry): entry is { basket: Basket; basketId: string } => entry !== null),
-    [activeBaskets, allBaskets]
+    [ownedIds, allBaskets],
   )
 
   const { getDriftForBasket } = usePortfolioDrift(portfolio.heldTokens, ownedBasketInputs)
@@ -84,7 +143,7 @@ export function Baskets() {
   }
 
   const guardQuotePreview = (basket: Basket): boolean => {
-    if (canPreviewQuoteForBasket(basket)) return true
+    if (canShowBasketQuotes(basket)) return true
     selectPlannedBasket(basket)
     return false
   }
@@ -100,12 +159,16 @@ export function Baskets() {
     if (!guardQuotePreview(basket)) return
     setSelectedBasket(basket)
     setTxMsg(null)
-    const purchase = activeBaskets.find((b) => b.basketId === basket.id)
-    await previewSellBasket(basket, purchase?.amountUsd ?? 1000)
+    const purchase = demoActiveBaskets.find((b) => b.basketId === basket.id)
+    const balancesWei =
+      isTestnetMultiTokenBasket(basket.id) && isConnected
+        ? Object.fromEntries(testnetBalances.assets.map((asset) => [asset.symbol, asset.balanceWei]))
+        : undefined
+    await previewSellBasket(basket, purchase?.amountUsd ?? 1000, balancesWei)
   }
 
   const handleReview = () => {
-    if (!preview || !selectedBasket || !canPreviewQuoteForBasket(selectedBasket)) return
+    if (!preview || !selectedBasket || !canShowBasketQuotes(selectedBasket)) return
     buildPlan(preview)
     setModalOpen(true)
   }
@@ -123,10 +186,10 @@ export function Baskets() {
             purchasedAt: Date.now(),
             entryValueUsd: plan.totalInputUsd,
           },
-          selectedBasket.allocations
+          selectedBasket.allocations,
         )
       } else if (plan.type === 'sell_basket' && plan.basketId && selectedBasket) {
-        const purchase = activeBaskets.find((b) => b.basketId === plan.basketId)
+        const purchase = demoActiveBaskets.find((b) => b.basketId === plan.basketId)
         sellBasket({
           basketId: plan.basketId,
           allocations: selectedBasket.allocations,
@@ -159,11 +222,52 @@ export function Baskets() {
   }
 
   const showPlannedPanel =
-    selectedBasket !== null && !canPreviewQuoteForBasket(selectedBasket)
+    selectedBasket !== null && !canShowBasketQuotes(selectedBasket)
   const showQuotePreview =
     preview !== null &&
     selectedBasket !== null &&
-    canPreviewQuoteForBasket(selectedBasket)
+    canShowBasketQuotes(selectedBasket)
+
+  useEffect(() => {
+    const state = location.state as BasketsLocationState | null
+    if (!state?.basketId || basketsLoading) return
+    const basket = allBaskets.find((b) => b.id === state.basketId)
+    if (!basket) return
+
+    if (state.action === 'sell') {
+      void handlePreviewSell(basket)
+    } else if (state.action === 'rebalance') {
+      setRebalanceBasket(basket)
+      setSelectedBasket(basket)
+    } else {
+      void handlePreviewBuy(basket)
+    }
+
+    window.history.replaceState({}, document.title)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when deep-link state arrives
+  }, [location.state, basketsLoading, allBaskets.length])
+
+  const renderBasketCard = (basket: Basket) => (
+    <BasketCard
+      key={basket.id}
+      basket={basket}
+      onPreviewBuy={handlePreviewBuy}
+      onPreviewSell={handlePreviewSell}
+      onPreviewRebalance={
+        ownedIds.has(basket.id) ? () => setRebalanceBasket(basket) : undefined
+      }
+      canRebalance={ownedIds.has(basket.id)}
+      onBuy={handleQuickBuy}
+      onPlannedChainSelect={selectPlannedBasket}
+      isOwned={ownedIds.has(basket.id)}
+      canPreviewSell={ownedIds.has(basket.id)}
+      driftStatus={ownedIds.has(basket.id) ? getDriftForBasket(basket.id)?.status : undefined}
+      loading={loading && selectedBasket?.id === basket.id}
+      isSelected={selectedBasket?.id === basket.id && (showQuotePreview || showPlannedPanel)}
+    />
+  )
+
+  const showTestnetEnvWarning = shouldShowTestnetEnvWarning(chainId, isConnected)
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -175,6 +279,12 @@ export function Baskets() {
       </div>
 
       <ExecutionWarning variant="info" warnings={[INFO_MESSAGES.demoMode]} />
+
+      {showTestnetEnvWarning ? (
+        <StatusBanner variant="warning" className="mb-6" compact>
+          {TESTNET_EXECUTION_ENV_MESSAGE}
+        </StatusBanner>
+      ) : null}
 
       <div className="mt-6 mb-8 card flex flex-col sm:flex-row sm:items-end gap-4">
         <div className="flex-1 min-w-0">
@@ -247,12 +357,6 @@ export function Baskets() {
         </StatusBanner>
       )}
 
-      {quoteSource === 'testnet' && preview && !loading && (
-        <StatusBanner variant="warning" className="mb-6" compact>
-          Sepolia testnet quote — frontend Uniswap V3 only (no backend /quotes).
-        </StatusBanner>
-      )}
-
       {error && (
         <StatusBanner variant="error" className="mb-6">
           {error || ERROR_MESSAGES.quoteFailed}
@@ -266,37 +370,33 @@ export function Baskets() {
       )}
 
       <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
-        <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4 sm:gap-6 min-w-0">
+        <div className="lg:col-span-2 min-w-0 space-y-10">
           {!basketsLoading && allBaskets.length === 0 ? (
-            <div className="sm:col-span-2">
-              <EmptyState
-                title={EMPTY_MESSAGES.noBaskets.title}
-                description={EMPTY_MESSAGES.noBaskets.description}
-              />
-            </div>
+            <EmptyState
+              title={EMPTY_MESSAGES.noBaskets.title}
+              description={EMPTY_MESSAGES.noBaskets.description}
+            />
           ) : (
             !basketsLoading &&
-            allBaskets.map((basket) => (
-              <BasketCard
-                key={basket.id}
-                basket={basket}
-                onPreviewBuy={handlePreviewBuy}
-                onPreviewSell={handlePreviewSell}
-                onPreviewRebalance={
-                  ownedIds.has(basket.id) ? () => setRebalanceBasket(basket) : undefined
-                }
-                onBuy={handleQuickBuy}
-                onPlannedChainSelect={selectPlannedBasket}
-                isOwned={ownedIds.has(basket.id)}
-                driftStatus={
-                  ownedIds.has(basket.id) ? getDriftForBasket(basket.id)?.status : undefined
-                }
-                loading={loading && selectedBasket?.id === basket.id}
-                isSelected={
-                  selectedBasket?.id === basket.id && (showQuotePreview || showPlannedPanel)
-                }
-              />
-            ))
+            CATALOG_SECTION_ORDER.map((sectionKey) => {
+              const sectionBaskets = catalogSections[sectionKey]
+              if (sectionBaskets.length === 0) return null
+              return (
+                <section key={sectionKey}>
+                  <div className="mb-4">
+                    <h2 className="text-xl font-bold">{BASKET_SECTION_LABELS[sectionKey]}</h2>
+                    {sectionKey === 'sport-fan' && (
+                      <p className="text-sm text-portx-muted mt-1">
+                        Preview templates — Sport & Fan Token routing is planned.
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
+                    {sectionBaskets.map((basket) => renderBasketCard(basket))}
+                  </div>
+                </section>
+              )
+            })
           )}
         </div>
 
@@ -363,6 +463,7 @@ export function Baskets() {
         onClose={() => setModalOpen(false)}
         onConfirm={handleConfirm}
         confirming={confirming}
+        onTestnetExecutionSuccess={handleTestnetExecutionSuccess}
       />
 
       <PortfolioRebalancePreviewModal

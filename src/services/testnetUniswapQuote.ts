@@ -58,6 +58,7 @@ const USDC_TOKEN = {
 export interface TestnetUniswapQuoteParams {
   basketId?: string
   basketName?: string
+  amountUsd?: number
   amountInWei?: bigint
   slippageBps?: number
   /** Basket allocation weights — up to 4 legs, each quoted ETH → USDC */
@@ -222,7 +223,7 @@ function buildQuoteResponse(
     calldata: details.calldata,
     routerAddress: details.routerAddress,
     warnings: [
-      'Sepolia testnet Uniswap V3 quote — not for production execution.',
+      'Sepolia testnet Uniswap V3 quote.',
       `Quoted min out after ${details.slippageBps} bps slippage: ${details.minAmountOut.toString()} (6 decimals).`,
     ],
     testnetSwap: {
@@ -249,6 +250,7 @@ export async function buildTestnetEthToUsdcBasketPreview(
   recipient?: Address,
 ): Promise<BasketQuotePreview> {
   const totalAmountWei = params.amountInWei ?? TESTNET_DEFAULT_SWAP_AMOUNT_WEI
+  const totalInputUsd = params.amountUsd ?? 0
   const slippageBps = params.slippageBps ?? TESTNET_DEFAULT_SLIPPAGE_BPS
   assertTestnetSwapAmount(totalAmountWei)
 
@@ -261,7 +263,7 @@ export async function buildTestnetEthToUsdcBasketPreview(
       type: 'buy',
       basketId: params.basketId,
       basketName: params.basketName,
-      totalInputUsd: 0,
+      totalInputUsd,
       totalOutputUsd: quote.outputAmountUsd,
       totalGasUsd: quote.estimatedGasUsd,
       slippageBps: details.slippageBps,
@@ -271,7 +273,7 @@ export async function buildTestnetEthToUsdcBasketPreview(
           allocation: {
             token: quote.outputToken,
             weightPercent: 100,
-            inputAmountUsd: 0,
+            inputAmountUsd: totalInputUsd,
             inputAmount: quote.inputAmount,
           },
           bestQuote: quote,
@@ -300,7 +302,9 @@ export async function buildTestnetEthToUsdcBasketPreview(
     allocation: {
       token: quote.outputToken,
       weightPercent: selectedAllocations[index].weightPercent,
-      inputAmountUsd: 0,
+      inputAmountUsd: totalInputUsd
+        ? (totalInputUsd * selectedAllocations[index].weightPercent) / 100
+        : 0,
       inputAmount: quote.inputAmount,
     },
     bestQuote: quote,
@@ -318,7 +322,7 @@ export async function buildTestnetEthToUsdcBasketPreview(
     type: 'buy',
     basketId: params.basketId,
     basketName: params.basketName,
-    totalInputUsd: 0,
+    totalInputUsd,
     totalOutputUsd,
     totalGasUsd,
     slippageBps,

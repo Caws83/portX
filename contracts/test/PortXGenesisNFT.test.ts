@@ -34,7 +34,7 @@ describe('PortXGenesisNFT', () => {
     expect(await nft.goPublic()).to.equal(false)
   })
 
-  it('rejects max supply above 10000 at deploy and via setMaxSupply', async () => {
+  it('rejects max supply above absolute cap at deploy and via setMaxSupply', async () => {
     const [owner] = await ethers.getSigners()
     const Factory = await ethers.getContractFactory('PortXGenesisNFT')
 
@@ -45,13 +45,13 @@ describe('PortXGenesisNFT', () => {
         'PORTX',
         METADATA_URI,
         MINT_PRICE,
-        10_001n,
+        250_001n,
       ),
     ).to.be.revertedWith('Above absolute max')
 
     const { nft } = await loadFixture(deployFixture)
 
-    await expect(nft.setMaxSupply(10_001n)).to.be.revertedWith('Above absolute max')
+    await expect(nft.setMaxSupply(250_001n)).to.be.revertedWith('Above absolute max')
   })
 
   it('blocks public mint before goPublic', async () => {

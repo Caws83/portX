@@ -27,6 +27,8 @@ interface PortfolioState {
   setTargets: (targets: Partial<PortfolioTargets>) => void
   buyBasket: (purchase: BasketPurchase, allocations: TokenAllocation[]) => void
   sellBasket: (params: SellBasketParams) => void
+  /** Remove demo active-basket entry without mutating held tokens (testnet live sell sync) */
+  removeActiveBasket: (basketId: string) => void
   sellAllPortfolio: () => void
   refreshDemoPrices: () => void
 }
@@ -94,6 +96,12 @@ export const usePortfolioStore = create<PortfolioState>()(
             localDemoOverride: true,
           }
         })
+      },
+
+      removeActiveBasket: (basketId) => {
+        set((s) => ({
+          activeBaskets: s.activeBaskets.filter((b) => b.basketId !== basketId),
+        }))
       },
 
       sellAllPortfolio: () => {

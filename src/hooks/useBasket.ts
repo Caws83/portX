@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchBaskets } from '@/api/baskets'
 import { useBasketStore } from '@/store/basketStore'
 import { DEMO_BASKETS } from '@/data/demoBaskets'
+import {
+  filterBasketsForAppMode,
+  injectTestnetCanonicalBasket,
+  mergeCatalogBaskets,
+} from '@/utils/basketCatalog'
 import type { Basket } from '@/types/basket'
 
 export type BasketsSource = 'api' | 'fallback'
@@ -47,10 +52,11 @@ export function useBasket() {
     }
   }, [])
 
-  const allBaskets = useMemo(
-    () => [...demoBaskets, ...customBaskets],
-    [demoBaskets, customBaskets]
-  )
+  const allBaskets = useMemo(() => {
+    const merged = mergeCatalogBaskets([...demoBaskets, ...customBaskets])
+    const withCanonical = injectTestnetCanonicalBasket(merged)
+    return filterBasketsForAppMode(withCanonical)
+  }, [demoBaskets, customBaskets])
 
   const getBasketById = (id: string): Basket | undefined =>
     allBaskets.find((b) => b.id === id)

@@ -1,17 +1,23 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { usePortfolio } from '@/hooks/usePortfolio'
 import { useSellAllPreview } from '@/hooks/useSellAllPreview'
+import { useTestnetPortfolioOwnership } from '@/hooks/useTestnetPortfolioOwnership'
+import { usePortfolioTradeEngine } from '@/hooks/usePortfolioTradeEngine'
 import { SellAllButton } from '@/components/SellAllButton'
 import { TargetSellForm } from '@/components/TargetSellForm'
 import { StopLossForm } from '@/components/StopLossForm'
-import { PortfolioSummary } from '@/components/PortfolioCard'
+import { PortfolioSummary, PortfolioCard } from '@/components/PortfolioCard'
 import { SellAllPreviewCard } from '@/components/SellAllPreviewCard'
 import { TransactionReviewModal } from '@/components/TransactionReviewModal'
+import { PortfolioTargetControls } from '@/components/PortfolioTargetControls'
+import { TestnetPortfolioTradeModals } from '@/components/TestnetPortfolioTradeModals'
 import { ExecutionWarning } from '@/components/ExecutionWarning'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { StatusBanner } from '@/components/ui/StatusBanner'
 import { executeDemoPlan } from '@/services/transactionBuilder'
 import { assessQuoteQuality } from '@/utils/quoteQuality'
+import { ENABLE_TESTNET_MODE } from '@/config/features'
 import {
   BUTTON_LABELS,
   EMPTY_MESSAGES,
@@ -20,8 +26,188 @@ import {
   WARNING_MESSAGES,
 } from '@/config/uiCopy'
 import { formatUsd } from '@/utils/format'
+import { TESTNET_MULTI_TOKEN_BASKET } from '@/data/testnetMultiTokenBasket'
+import { estimateBasketHoldingsValueUsd } from '@/utils/basketCatalog'
 
-export function SellAll() {
+function TestnetSellAll() {
+  const { portfolio, hasBasketHoldings, canSell } = useTestnetPortfolioOwnership()
+  const trade = usePortfolioTradeEngine()
+
+  const ownedBasket = useMemo(() => {
+    if (hasBasketHoldings) return TESTNET_MULTI_TOKEN_BASKET
+    const entry = portfolio.activeBaskets.find(
+      (b) => b.basketId === TESTNET_MULTI_TOKEN_BASKET.id,
+    )
+    return entry?.basket ?? null
+  }, [hasBasketHoldings, portfolio.activeBaskets])
+
+  const estimatedValueUsd = useMemo(
+    () =>
+      ownedBasket
+        ? estimateBasketHoldingsValueUsd(ownedBasket, portfolio.walletAssets)
+        : 0,
+    [ownedBasket, portfolio.walletAssets],
+  )
+
+  const basketHoldings = useMemo(() => {
+    if (!ownedBasket) return []
+    const symbols = new Set(ownedBasket.allocations.map((a) => a.token.symbol.toUpperCase()))
+    return portfolio.walletAssets.filter((asset) => symbols.has(asset.symbol.toUpperCase()))
+  }, [ownedBasket, portfolio.walletAssets])
+
+  const showOwnedPortfolio = Boolean(
+    ownedBasket && (hasBasketHoldings || portfolio.activeBaskets.length > 0),
+  )
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+      <h1 className="section-title mb-2">Sell Portfolio</h1>
+      <p className="text-portx-muted mb-8">
+        Sell from your Sepolia wallet holdings. Ownership is detected from on-chain LINK, UNI, WETH,
+        and AAVE balances.
+      </p>
+
+      {portfolio.isLoading && (
+        <StatusBanner variant="loading" className="mb-6">
+          Loading Sepolia wallet assets…
+        </StatusBanner>
+      )}
+
+      {portfolio.error && !portfolio.isLoading && (
+        <StatusBanner variant="warning" className="mb-6" onRetry={portfolio.refresh}>
+          Failed to load wallet assets ({portfolio.error.message})
+        </StatusBanner>
+      )}
+
+      {trade.error && (
+        <StatusBanner variant="error" className="mb-6">
+          {trade.error || ERROR_MESSAGES.quoteFailed}
+        </StatusBanner>
+      )}
+
+      {trade.txMsg && (
+        <StatusBanner variant="success" className="mb-6">
+          {trade.txMsg}
+        </StatusBanner>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        <PortfolioCard
+          label="Wallet value"
+          value={portfolio.totalValueDisplay}
+          subValue="Sepolia testnet estimate"
+          highlight
+        />
+        <PortfolioCard
+          label="Owned portfolios"
+          value={showOwnedPortfolio ? '1' : '0'}
+          subValue={`${portfolio.assetCount} on-chain asset(s)`}
+        />
+      </div>
+
+      {showOwnedPortfolio && ownedBasket ? (
+        <div className="card-glow mb-8 border-portx-green/25">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-portx-green mb-1">
+                My Portfolio
+              </p>
+              <h2 className="text-xl font-bold">{ownedBasket.name}</h2>
+              <p className="text-sm text-portx-muted mt-1">
+                Est. value {formatUsd(estimatedValueUsd)} · {basketHoldings.length} token
+                {basketHoldings.length === 1 ? '' : 's'} held
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void trade.openBuyPreviewAndReview(ownedBasket.id)}
+              disabled={trade.loading}
+              className="btn-secondary text-sm py-2 px-4 shrink-0 disabled:opacity-50"
+            >
+              {trade.loading && trade.selectedBasket?.id === ownedBasket.id ? 'Loading…' : 'Buy More'}
+            </button>
+          </div>
+
+          {basketHoldings.length > 0 && (
+            <div className="mb-6 space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+                Token balances
+              </p>
+              {basketHoldings.map((asset) => (
+                <div
+                  key={asset.symbol}
+                  className="flex justify-between items-center text-sm py-2 border-b border-portx-border last:border-0"
+                >
+                  <span className="font-mono">{asset.symbol}</span>
+                  <span className="text-portx-muted tabular-nums">
+                    {asset.balanceDisplay} · {asset.estimatedValueDisplay}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-3 mb-6">
+            <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">Sell</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void trade.openSellPreviewAndReview(ownedBasket.id)}
+                disabled={trade.loading || !canSell(ownedBasket.id)}
+                className="btn-primary text-sm py-2.5 px-4 disabled:opacity-50"
+              >
+                {trade.loading && trade.selectedBasket?.id === ownedBasket.id
+                  ? BUTTON_LABELS.fetchingQuotes
+                  : 'Sell 100%'}
+              </button>
+              <button
+                type="button"
+                disabled
+                title="Partial sell coming soon"
+                className="btn-secondary text-sm py-2.5 px-4 opacity-50 cursor-not-allowed"
+              >
+                Partial sell coming soon (50%)
+              </button>
+              <button
+                type="button"
+                disabled
+                title="Custom sell coming soon"
+                className="btn-secondary text-sm py-2.5 px-4 opacity-50 cursor-not-allowed"
+              >
+                Custom sell coming soon
+              </button>
+            </div>
+          </div>
+
+          {trade.loading && (
+            <StatusBanner variant="loading" className="mb-4">
+              {LOADING_MESSAGES.quotePreview}
+            </StatusBanner>
+          )}
+
+          <PortfolioTargetControls basketId={ownedBasket.id} />
+        </div>
+      ) : (
+        !portfolio.isLoading && (
+          <EmptyState
+            title="No owned portfolios"
+            description="Buy Sepolia Multi-Token Beta from Baskets — it will appear here when your wallet holds basket tokens."
+            action={
+              <Link to="/baskets" className="btn-primary">
+                Go to Baskets
+              </Link>
+            }
+            className="mb-8"
+          />
+        )
+      )}
+
+      <TestnetPortfolioTradeModals />
+    </div>
+  )
+}
+
+function ProductionSellAll() {
   const portfolio = usePortfolio()
   const sellAllPortfolio = portfolio.sellAllPortfolio
   const {
@@ -213,4 +399,8 @@ export function SellAll() {
       />
     </div>
   )
+}
+
+export function SellAll() {
+  return ENABLE_TESTNET_MODE ? <TestnetSellAll /> : <ProductionSellAll />
 }

@@ -14,10 +14,21 @@ export function isTestnetSepoliaUniswapPreview(preview: BasketQuotePreview): boo
 }
 
 export function isTestnetSepoliaUniswapPlan(plan: ExecutionPlan): boolean {
-  if (plan.isDemo) return false
   if (plan.chainId !== TESTNET_SEPOLIA_CHAIN_ID) return false
   if (plan.legs.length < 1 || plan.legs.length > TESTNET_MAX_BASKET_LEGS) return false
   return plan.legs.every((leg) => leg.quote.provider === 'uniswap-sepolia')
+}
+
+export type TestnetQuoteSource = 'api' | 'fallback' | 'testnet' | null
+
+/** True when review modal should use Sepolia testnet execute flow */
+export function isSepoliaTestnetTradePlan(
+  plan: ExecutionPlan | null,
+  quoteSource: TestnetQuoteSource = null,
+): boolean {
+  if (!plan) return false
+  if (quoteSource === 'testnet') return isTestnetSepoliaUniswapPlan(plan)
+  return isTestnetSepoliaUniswapPlan(plan) && !plan.isDemo
 }
 
 export function sumTestnetPlanInputWei(plan: ExecutionPlan): bigint {
@@ -29,6 +40,9 @@ export function sumTestnetPlanOutputAmount(plan: ExecutionPlan): bigint {
 }
 
 export function formatTestnetPlanTotalInput(plan: ExecutionPlan): string {
+  if (plan.type === 'sell_basket') {
+    return plan.legs.map((leg) => formatTestnetLegInputDisplay(leg)).join(' · ')
+  }
   return `${formatEther(sumTestnetPlanInputWei(plan))} ETH`
 }
 

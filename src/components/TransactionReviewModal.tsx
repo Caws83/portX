@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAccount, useChainId } from 'wagmi'
+import { formatEther } from 'viem'
 import type { ExecutionPlan } from '@/types/execution'
 import { BUNDLE_EXECUTOR_SEPOLIA } from '@/config/contracts'
 import { formatUsd, formatTokenAmount, truncateAddress } from '@/utils/format'
@@ -11,7 +12,7 @@ import {
   truncateCalldata,
 } from '@/services/transactionBuilder'
 import { assessExecutionSafety } from '@/services/executionSafety'
-import { getBundleExecutorChainId } from '@/services/bundleExecutorContract'
+import { getBundleExecutorChainId, getBundleExecutorAddress } from '@/services/bundleExecutorContract'
 import {
   buildSwapCalls,
   executionPlanToQuotePreview,
@@ -23,11 +24,18 @@ import {
   type SimulationResult,
 } from '@/services/executionService'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import { useRequiredTradeChain } from '@/hooks/useRequiredTradeChain'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
+import { shouldSuppressMainnetPilotPanel } from '@/utils/testnetQuoteRouting'
 import {
   getTestnetUniswapExecuteAmountLabel,
+  getTestnetUniswapBuyExecuteLabel,
+  getTestnetUniswapSellExecuteLabel,
   useTestnetUniswapBasketExecute,
 } from '@/hooks/useTestnetUniswapBasketExecute'
+import { approvalStatusLabel, type TestnetApprovalRequirement } from '@/hooks/useTestnetBundleExecutorApprovals'
+import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
+import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPortfolio'
 import { useMainnetSwapExecute } from '@/hooks/useMainnetSwapExecute'
 import { saveTestnetPortfolioFromPlan } from '@/services/testnetPortfolio'
 import { saveTestnetSwapFromPlan } from '@/services/testnetSwapHistory'
@@ -37,12 +45,36 @@ import {
   formatTestnetLegInputDisplay,
   formatTestnetPlanTotalInput,
   formatTestnetPlanTotalOutput,
+  isSepoliaTestnetTradePlan,
+  sumTestnetPlanInputWei,
 } from '@/utils/testnetPreview'
+import { useBundleExecutorFeeConfig } from '@/hooks/useBundleExecutorFeeConfig'
+import {
+  estimateBuyProtocolFee,
+  grossUpEthValueForBuyFee,
+  estimateSellProtocolFee,
+  formatProtocolFeeBps,
+  isFeeCollectionActive,
+} from '@/services/protocolFee'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
+import { TradeChainStatusPanel } from './TradeChainStatusPanel'
 import { QuoteQualityPanel } from './QuoteQualityPanel'
 import { MainnetPilotReadinessPanel } from './MainnetPilotReadinessPanel'
 import { assessQuoteQualityFromPlan, isLegUnsupported } from '@/utils/quoteQuality'
+import { AdvancedDisclosure } from '@/components/ui/AdvancedDisclosure'
+import { TestnetProtocolFeeSummary } from '@/components/TestnetProtocolFeeSummary'
+import {
+  EXECUTION_ROUTER_NAME,
+  EXECUTE_PORTFOLIO_TRADE,
+  formatDisabledReason,
+  formatSafetyGateLabel,
+  SEPOLIA_PORTFOLIO_TRADE,
+  TESTNET_BUTTONS,
+  TESTNET_SUCCESS,
+  ASSET_NOT_ROUTEABLE,
+  TESTNET_TRADE_NOTE,
+} from '@/config/testnetUxCopy'
 
 type ReviewQuoteSource = 'api' | 'fallback' | 'testnet' | null
 
@@ -53,9 +85,25 @@ interface TransactionReviewModalProps {
   onClose: () => void
   onConfirm: () => void
   confirming?: boolean
+  onTestnetExecutionSuccess?: (plan: ExecutionPlan) => void
 }
 
-function getPlanTypeLabel(plan: ExecutionPlan): string {
+function getSepoliaReviewWarnings(warnings: string[]): string[] {
+  const filtered = warnings.filter(
+    (w) =>
+      !/not for production/i.test(w) &&
+      !/^Sepolia testnet Uniswap V3/i.test(w) &&
+      !/^Demo mode/i.test(w),
+  )
+  return [TESTNET_TRADE_NOTE, ...filtered]
+}
+
+function getPlanTypeLabel(plan: ExecutionPlan, testnetPlan?: boolean): string {
+  if (testnetPlan) {
+    if (plan.type === 'buy') return TESTNET_BUTTONS.reviewTrade
+    if (plan.type === 'sell_basket') return TESTNET_BUTTONS.reviewSell
+    return 'Review Sell All'
+  }
   if (plan.type === 'buy') return 'Buy Basket'
   if (plan.type === 'sell_basket') return 'Sell Basket'
   return 'Sell All Portfolio'
@@ -67,6 +115,89 @@ function getAlphaExecutionDisabledLabel(plan: ExecutionPlan): string {
     return 'Sell execution disabled in Alpha'
   }
   return 'Execution disabled in Alpha'
+}
+
+function ApprovalRow({
+  leg,
+  onApprove,
+  isApproving,
+  pendingSymbol,
+  preferMaxApproval,
+  compact = false,
+}: {
+  leg: TestnetApprovalRequirement
+  onApprove: () => void
+  isApproving: boolean
+  pendingSymbol: string | null
+  preferMaxApproval: boolean
+  compact?: boolean
+}) {
+  const statusTone =
+    leg.status === 'approved'
+      ? 'text-portx-green'
+      : leg.status === 'pending'
+        ? 'text-portx-muted'
+        : 'text-portx-warning'
+
+  const tokenLabel = leg.kind === 'protocol_fee' ? 'USDC' : leg.symbol
+  const approvalTypeLabel = preferMaxApproval ? 'Unlimited' : 'Exact amount'
+  const amountToApproveLabel = preferMaxApproval
+    ? 'Unlimited'
+    : `${leg.approvalAmountDisplay} ${tokenLabel}`
+
+  return (
+    <li
+      className={`rounded-lg border border-portx-border bg-black/20 px-3 py-2 text-xs ${
+        compact ? 'border-transparent bg-transparent px-0 py-0' : 'space-y-2'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium">
+          {leg.kind === 'protocol_fee' ? 'USDC fee' : `${leg.symbol} → USDC`}
+          <span className={`ml-2 font-normal ${statusTone}`}>
+            {approvalStatusLabel(leg.status)}
+          </span>
+        </p>
+        {!leg.sufficient && leg.status !== 'pending' ? (
+          <button
+            type="button"
+            onClick={onApprove}
+            disabled={isApproving}
+            className="btn-secondary text-xs px-3 py-1 disabled:opacity-50"
+          >
+            {leg.kind === 'protocol_fee' ? 'Approve USDC Fee' : `Approve ${leg.symbol}`}
+          </button>
+        ) : leg.status === 'pending' || pendingSymbol === leg.symbol ? (
+          <span className="text-xs text-portx-muted">Approving…</span>
+        ) : null}
+      </div>
+      {!compact ? (
+        <div className="space-y-1 text-portx-muted">
+          <p>
+            <span>Token: </span>
+            <span className="font-medium text-portx-foreground">{tokenLabel}</span>
+          </p>
+          <p>
+            <span>Amount to approve: </span>
+            <span className="font-mono text-portx-foreground">{amountToApproveLabel}</span>
+          </p>
+          <p>
+            <span>Spender: </span>
+            <span className="text-portx-foreground">{EXECUTION_ROUTER_NAME}</span>
+          </p>
+          <p>
+            <span>Approval type: </span>
+            <span className="text-portx-foreground">{approvalTypeLabel}</span>
+          </p>
+          {leg.needsAdditionalApproval ? (
+            <p className="text-portx-warning">
+              Quote updated — approve the new amount required for this sell.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  )
 }
 
 function ChecklistRow({
@@ -105,19 +236,34 @@ export function TransactionReviewModal({
   onClose,
   onConfirm,
   confirming,
+  onTestnetExecutionSuccess,
 }: TransactionReviewModalProps) {
   const { isConnected, address } = useAccount()
   const chainId = useChainId()
   const { enableLiveExecution } = useFeatureFlags()
   const [simulation, setSimulation] = useState<SimulationResult | null>(null)
   const [simulating, setSimulating] = useState(false)
-  const testnetExecute = useTestnetUniswapBasketExecute(plan, open)
+  const [preferMaxApproval, setPreferMaxApproval] = useState(false)
+  const testnetExecute = useTestnetUniswapBasketExecute(plan, open, quoteSource ?? null, {
+    preferMaxApproval,
+  })
+  const tradeChain = useRequiredTradeChain({ plan, modalOpen: open })
+  const testnetBalances = useTestnetPortfolioBalances()
+  const feeConfigState = useBundleExecutorFeeConfig()
   const mainnetPilot = useMainnetSwapExecute(plan, open, quoteSource ?? null)
   const isProductionPreview = !ENABLE_TESTNET_MODE
+  const isSepoliaTestnetTrade = isSepoliaTestnetTradePlan(plan, quoteSource ?? null)
+  const suppressMainnetPilot = shouldSuppressMainnetPilotPanel({
+    quoteSource,
+    chainId,
+    plan,
+  })
   const showTestnetExecute =
-    testnetExecute.isTestnetUniswapPlan && ENABLE_TESTNET_MODE && enableLiveExecution
-  const showMainnetPilotExecute = mainnetPilot.showPilotUi && !showTestnetExecute
-  const showMainnetPilotPanel = mainnetPilot.showPilotPanel && !showTestnetExecute
+    isSepoliaTestnetTrade && ENABLE_TESTNET_MODE && enableLiveExecution
+  const showMainnetPilotExecute =
+    mainnetPilot.showPilotUi && !showTestnetExecute && !suppressMainnetPilot
+  const showMainnetPilotPanel =
+    mainnetPilot.showPilotPanel && !showTestnetExecute && !suppressMainnetPilot
   const savedHistoryTxRef = useRef<string | null>(null)
 
   const walletConnected = isConnected && Boolean(address)
@@ -125,6 +271,7 @@ export function TransactionReviewModal({
   useEffect(() => {
     if (!open) {
       savedHistoryTxRef.current = null
+      setPreferMaxApproval(false)
     }
   }, [open])
 
@@ -153,6 +300,9 @@ export function TransactionReviewModal({
     }
     saveTestnetSwapFromPlan(plan, saveParams)
     saveTestnetPortfolioFromPlan(plan, saveParams)
+    testnetBalances.refresh()
+    window.dispatchEvent(new Event(TESTNET_DASHBOARD_REFRESH_EVENT))
+    onTestnetExecutionSuccess?.(plan)
   }, [
     open,
     plan,
@@ -160,6 +310,7 @@ export function TransactionReviewModal({
     testnetExecute.status,
     testnetExecute.txHash,
     testnetExecute.explorerUrl,
+    onTestnetExecutionSuccess,
   ])
 
   const prepared = useMemo(
@@ -189,11 +340,66 @@ export function TransactionReviewModal({
 
   const sepoliaChainId = getBundleExecutorChainId()
   const walletOnSepolia = chainId === sepoliaChainId
+  const canExecuteOnRequiredChain = tradeChain.isConnected && tradeChain.isCorrectChain
   const isSellPlan = plan?.type === 'sell_basket' || plan?.type === 'sell_all'
   const soldAssetSymbols =
     plan && isSellPlan
       ? plan.legs.map((leg) => leg.quote.inputToken.symbol).join(', ')
       : null
+
+  const estimatedProtocolFee = useMemo(() => {
+    if (!plan || !feeConfigState.config || !isFeeCollectionActive(feeConfigState.config)) {
+      return null
+    }
+
+    if (testnetExecute.isSellPlan) {
+      const totalOutputWei = plan.legs.reduce(
+        (sum, leg) => sum + BigInt(leg.quote.outputAmount),
+        0n,
+      )
+      const feeAmount = estimateSellProtocolFee(totalOutputWei, feeConfigState.config)
+      const outputToken = plan.legs[0]?.quote.outputToken
+      if (feeAmount <= 0n || !outputToken) return null
+      return {
+        amount: feeAmount,
+        symbol: outputToken.symbol,
+        decimals: outputToken.decimals,
+        isBuy: false,
+        rateLabel: formatProtocolFeeBps(feeConfigState.config.sellFeeBps),
+      }
+    }
+
+    if (bundlePrepareResult?.status === 'ready') {
+      const feeAmount = estimateBuyProtocolFee(
+        bundlePrepareResult.totalNativeEthWei,
+        feeConfigState.config,
+      )
+      if (feeAmount <= 0n) return null
+      return {
+        amount: feeAmount,
+        symbol: 'ETH',
+        decimals: 18,
+        isBuy: true,
+        rateLabel: formatProtocolFeeBps(feeConfigState.config.buyFeeBps),
+      }
+    }
+
+    return null
+  }, [plan, feeConfigState.config, testnetExecute.isSellPlan, bundlePrepareResult])
+
+  const testnetBuyEthSummary = useMemo(() => {
+    if (!plan || plan.type !== 'buy' || testnetExecute.isSellPlan) return null
+    const swapEthWei = sumTestnetPlanInputWei(plan)
+    const nativeLegEthWei =
+      bundlePrepareResult?.status === 'ready'
+        ? bundlePrepareResult.totalNativeEthWei
+        : swapEthWei
+    const finalEthWei = grossUpEthValueForBuyFee(nativeLegEthWei, feeConfigState.config)
+    return {
+      swapEthWei,
+      finalEthWei,
+    }
+  }, [plan, testnetExecute.isSellPlan, bundlePrepareResult, feeConfigState.config])
 
   if (!open || !plan) return null
   const quoteQuality = assessQuoteQualityFromPlan(plan, quoteSource ?? null)
@@ -210,7 +416,11 @@ export function TransactionReviewModal({
     featureFlagEnabled: enableLiveExecution,
   })
 
-  const showLivePrep = !plan.isDemo && readiness.hasZeroExRoute && !testnetExecute.isTestnetUniswapPlan
+  const showLivePrep =
+    !plan.isDemo &&
+    readiness.hasZeroExRoute &&
+    !isSepoliaTestnetTrade &&
+    !suppressMainnetPilot
   const statusTone =
     readiness.status === 'ready_for_wallet'
       ? 'border-portx-green/40 bg-portx-green/10 text-portx-green'
@@ -245,8 +455,12 @@ export function TransactionReviewModal({
       <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto card-glow border-portx-green/20 shadow-glow">
         <div className="flex items-start justify-between mb-6 gap-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-bold">Review Transaction</h2>
-            <p className="text-sm text-portx-muted mt-0.5">{getPlanTypeLabel(plan)}</p>
+            <h2 className="text-xl font-bold">
+              {isSepoliaTestnetTrade ? getPlanTypeLabel(plan, true) : 'Review Transaction'}
+            </h2>
+            <p className="text-sm text-portx-muted mt-0.5">
+              {isSepoliaTestnetTrade ? SEPOLIA_PORTFOLIO_TRADE : getPlanTypeLabel(plan)}
+            </p>
             <div className="mt-3">
               <QuoteQualityPanel
                 quality={quoteQuality}
@@ -270,6 +484,10 @@ export function TransactionReviewModal({
           Non-custodial — you sign all swaps from your connected wallet. PortX never holds funds or
           private keys.
         </p>
+
+        {isSepoliaTestnetTrade ? (
+          <TradeChainStatusPanel plan={plan} modalOpen={open} className="mb-6" />
+        ) : null}
 
         {showLivePrep && (
           <div className="mb-6 space-y-4">
@@ -497,14 +715,10 @@ export function TransactionReviewModal({
         )}
 
         {ENABLE_TESTNET_MODE && !plan.isDemo && bundleQuotePreview && (
-          <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-border space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-              BundleExecutor Testnet Payload Preview
-            </p>
-
+          <AdvancedDisclosure title="Advanced — trade payload & routing" className="mb-6">
             {!walletOnSepolia && (
               <div className="rounded-xl border border-portx-warning/50 bg-portx-warning/10 text-portx-warning p-3 text-sm">
-                Sepolia required for BundleExecutor testnet execution.
+                Sepolia required for testnet portfolio trades.
               </div>
             )}
 
@@ -542,20 +756,25 @@ export function TransactionReviewModal({
                       {BUNDLE_EXECUTOR_SEPOLIA.networkLabel} ({bundleBuildResult.chainId})
                     </dd>
                   </div>
+                  <div className="col-span-2">
+                    <dt className="text-portx-muted text-xs">{EXECUTION_ROUTER_NAME}</dt>
+                    <dd className="font-mono text-xs break-all">{getBundleExecutorAddress()}</dd>
+                  </div>
                 </dl>
 
                 {bundleBuildResult.swapCalls.map((swapCall, index) => {
                   const legQuote = plan.legs[index]?.quote
+                  const builtCalldata = swapCall.data
                   const calldataStatus = legQuote
                     ? getCalldataStatus(legQuote, plan.isDemo)
                     : 'missing'
                   const calldataLabel =
                     calldataStatus === 'available'
-                      ? `Available (${legQuote?.calldata.length ?? 0} chars)`
+                      ? `Built (${builtCalldata.length} chars)`
                       : calldataStatus === 'demo'
-                        ? 'Demo placeholder'
+                        ? 'Preview placeholder'
                         : calldataStatus === 'unsupported'
-                          ? 'Unsupported'
+                          ? ASSET_NOT_ROUTEABLE
                           : 'Missing'
 
                   return (
@@ -592,7 +811,7 @@ export function TransactionReviewModal({
                         {swapCall.minAmountOut.toString()}
                       </p>
                       <p>
-                        <span className="text-portx-muted">calldata status: </span>
+                        <span className="text-portx-muted">calldata: </span>
                         <span
                           className={
                             calldataStatus === 'available' ? 'text-portx-green' : 'text-portx-warning'
@@ -601,16 +820,12 @@ export function TransactionReviewModal({
                           {calldataLabel}
                         </span>
                       </p>
-                      {legQuote?.calldata?.startsWith('0x') && (
+                      {builtCalldata.startsWith('0x') && builtCalldata.length > 10 && (
                         <p>
-                          <span className="text-portx-muted">calldata: </span>
-                          {truncateCalldata(legQuote.calldata, 24)}
+                          <span className="text-portx-muted">calldata hex: </span>
+                          {truncateCalldata(builtCalldata, 24)}
                         </p>
                       )}
-                      <p>
-                        <span className="text-portx-muted">chain target: </span>
-                        {BUNDLE_EXECUTOR_SEPOLIA.networkLabel} ({sepoliaChainId})
-                      </p>
                     </div>
                   )
                 })}
@@ -633,45 +848,156 @@ export function TransactionReviewModal({
             ) : null}
 
             <p className="text-xs text-portx-muted">
-              {testnetExecute.isTestnetUniswapPlan
-                ? 'Sepolia BundleExecutor payload — execute below when all safety gates pass.'
-                : 'Payload preview only — no wallet writes or contract calls.'}
+              {isSepoliaTestnetTrade
+                ? `${EXECUTE_PORTFOLIO_TRADE} — execute below when checks pass.`
+                : 'Payload preview only — no wallet writes.'}
             </p>
-          </div>
+          </AdvancedDisclosure>
         )}
 
-        {testnetExecute.isTestnetUniswapPlan && (
-          <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-warning/40 space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-portx-warning">
-              Sepolia testnet execution
+        {isSepoliaTestnetTrade && (
+          <div className="mb-6 p-4 rounded-xl bg-portx-surface border border-portx-green/30 space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-portx-green">
+              {SEPOLIA_PORTFOLIO_TRADE}
             </p>
 
             <ExecutionWarning
-              variant="warning"
-              warnings={[
-                `Testnet only: sends ${getTestnetUniswapExecuteAmountLabel()} through BundleExecutor to Uniswap V3. Not for production.`,
-              ]}
+              variant="testnet"
+              warnings={
+                testnetExecute.isSellPlan
+                  ? [
+                      TESTNET_TRADE_NOTE,
+                      'Sells your Sepolia portfolio tokens to USDC in one transaction.',
+                      `Approve tokens for ${EXECUTION_ROUTER_NAME} if prompted.`,
+                    ]
+                  : [
+                      TESTNET_TRADE_NOTE,
+                      `Buys your portfolio allocation with ${getTestnetUniswapExecuteAmountLabel(plan)} on Sepolia.`,
+                    ]
+              }
             />
 
             <div className="rounded-xl border border-portx-border bg-black/20 p-3 space-y-3 text-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-                Multi-leg basket breakdown
+                {testnetExecute.isSellPlan ? 'Multi-leg basket breakdown' : 'Buy summary'}
               </p>
+              {!testnetExecute.isSellPlan ? (
+                <dl className="grid grid-cols-2 gap-3 mb-2">
+                  <div>
+                    <dt className="text-xs text-portx-muted">Total buy amount</dt>
+                    <dd className="font-mono font-semibold">{formatUsd(plan.totalInputUsd)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-portx-muted">Swap ETH (legs)</dt>
+                    <dd className="font-mono font-semibold text-portx-green">
+                      {testnetBuyEthSummary
+                        ? `${formatEther(testnetBuyEthSummary.swapEthWei)} ETH`
+                        : formatTestnetPlanTotalInput(plan)}
+                    </dd>
+                  </div>
+                  {testnetBuyEthSummary &&
+                  testnetBuyEthSummary.finalEthWei > testnetBuyEthSummary.swapEthWei ? (
+                    <div className="col-span-2">
+                      <dt className="text-xs text-portx-muted">Final ETH required (incl. protocol fee)</dt>
+                      <dd className="font-mono font-semibold">
+                        {formatEther(testnetBuyEthSummary.finalEthWei)} ETH
+                      </dd>
+                    </div>
+                  ) : null}
+                  {testnetExecute.buyFundsSummary ? (
+                    <>
+                      <div>
+                        <dt className="text-xs text-portx-muted">Wallet Sepolia ETH</dt>
+                        <dd className="font-mono font-semibold">
+                          {testnetExecute.buyFundsSummary.walletEthBalanceWei != null
+                            ? `${formatEther(testnetExecute.buyFundsSummary.walletEthBalanceWei)} ETH`
+                            : 'Loading…'}
+                        </dd>
+                      </div>
+                      {testnetExecute.buyFundsSummary.protocolFeeWei > 0n ? (
+                        <div>
+                          <dt className="text-xs text-portx-muted">Protocol fee (est.)</dt>
+                          <dd className="font-mono font-semibold">
+                            {formatEther(testnetExecute.buyFundsSummary.protocolFeeWei)} ETH
+                          </dd>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {testnetExecute.buyFundsBlockedReason ? (
+                    <div className="col-span-2">
+                      <p className="text-xs text-portx-warning">{testnetExecute.buyFundsBlockedReason}</p>
+                    </div>
+                  ) : null}
+                  <div className="col-span-2">
+                    <dt className="text-xs text-portx-muted mb-1">Expected tokens received</dt>
+                    <dd className="font-mono font-semibold">{formatTestnetPlanTotalOutput(plan)}</dd>
+                  </div>
+                </dl>
+              ) : null}
+              {!testnetExecute.isSellPlan && plan.legs.length > 0 ? (
+                <ul className="space-y-1 text-xs border-t border-portx-border pt-2">
+                  {plan.legs.map((leg, index) => {
+                    const quotePreviewLeg = bundleQuotePreview?.legs[index]
+                    const weight = quotePreviewLeg?.allocation.weightPercent ?? 0
+                    const usd = quotePreviewLeg?.allocation.inputAmountUsd ?? 0
+                    return (
+                      <li key={leg.index} className="flex justify-between gap-2">
+                        <span>
+                          {leg.quote.outputToken.symbol}{' '}
+                          <span className="text-portx-muted">({weight}%)</span>
+                        </span>
+                        <span className="font-mono">{formatUsd(usd)}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : null}
               <dl className="grid grid-cols-2 gap-3">
                 <div>
                   <dt className="text-xs text-portx-muted">Leg count</dt>
                   <dd className="font-mono font-semibold">{plan.legs.length}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-portx-muted">Total amountIn</dt>
+                  <dt className="text-xs text-portx-muted">
+                    {testnetExecute.isSellPlan ? 'Tokens sold' : 'Total amountIn'}
+                  </dt>
                   <dd className="font-mono font-semibold text-portx-green">
                     {formatTestnetPlanTotalInput(plan)}
                   </dd>
                 </div>
                 <div className="col-span-2">
-                  <dt className="text-xs text-portx-muted mb-1">Est. total output</dt>
+                  <dt className="text-xs text-portx-muted mb-1">
+                    {testnetExecute.isSellPlan ? 'Est. total USDC received' : 'Est. total output'}
+                  </dt>
                   <dd className="font-mono font-semibold">{formatTestnetPlanTotalOutput(plan)}</dd>
                 </div>
+                {estimatedProtocolFee ? (
+                  <div className="col-span-2">
+                    <TestnetProtocolFeeSummary
+                      feeConfig={feeConfigState.config}
+                      isAvailable={feeConfigState.isAvailable}
+                      estimatedFee={estimatedProtocolFee}
+                      netOutputWei={
+                        testnetExecute.isSellPlan
+                          ? plan.legs.reduce(
+                              (sum, leg) => sum + BigInt(leg.quote.outputAmount),
+                              0n,
+                            ) - estimatedProtocolFee.amount
+                          : undefined
+                      }
+                      compact
+                    />
+                  </div>
+                ) : feeConfigState.isAvailable && feeConfigState.config?.feesEnabled ? (
+                  <div className="col-span-2">
+                    <TestnetProtocolFeeSummary
+                      feeConfig={feeConfigState.config}
+                      isAvailable={feeConfigState.isAvailable}
+                      compact
+                    />
+                  </div>
+                ) : null}
               </dl>
               <ul className="space-y-2">
                 {plan.legs.map((leg, index) => {
@@ -706,27 +1032,174 @@ export function TransactionReviewModal({
               </ul>
             </div>
 
-            <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
-                Safety gates
-              </p>
+            {testnetExecute.approvals.requiresApprovals ? (
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-portx-muted">
+                  Sell approvals — complete in order
+                </p>
+
+                <p className="text-xs text-portx-muted">
+                  PortX only requests approval for the amount needed for this sell.
+                </p>
+
+                {testnetExecute.isSellPlan && testnetExecute.sellPayloadRefreshing ? (
+                  <p className="text-xs text-portx-muted">
+                    Refreshing sell quote before execution…
+                  </p>
+                ) : null}
+
+                {testnetExecute.isSellPlan ? (
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-portx-accent hover:underline disabled:opacity-50 disabled:no-underline"
+                    disabled={testnetExecute.sellPayloadRefreshing}
+                    onClick={() => testnetExecute.refreshSellQuote()}
+                  >
+                    Refresh quote
+                  </button>
+                ) : null}
+
+                <div className="rounded-lg border border-portx-border bg-black/20 p-3 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold">1. Approve portfolio tokens</p>
+                      <p className="text-xs text-portx-muted">
+                        LINK, UNI, WETH, AAVE → {EXECUTION_ROUTER_NAME}
+                      </p>
+                    </div>
+                    {testnetExecute.approvals.portfolioApprovalsSufficient ? (
+                      <span className="text-xs font-semibold text-portx-green shrink-0">Approved</span>
+                    ) : testnetExecute.approvals.missingInputApprovals.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void testnetExecute.approvals.approveMissingPortfolioTokens()
+                        }
+                        disabled={testnetExecute.approvals.isApproving}
+                        className="btn-secondary text-xs px-3 py-1.5 shrink-0 disabled:opacity-50"
+                      >
+                        {testnetExecute.approvals.isApproving
+                          ? 'Approving…'
+                          : 'Approve Required Tokens'}
+                      </button>
+                    ) : null}
+                  </div>
+                  <ul className="space-y-2">
+                    {testnetExecute.approvals.inputLegs.map((leg) => (
+                      <ApprovalRow
+                        key={leg.id}
+                        leg={leg}
+                        preferMaxApproval={preferMaxApproval}
+                        onApprove={() => void testnetExecute.approvals.approveToken(leg.id)}
+                        isApproving={testnetExecute.approvals.isApproving}
+                        pendingSymbol={testnetExecute.approvals.pendingSymbol}
+                      />
+                    ))}
+                  </ul>
+                </div>
+
+                {testnetExecute.approvals.protocolFeeLeg ? (
+                  <div className="rounded-lg border border-portx-warning/30 bg-portx-warning/5 p-3 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold">2. Approve USDC fee</p>
+                        <p className="text-xs text-portx-muted">
+                          Protocol sell fee — est.{' '}
+                          {testnetExecute.approvals.protocolFeeLeg.amountDisplay} USDC
+                          {testnetExecute.approvals.protocolFeeLeg.approvalAmountDisplay !==
+                          testnetExecute.approvals.protocolFeeLeg.amountDisplay
+                            ? ` (approve ${testnetExecute.approvals.protocolFeeLeg.approvalAmountDisplay} USDC with buffer)`
+                            : null}
+                        </p>
+                      </div>
+                      {testnetExecute.approvals.protocolFeeLeg.sufficient ? (
+                        <span className="text-xs font-semibold text-portx-green shrink-0">
+                          Approved
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void testnetExecute.approvals.approveToken(
+                              testnetExecute.approvals.protocolFeeLeg!.id,
+                            )
+                          }
+                          disabled={testnetExecute.approvals.isApproving}
+                          className="btn-secondary text-xs px-3 py-1.5 shrink-0 disabled:opacity-50"
+                        >
+                          Approve USDC Fee
+                        </button>
+                      )}
+                    </div>
+                    <ApprovalRow
+                      leg={testnetExecute.approvals.protocolFeeLeg}
+                      preferMaxApproval={preferMaxApproval}
+                      onApprove={() =>
+                        void testnetExecute.approvals.approveToken(
+                          testnetExecute.approvals.protocolFeeLeg!.id,
+                        )
+                      }
+                      isApproving={testnetExecute.approvals.isApproving}
+                      pendingSymbol={testnetExecute.approvals.pendingSymbol}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-xs text-portx-muted">
+                    2. USDC protocol fee — not required (fees disabled on Sepolia executor).
+                  </p>
+                )}
+
+                <p className="text-xs text-portx-muted">
+                  3. Execute Sell — enabled after approvals and a fresh simulation pass.
+                </p>
+
+                <AdvancedDisclosure title="Advanced — approval options">
+                  <label className="flex items-start gap-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={preferMaxApproval}
+                      onChange={(event) => setPreferMaxApproval(event.target.checked)}
+                      disabled={testnetExecute.approvals.isApproving}
+                    />
+                    <span>Approve once for faster future sells</span>
+                  </label>
+                  {preferMaxApproval ? (
+                    <p className="text-xs text-portx-warning mt-2">
+                      Unlimited approval gives the PortX Execution Router permission to move future
+                      balances of this token until revoked.
+                    </p>
+                  ) : null}
+                </AdvancedDisclosure>
+
+                {testnetExecute.approvals.approvalError ? (
+                  <p className="text-xs text-portx-danger">{testnetExecute.approvals.approvalError}</p>
+                ) : null}
+                {testnetExecute.approvals.allApprovalsSufficient ? (
+                  <p className="text-xs text-portx-green">
+                    All approvals complete — ready to execute when simulation passes.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <AdvancedDisclosure title="Advanced — execution checks">
               <ul className="space-y-2">
                 {testnetExecute.gates.map((gate) => (
                   <ChecklistRow
                     key={gate.id}
-                    label={gate.label}
+                    label={formatSafetyGateLabel(gate.label)}
                     passed={gate.passed}
                     detail={gate.detail}
                   />
                 ))}
               </ul>
-            </div>
-
-            {testnetExecute.disabledReason && !testnetExecute.canExecute ? (
-              <p className="text-xs text-portx-muted">
-                Disabled: {testnetExecute.disabledReason}
-              </p>
-            ) : null}
+              {testnetExecute.disabledReason && !testnetExecute.canExecute ? (
+                <p className="text-xs text-portx-muted mt-2">
+                  Disabled: {formatDisabledReason(testnetExecute.disabledReason)}
+                </p>
+              ) : null}
+            </AdvancedDisclosure>
 
             {testnetExecute.status === 'pending' ? (
               <div className="rounded-xl border border-portx-border bg-portx-surface p-3 text-sm">
@@ -741,7 +1214,7 @@ export function TransactionReviewModal({
                     Swap confirmed
                   </p>
                   <p className="font-bold text-lg text-portx-green">
-                    Sepolia test swap executed successfully
+                    {testnetExecute.isSellPlan ? TESTNET_SUCCESS.sell : TESTNET_SUCCESS.buy}
                   </p>
                   <p className="text-sm text-portx-muted mt-1">
                     Your transaction was confirmed on Sepolia. Review the hash below or open
@@ -794,7 +1267,7 @@ export function TransactionReviewModal({
               </div>
             ) : null}
 
-            {testnetExecute.status === 'error' && testnetExecute.errorMessage ? (
+            {testnetExecute.errorMessage && testnetExecute.status !== 'success' ? (
               <div className="rounded-xl border border-portx-danger/40 bg-portx-danger/10 text-portx-danger p-3 text-sm">
                 {testnetExecute.errorMessage}
               </div>
@@ -844,7 +1317,8 @@ export function TransactionReviewModal({
             {quoteQuality.proceedsExcludeUnsupported && (
               <p className="text-xs text-portx-warning">
                 Proceeds exclude {formatUsd(quoteQuality.excludedProceedsUsd)} from{' '}
-                {quoteQuality.unsupportedLegCount} unsupported leg(s).
+                {quoteQuality.unsupportedLegCount}{' '}
+                {ENABLE_TESTNET_MODE ? ASSET_NOT_ROUTEABLE.toLowerCase() : 'unsupported leg(s)'}.
               </p>
             )}
           </div>
@@ -864,6 +1338,7 @@ export function TransactionReviewModal({
               allQuotes: [q],
             }
             const unsupported = isLegUnsupported(legQuote)
+            const showTestnetLegAmounts = isSepoliaTestnetTrade
             return (
               <div
                 key={leg.index}
@@ -875,14 +1350,28 @@ export function TransactionReviewModal({
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-medium">
-                    {q.inputToken.symbol} → {q.outputToken.symbol}
+                    {showTestnetLegAmounts
+                      ? formatTestnetLegRouteLabel(leg)
+                      : `${q.inputToken.symbol} → ${q.outputToken.symbol}`}
                   </span>
                   <RouteProviderBadge provider={q.provider} />
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs text-portx-muted font-mono">
-                  <span>In: {formatUsd(q.inputAmountUsd)}</span>
                   <span>
-                    Out: ~{formatTokenAmount(parseFloat(q.outputAmount))} {q.outputToken.symbol}
+                    In:{' '}
+                    {showTestnetLegAmounts
+                      ? formatTestnetLegInputDisplay(leg)
+                      : formatUsd(q.inputAmountUsd)}
+                  </span>
+                  <span>
+                    Out:{' '}
+                    {showTestnetLegAmounts
+                      ? formatTestnetLegOutput(
+                          q.outputAmount,
+                          q.outputToken.decimals,
+                          q.outputToken.symbol,
+                        )
+                      : `~${formatTokenAmount(parseFloat(q.outputAmount))} ${q.outputToken.symbol}`}
                   </span>
                   <span>Gas: {formatUsd(q.estimatedGasUsd)}</span>
                   <span>Impact: {q.priceImpactPercent.toFixed(2)}%</span>
@@ -900,7 +1389,11 @@ export function TransactionReviewModal({
             <dt className="text-portx-muted text-xs">
               {isSellPlan ? 'Est. proceeds (USDC)' : 'Est. total out'}
             </dt>
-            <dd className="font-mono font-bold text-portx-green">{formatUsd(plan.totalOutputUsd)}</dd>
+            <dd className="font-mono font-bold text-portx-green">
+              {isSepoliaTestnetTrade
+                ? formatTestnetPlanTotalOutput(plan)
+                : formatUsd(plan.totalOutputUsd)}
+            </dd>
           </div>
           <div>
             <dt className="text-portx-muted text-xs">Est. total gas</dt>
@@ -917,14 +1410,17 @@ export function TransactionReviewModal({
         </dl>
 
         <ExecutionWarning
+          variant={
+            isSepoliaTestnetTrade ? 'testnet' : plan.isDemo ? 'demo' : showMainnetPilotPanel ? 'warning' : 'info'
+          }
           warnings={
-            plan.isDemo
+            plan.isDemo && !isSepoliaTestnetTrade
               ? [
                   'Demo mode. Real swap execution is not live yet.',
                   ...plan.warnings.filter((w) => !w.includes('Demo mode')),
                 ]
-              : testnetExecute.isTestnetUniswapPlan
-                ? plan.warnings
+              : isSepoliaTestnetTrade
+                ? getSepoliaReviewWarnings(plan.warnings)
                 : showMainnetPilotPanel
                   ? [
                       'Mainnet pilot — single-leg buy only. Multi-leg and sell execution remain disabled.',
@@ -942,7 +1438,7 @@ export function TransactionReviewModal({
         )}
 
         <div className="flex gap-3 mt-6">
-          {testnetExecute.isTestnetUniswapPlan && testnetExecute.status === 'success' ? (
+          {isSepoliaTestnetTrade && testnetExecute.status === 'success' ? (
             <>
               <button
                 type="button"
@@ -973,26 +1469,52 @@ export function TransactionReviewModal({
               <button type="button" onClick={onClose} className="btn-secondary flex-1">
                 Cancel
               </button>
-              {plan.isDemo && !isProductionPreview ? (
+              {showTestnetExecute ? (
+                <button
+                  type="button"
+                  onClick={() => void testnetExecute.execute()}
+                  disabled={!testnetExecute.canExecute || !canExecuteOnRequiredChain}
+                  title={
+                    !canExecuteOnRequiredChain
+                      ? `Switch wallet to ${tradeChain.requiredChain.name} to execute`
+                      : (testnetExecute.disabledReason ?? undefined)
+                  }
+                  className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {testnetExecute.status === 'pending'
+                    ? testnetExecute.isSellPlan
+                      ? TESTNET_BUTTONS.executingTestnetSell
+                      : TESTNET_BUTTONS.executingTestnetTrade
+                    : testnetExecute.isSellPlan
+                      ? getTestnetUniswapSellExecuteLabel()
+                      : getTestnetUniswapBuyExecuteLabel()}
+                </button>
+              ) : isSepoliaTestnetTrade ? (
+                <button
+                  type="button"
+                  disabled
+                  title={
+                    testnetExecute.disabledReason ??
+                    'Complete Sepolia testnet checks to enable execution.'
+                  }
+                  className="btn-primary flex-1 opacity-50 cursor-not-allowed"
+                >
+                  {testnetExecute.isSellPlan
+                    ? TESTNET_BUTTONS.executeTestnetSell
+                    : TESTNET_BUTTONS.executeTestnetTrade}
+                </button>
+              ) : plan.isDemo && !isProductionPreview ? (
                 <button
                   type="button"
                   onClick={onConfirm}
                   disabled={confirming}
                   className="btn-primary flex-1 disabled:opacity-50"
                 >
-                  {confirming ? 'Processing...' : 'Confirm Demo Execution'}
-                </button>
-              ) : showTestnetExecute ? (
-                <button
-                  type="button"
-                  onClick={() => void testnetExecute.execute()}
-                  disabled={!testnetExecute.canExecute}
-                  title={testnetExecute.disabledReason ?? undefined}
-                  className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {testnetExecute.status === 'pending'
-                    ? 'Executing Sepolia Test Swap…'
-                    : 'Execute Sepolia Test Swap'}
+                  {confirming
+                    ? 'Processing...'
+                    : ENABLE_TESTNET_MODE
+                      ? TESTNET_BUTTONS.confirmDemoExecution
+                      : 'Confirm Demo Execution'}
                 </button>
               ) : showMainnetPilotExecute ? (
                 <button
@@ -1019,6 +1541,15 @@ export function TransactionReviewModal({
                     mainnetPilot.disabledReason ??
                     getAlphaExecutionDisabledLabel(plan)
                   }
+                  className="btn-primary flex-1 opacity-50 cursor-not-allowed"
+                >
+                  {getAlphaExecutionDisabledLabel(plan)}
+                </button>
+              ) : plan.type === 'sell_basket' && !showTestnetExecute ? (
+                <button
+                  type="button"
+                  disabled
+                  title={getAlphaExecutionDisabledLabel(plan)}
                   className="btn-primary flex-1 opacity-50 cursor-not-allowed"
                 >
                   {getAlphaExecutionDisabledLabel(plan)}
