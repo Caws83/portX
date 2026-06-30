@@ -1,5 +1,6 @@
 import type { PortfolioDriftResult } from '@/utils/portfolioDrift'
 import { BuyAmountSelectorModal } from '@/components/BuyAmountSelectorModal'
+import { TradeChainGateModal } from '@/components/TradeChainGateModal'
 import { usePortfolioTradeEngine } from '@/hooks/usePortfolioTradeEngine'
 import { TransactionReviewModal } from '@/components/TransactionReviewModal'
 import { PortfolioRebalancePreviewModal } from '@/components/PortfolioRebalancePreviewModal'
@@ -54,6 +55,13 @@ export function TestnetPortfolioTradeModals({
         loading={trade.loading}
         onClose={() => trade.closeBuyAmountSelector()}
         onConfirm={(amountUsd) => void trade.confirmBuyAmountAndReview(amountUsd)}
+      />
+
+      <TradeChainGateModal
+        open={trade.chainGateBasket !== null}
+        basket={trade.chainGateBasket}
+        onClose={() => trade.dismissChainGate()}
+        onContinue={() => trade.continueAfterChainGate()}
       />
 
       <TransactionReviewModal

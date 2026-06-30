@@ -3,7 +3,7 @@ import { BUTTON_LABELS } from '@/config/uiCopy'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { AppModeBadge } from './AppModeIndicator'
 import { Logo } from './Logo'
-import { WalletButton } from './WalletButton'
+import { WalletChainControl } from './WalletChainControl'
 
 type NavLinkItem = {
   to: string
@@ -70,7 +70,7 @@ export function Navbar() {
 
             <div className="flex items-center gap-2 shrink-0">
               <AppModeBadge className="hidden md:inline-flex" />
-              <WalletButton />
+              <WalletChainControl />
             </div>
           </div>
 

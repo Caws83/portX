@@ -24,6 +24,7 @@ import {
   type SimulationResult,
 } from '@/services/executionService'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import { useRequiredTradeChain } from '@/hooks/useRequiredTradeChain'
 import { ENABLE_TESTNET_MODE } from '@/config/features'
 import { shouldSuppressMainnetPilotPanel } from '@/utils/testnetQuoteRouting'
 import {
@@ -57,6 +58,7 @@ import {
 } from '@/services/protocolFee'
 import { RouteProviderBadge } from './RouteProviderBadge'
 import { ExecutionWarning } from './ExecutionWarning'
+import { TradeChainStatusPanel } from './TradeChainStatusPanel'
 import { QuoteQualityPanel } from './QuoteQualityPanel'
 import { MainnetPilotReadinessPanel } from './MainnetPilotReadinessPanel'
 import { assessQuoteQualityFromPlan, isLegUnsupported } from '@/utils/quoteQuality'
@@ -245,6 +247,7 @@ export function TransactionReviewModal({
   const testnetExecute = useTestnetUniswapBasketExecute(plan, open, quoteSource ?? null, {
     preferMaxApproval,
   })
+  const tradeChain = useRequiredTradeChain({ plan, modalOpen: open })
   const testnetBalances = useTestnetPortfolioBalances()
   const feeConfigState = useBundleExecutorFeeConfig()
   const mainnetPilot = useMainnetSwapExecute(plan, open, quoteSource ?? null)
@@ -337,6 +340,7 @@ export function TransactionReviewModal({
 
   const sepoliaChainId = getBundleExecutorChainId()
   const walletOnSepolia = chainId === sepoliaChainId
+  const canExecuteOnRequiredChain = tradeChain.isConnected && tradeChain.isCorrectChain
   const isSellPlan = plan?.type === 'sell_basket' || plan?.type === 'sell_all'
   const soldAssetSymbols =
     plan && isSellPlan
@@ -480,6 +484,10 @@ export function TransactionReviewModal({
           Non-custodial — you sign all swaps from your connected wallet. PortX never holds funds or
           private keys.
         </p>
+
+        {isSepoliaTestnetTrade ? (
+          <TradeChainStatusPanel plan={plan} modalOpen={open} className="mb-6" />
+        ) : null}
 
         {showLivePrep && (
           <div className="mb-6 space-y-4">
@@ -1440,8 +1448,12 @@ export function TransactionReviewModal({
                 <button
                   type="button"
                   onClick={() => void testnetExecute.execute()}
-                  disabled={!testnetExecute.canExecute}
-                  title={testnetExecute.disabledReason ?? undefined}
+                  disabled={!testnetExecute.canExecute || !canExecuteOnRequiredChain}
+                  title={
+                    !canExecuteOnRequiredChain
+                      ? `Switch wallet to ${tradeChain.requiredChain.name} to execute`
+                      : (testnetExecute.disabledReason ?? undefined)
+                  }
                   className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {testnetExecute.status === 'pending'

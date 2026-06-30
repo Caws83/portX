@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { useAccount, useChainId } from 'wagmi'
 import type { Basket } from '@/types/basket'
 import { DEFAULT_BUY_AMOUNT_USD } from '@/config/constants'
 import { TESTNET_MULTI_TOKEN_BASKET, TESTNET_MULTI_TOKEN_BASKET_ID, isTestnetMultiTokenBasket } from '@/data/testnetMultiTokenBasket'
@@ -9,6 +10,10 @@ import { executeDemoPlan } from '@/services/transactionBuilder'
 import { usePortfolioStore } from '@/store/portfolioStore'
 import { canShowBasketQuotes, estimateBasketHoldingsValueUsd } from '@/utils/basketCatalog'
 import { TESTNET_DASHBOARD_REFRESH_EVENT } from '@/hooks/useTestnetDashboardPortfolio'
+import {
+  isWalletOnRequiredTradeChain,
+  resolveRequiredTradeChain,
+} from '@/utils/tradeChainResolution'
 
 export interface UseTestnetPortfolioTradeActionsOptions {
   buyAmountUsd?: number
@@ -28,9 +33,13 @@ export function useTestnetPortfolioTradeActions(
   const onBuyAmountUsdChange = options.onBuyAmountUsdChange
 
   const quote = useQuotePreview()
+  const { isConnected } = useAccount()
+  const walletChainId = useChainId()
   const [selectedBasket, setSelectedBasket] = useState<Basket | null>(null)
   const [pendingBuyBasket, setPendingBuyBasket] = useState<Basket | null>(null)
   const [buyAmountModalOpen, setBuyAmountModalOpen] = useState(false)
+  const [chainGateBasket, setChainGateBasket] = useState<Basket | null>(null)
+  const [pendingChainGateAction, setPendingChainGateAction] = useState<(() => void) | null>(null)
   const [rebalanceBasket, setRebalanceBasket] = useState<Basket | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -63,16 +72,47 @@ export function useTestnetPortfolioTradeActions(
     return canShowBasketQuotes(basket)
   }, [])
 
+  const guardWalletChain = useCallback(
+    (basket: Basket, onReady: () => void): boolean => {
+      const required = resolveRequiredTradeChain({ selectedBasket: basket })
+      if (
+        isConnected &&
+        !isWalletOnRequiredTradeChain(walletChainId, required.chainId, isConnected)
+      ) {
+        setChainGateBasket(basket)
+        setPendingChainGateAction(() => onReady)
+        return false
+      }
+      return true
+    },
+    [isConnected, walletChainId],
+  )
+
+  const dismissChainGate = useCallback(() => {
+    setChainGateBasket(null)
+    setPendingChainGateAction(null)
+  }, [])
+
+  const continueAfterChainGate = useCallback(() => {
+    const action = pendingChainGateAction
+    dismissChainGate()
+    action?.()
+  }, [pendingChainGateAction, dismissChainGate])
+
   const openBuyAmountSelector = useCallback(
     (basketOrId: Basket | string) => {
       const basket = typeof basketOrId === 'string' ? resolveBasket(basketOrId) : basketOrId
       if (!basket || !guardQuotePreview(basket)) return
-      setSelectedBasket(basket)
-      setPendingBuyBasket(basket)
-      setTxMsg(null)
-      setBuyAmountModalOpen(true)
+      const startBuyFlow = () => {
+        setSelectedBasket(basket)
+        setPendingBuyBasket(basket)
+        setTxMsg(null)
+        setBuyAmountModalOpen(true)
+      }
+      if (!guardWalletChain(basket, startBuyFlow)) return
+      startBuyFlow()
     },
-    [resolveBasket, guardQuotePreview],
+    [resolveBasket, guardQuotePreview, guardWalletChain],
   )
 
   const closeBuyAmountSelector = useCallback(() => {
@@ -84,17 +124,21 @@ export function useTestnetPortfolioTradeActions(
     async (amountUsd: number) => {
       const basket = pendingBuyBasket
       if (!basket) return
-      onBuyAmountUsdChange?.(amountUsd)
-      setBuyAmountModalOpen(false)
-      setPendingBuyBasket(null)
-      setSelectedBasket(basket)
-      setTxMsg(null)
-      const preview = await quote.previewBuy(basket, amountUsd)
-      if (!preview) return
-      quote.buildPlan(preview)
-      setModalOpen(true)
+      const runPreview = async () => {
+        onBuyAmountUsdChange?.(amountUsd)
+        setBuyAmountModalOpen(false)
+        setPendingBuyBasket(null)
+        setSelectedBasket(basket)
+        setTxMsg(null)
+        const preview = await quote.previewBuy(basket, amountUsd)
+        if (!preview) return
+        quote.buildPlan(preview)
+        setModalOpen(true)
+      }
+      if (!guardWalletChain(basket, () => void runPreview())) return
+      await runPreview()
     },
-    [pendingBuyBasket, onBuyAmountUsdChange, quote],
+    [pendingBuyBasket, onBuyAmountUsdChange, quote, guardWalletChain],
   )
 
   const openBuyPreview = useCallback(
@@ -127,19 +171,23 @@ export function useTestnetPortfolioTradeActions(
     async (basketOrId: Basket | string) => {
       const basket = typeof basketOrId === 'string' ? resolveBasket(basketOrId) : basketOrId
       if (!basket || !guardQuotePreview(basket)) return
-      setSelectedBasket(basket)
-      setTxMsg(null)
-      const balancesWei = isTestnetMultiTokenBasket(basket.id) ? getBalancesWei() : undefined
-      const preview = await quote.previewSellBasket(
-        basket,
-        getSellPositionValueUsd(basket),
-        balancesWei,
-      )
-      if (!preview) return
-      quote.buildPlan(preview)
-      setModalOpen(true)
+      const runSellPreview = async () => {
+        setSelectedBasket(basket)
+        setTxMsg(null)
+        const balancesWei = isTestnetMultiTokenBasket(basket.id) ? getBalancesWei() : undefined
+        const preview = await quote.previewSellBasket(
+          basket,
+          getSellPositionValueUsd(basket),
+          balancesWei,
+        )
+        if (!preview) return
+        quote.buildPlan(preview)
+        setModalOpen(true)
+      }
+      if (!guardWalletChain(basket, () => void runSellPreview())) return
+      await runSellPreview()
     },
-    [resolveBasket, guardQuotePreview, quote, getBalancesWei, getSellPositionValueUsd],
+    [resolveBasket, guardQuotePreview, quote, getBalancesWei, getSellPositionValueUsd, guardWalletChain],
   )
 
   const openRebalancePreview = useCallback(
@@ -154,9 +202,13 @@ export function useTestnetPortfolioTradeActions(
 
   const openReviewModal = useCallback(() => {
     if (!quote.preview || !selectedBasket) return
-    quote.buildPlan(quote.preview)
-    setModalOpen(true)
-  }, [quote, selectedBasket])
+    const openModal = () => {
+      quote.buildPlan(quote.preview!)
+      setModalOpen(true)
+    }
+    if (!guardWalletChain(selectedBasket, openModal)) return
+    openModal()
+  }, [quote, selectedBasket, guardWalletChain])
 
   const closeTradeFlow = useCallback(() => {
     quote.clear()
@@ -234,6 +286,9 @@ export function useTestnetPortfolioTradeActions(
     buyAmountModalOpen,
     pendingBuyBasket,
     buyAmountUsd: buyAmount,
+    chainGateBasket,
+    dismissChainGate,
+    continueAfterChainGate,
     resolveBasket,
     getBalancesWei,
     openBuyPreview,
