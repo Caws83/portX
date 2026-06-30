@@ -37,7 +37,7 @@ import {
 } from '@/hooks/useTestnetBundleExecutorApprovals'
 import { useTestnetPortfolioBalances } from '@/hooks/useTestnetPortfolioBalances'
 import { refreshTestnetSellExecutionBundle } from '@/services/testnetSellExecution'
-import { formatTestnetSimulationError } from '@/utils/bundleExecutorErrors'
+import { formatTestnetSimulationError, type TestnetTradeDirection } from '@/utils/bundleExecutorErrors'
 import { isSepoliaTestnetTradePlan, type TestnetQuoteSource } from '@/utils/testnetPreview'
 import {
   EXECUTION_ROUTER_NAME,
@@ -82,7 +82,7 @@ export interface UseTestnetUniswapBasketExecuteResult {
 async function simulateBundleExecution(
   params: ExecuteBundleParams,
   account: `0x${string}`,
-  isSell: boolean,
+  direction: TestnetTradeDirection,
 ): Promise<{ passed: boolean; message: string }> {
   const simulationPromise = simulateContract(wagmiConfig, {
     address: getBundleExecutorAddress(),
@@ -96,7 +96,7 @@ async function simulateBundleExecution(
     .then(() => ({ passed: true as const, message: 'Static simulation succeeded' }))
     .catch((error) => ({
       passed: false as const,
-      message: formatTestnetSimulationError(error, isSell),
+      message: formatTestnetSimulationError(error, direction),
     }))
 
   const timeoutPromise = new Promise<{ passed: false; message: string }>((resolve) => {
@@ -354,9 +354,14 @@ export function useTestnetUniswapBasketExecute(
     setSimulating(true)
     setSimulation(null)
 
-    const executeParams = buildExecuteParams(prepareResult, isSellPlan, resolveBundleMsgValue)
+    const executeParams = buildExecuteParams(
+      prepareResult,
+      isSellPlan,
+      resolveBundleMsgValue,
+    )
+    const tradeDirection: TestnetTradeDirection = isSellPlan ? 'sell' : 'buy'
 
-    void simulateBundleExecution(executeParams, address, isSellPlan).then((result) => {
+    void simulateBundleExecution(executeParams, address, tradeDirection).then((result) => {
       if (!cancelled) {
         setSimulation(result)
         setSimulating(false)
@@ -432,14 +437,18 @@ export function useTestnetUniswapBasketExecute(
             ? simulating
               ? 'Simulating sell transaction…'
               : simulation?.message ?? 'Simulation required before execute.'
-            : approvals.missingUsdcFeeApproval
-              ? 'Approve USDC protocol fee before selling.'
-              : !approvals.allApprovalsSufficient
-                ? approvals.missingInputApprovals.some((leg) => leg.needsAdditionalApproval) ||
-                    approvals.protocolFeeLeg?.needsAdditionalApproval
-                  ? 'Quote updated — approve the new amount required for this sell.'
-                  : `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
-                : assessment.blockedReason
+            : !isSellPlan && simulation?.passed !== true
+              ? simulating
+                ? 'Simulating buy transaction…'
+                : simulation?.message ?? 'Simulation required before execute.'
+              : isSellPlan && approvals.missingUsdcFeeApproval
+                ? 'Approve USDC protocol fee before selling.'
+                : isSellPlan && !approvals.allApprovalsSufficient
+                  ? approvals.missingInputApprovals.some((leg) => leg.needsAdditionalApproval) ||
+                      approvals.protocolFeeLeg?.needsAdditionalApproval
+                    ? 'Quote updated — approve the new amount required for this sell.'
+                    : `Approve each portfolio token for ${EXECUTION_ROUTER_NAME}`
+                  : assessment.blockedReason
 
   const reset = useCallback(() => {
     resetExecute()
@@ -493,20 +502,26 @@ export function useTestnetUniswapBasketExecute(
       }
 
       const executeParams = buildExecuteParams(prepareResult, true, resolveBundleMsgValue)
-      const simResult = await simulateBundleExecution(executeParams, address, true)
+      const simResult = await simulateBundleExecution(executeParams, address, 'sell')
       setSimulation(simResult)
       if (!simResult.passed) {
         setPreExecuteError(simResult.message)
         return
       }
 
-      await executeBundle(executeParams)
+      await executeBundle(executeParams, { direction: 'sell' })
       return
     }
 
-    await executeBundle(
-      buildExecuteParams(prepareResult, false, resolveBundleMsgValue),
-    )
+    const buyExecuteParams = buildExecuteParams(prepareResult, false, resolveBundleMsgValue)
+    const buySimResult = await simulateBundleExecution(buyExecuteParams, address, 'buy')
+    setSimulation(buySimResult)
+    if (!buySimResult.passed) {
+      setPreExecuteError(buySimResult.message)
+      return
+    }
+
+    await executeBundle(buyExecuteParams, { direction: 'buy' })
   }, [
     canExecute,
     plan,

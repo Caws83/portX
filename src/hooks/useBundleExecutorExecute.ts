@@ -20,7 +20,10 @@ export interface UseBundleExecutorExecuteResult {
   explorerUrl?: string
   errorMessage?: string
   isWritePending: boolean
-  executeBundle: (params: ExecuteBundleParams) => Promise<void>
+  executeBundle: (
+    params: ExecuteBundleParams,
+    options?: { direction?: 'buy' | 'sell' },
+  ) => Promise<void>
   reset: () => void
 }
 
@@ -42,7 +45,11 @@ export function useBundleExecutorExecute(): UseBundleExecutorExecuteResult {
   }, [])
 
   const executeBundle = useCallback(
-    async (params: ExecuteBundleParams) => {
+    async (
+      params: ExecuteBundleParams,
+      options?: { direction?: 'buy' | 'sell' },
+    ) => {
+      const direction = options?.direction ?? 'buy'
       setStatus('pending')
       setTxHash(undefined)
       setErrorMessage(undefined)
@@ -83,7 +90,7 @@ export function useBundleExecutorExecute(): UseBundleExecutorExecuteResult {
         setStatus('success')
       } catch (error) {
         setStatus('error')
-        setErrorMessage(formatTestnetExecutionError(error))
+        setErrorMessage(formatTestnetExecutionError(error, { direction }))
       }
     },
     [address, sepoliaChainId, writeContractAsync],
